@@ -1,0 +1,108 @@
+============================================================
+SMART CAMPUS RESERVATION - DAILY CHANGELOG (ALL-TIME RECORD)
+============================================================
+Student : Amaan Rashid | APU Year 4 FYP
+A dated record of everything done, newest first.
+New entries are appended at the TOP each working session.
+Last updated: Sunday, 26 July 2026, 01:34
+
+------------------------------------------------------------
+2026-07-26 (Sun)
+------------------------------------------------------------
+- Unit tests on the recommendation engine (src/lib/recommend.test.ts):
+  16 Vitest cases covering rule enforcement, slot generation,
+  conflict exclusion, scoring/ranking, and adaptive weights.
+  Verified all pass. Added "npm test" script + vitest devDep.
+- Evaluation instrumentation for Phase 2 (Objective 4):
+  evaluation_events table + src/lib/evaluation.ts. Logs
+  rec_shown, rec_accepted (with rank), and chatbot thumbs
+  up/down feedback. (supabase/upgrade-evaluation.sql)
+- Chatbot: thumbs up/down rating on each answer.
+- Analytics: added "Recommendation acceptance" and "Chatbot
+  helpfulness" metrics panel for Phase 2.
+- Created docs/PROJECT-LOG.txt (full project snapshot).
+- Started this all-time daily changelog.
+
+------------------------------------------------------------
+2026-07-24 (Thu)
+------------------------------------------------------------
+- Check-in / no-show tracking: students self-check-in around
+  booking time; managers mark attended/no-show; no-show rate
+  KPI added to analytics. (supabase/upgrade-checkin.sql)
+- Admin analytics dashboard (Analytics tab): 5 KPIs + 4
+  recharts (bookings over 14 days, peak hours, most-booked
+  facilities, status breakdown). Completes analytics objective.
+- In-app notifications: header bell + unread badge via database
+  triggers (student on approve/reject, managers/admins on new
+  requests), 30s polling. (supabase/upgrade-notifications.sql)
+- "Popular times" chart on student booking view (busyness by
+  weekday + hour from history, live label). No schema change.
+- Admin dashboard reorganised into sticky tabs with count badges.
+- System-wide activity log (audit trail) via database triggers;
+  admin Records view with filters + search.
+  (supabase/upgrade-activity-log.sql)
+- Lost & found register on manager dashboard, scoped per
+  facility with claim tracking. (supabase/upgrade-lost-found.sql)
+- Chatbot wired to live Gemini (gemini-2.5-flash); fixed the
+  deprecated gemini-2.0-flash model. Key in .env.local.
+- Phase 1 report updated: 7-table ERD, concept design revised
+  for venues/equipment/manager scoping/free-form categories
+  (~6,580 words).
+- Consolidated supabase/setup-all.sql (all migrations in order).
+
+------------------------------------------------------------
+2026-07-23 (Wed)
+------------------------------------------------------------
+- Admin/manager v2: free-form facility categories, facility
+  CRUD with rules, multi-manager assignment (facility_managers),
+  scoped manager permissions via RLS, admin approvals for
+  unassigned facilities, manager-editable equipment.
+  (supabase/upgrade-admin.sql)
+- Student flow v2: venue -> facility browsing with isometric
+  live-status cards, time-first booking validated against
+  per-facility min/max rules with AI alternatives on conflict,
+  equipment inventory with per-slot quantity checking.
+  (supabase/upgrade-equipment.sql)
+- Professional UI pass: "Campus Reserve" brand, crimson theme,
+  serif display font, shared app shell, new animated landing
+  and split-screen animated login pages.
+- Animated auth page; temporary demo login buttons added.
+
+------------------------------------------------------------
+2026-07-22 (Tue)
+------------------------------------------------------------
+- Phase 1 report drafted to official SOE template (11 verified
+  papers, 5W1H review, concept design, ERD, Gantt, costs).
+- Ethics documents prepared: participant information sheet and
+  consent form (fast-track), plus the 150-word description.
+- ~30% prototype built: auth with roles, student booking flow
+  with AI recommendations, manager approval queue, admin rule
+  editor, grounded chatbot, seeded database.
+- Database schema with RLS and no-overlap exclusion constraint.
+  (supabase/setup-full.sql)
+
+------------------------------------------------------------
+2026-07-20 (Sun)
+------------------------------------------------------------
+- SOE Student Project Handbook (V11) reviewed.
+- Phase 1 execution plan written (docs/PHASE1-PLAN.md):
+  draft aim + 4 objectives, week-by-week schedule, marking
+  scheme, admin checklist.
+- Chose Gemini Flash (free tier) for the chatbot.
+
+------------------------------------------------------------
+2026-07-19 (Sat)
+------------------------------------------------------------
+- Title proposal reviewed (Smart Campus Facility Reservation
+  System with AI-Assisted Recommendations, SDG 9).
+- CLAUDE.md and FYP.md written; scope aligned to the proposal.
+
+------------------------------------------------------------
+2026-06-22 (Mon)
+------------------------------------------------------------
+- Repository scaffolded: Next.js 16, React 19, Tailwind v4,
+  shadcn/ui, Supabase client. Role route stubs created.
+
+============================================================
+END - append new dated entries above this line
+============================================================

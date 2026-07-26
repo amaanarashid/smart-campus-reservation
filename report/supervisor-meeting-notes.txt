@@ -1,0 +1,149 @@
+SUPERVISOR MEETING NOTES
+Smart Campus Facility Reservation System with AI-Assisted Recommendations
+Amaan Rashid - FYP Phase 1
+
+=====================================================================
+1. THE PROJECT IN ONE PARAGRAPH
+=====================================================================
+
+Booking campus facilities (discussion rooms, sports courts, meeting
+rooms, event halls) is manual: queues, paper forms, clashing bookings,
+rules only staff know. This project is one web platform with three
+logins. Students search and book online. Facility managers approve or
+reject from a queue. Admins configure booking rules PER FACILITY:
+opening hours, max duration, advance window, cancellation notice,
+auto-approve or not. Policy is data in a table, not code - a discussion
+room can auto-approve 30-minute blocks while the event hall demands
+3 days notice and manager sign-off. No reviewed system does this.
+
+=====================================================================
+2. HOW AI IS USED (THREE LAYERS)
+=====================================================================
+
+Layer 1 - Smart slot suggestions (rule-based scoring)
+  Student says "4 people, tomorrow, around 3pm". System generates all
+  free legal slots, scores each: S = w1*T + w2*C + w3*U  (eq. 3.1)
+    T = closeness to preferred time
+    C = group-size fit to room capacity
+    U = off-peak bonus (spreads utilization)
+  Top 5 shown WITH REASONS. Chosen over a black-box model because it
+  is explainable, testable, free, and instant.
+
+Layer 2 - Adaptive weight learning (online learning)
+  Weights adjust each time a user accepts a suggestion, stored per
+  user in profiles.rec_weights. Always book evenings -> evening slots
+  rank higher for you. Simple, honest machine learning; weights can
+  be shown changing live in the database during the demo.
+
+Layer 3 - Grounded chatbot (LLM)
+  "Is the futsal court free tomorrow?" Pipeline: LLM extracts intent
+  as JSON -> SERVER queries the real database under the user's own
+  security context -> LLM phrases the answer from returned facts only.
+  It cannot invent information. Out-of-scope questions are deflected
+  to staff. Justified by Rahim et al. (2022): students abandon
+  chatbots that give wrong answers.
+
+Viva one-liner: "Deterministic explainable AI where the problem is
+structured (slot ranking), lightweight online learning where
+personalization helps (weights), an LLM only where natural language
+is involved (chatbot) - and even there it is grounded."
+
+Why not ChatGPT for recommendations? Non-deterministic (same query,
+different answers), costs money per request, cannot be unit-tested
+against objective 4's evaluation criteria.
+
+Key engineering point: double-bookings are prevented by the DATABASE
+(tstzrange exclusion constraint), not application code. Two people
+clicking the same slot simultaneously - exactly one wins, guaranteed.
+
+=====================================================================
+3. LITERATURE: INSPIRED BY -> IMPROVED ON
+=====================================================================
+
+Venkatesh et al. (2026) - MERN campus booking system. IJERT 15(3).
+  Closest ancestor: login, search, request -> approval -> tracking.
+  Their limits: one hard-coded policy for all facilities, duplicate
+  checks in app code, notifications/analytics unbuilt.
+  We improve: per-facility rule engine + database-level conflict
+  prevention.
+
+Antony et al. (2026) - EDUNEXUS. IJOEST 10(1), 36-38.
+  doi:10.29121/ijoest.v10.i1.2026.737
+  Most complete existing system: RBAC, calendar view, reports.
+  Killer detail: their paper lists "AI-driven availability
+  prediction" as an UNIMPLEMENTED extension.
+  We build what they only proposed - AI recommendations + a chatbot
+  they never mention.
+
+Artes et al. (2024) - Cardinal Reserve. ACM MSIE 2024, 108-118.
+  doi:10.1145/3664968.3664982
+  Inspired the stakeholder-centred requirements (interviews, pain
+  points). But contribution is process design only, no intelligence.
+  We keep the user-centred method, add the missing technology.
+
+Hwang et al. (2022) - reservation database design. J. Positive School
+  Psychology 6(8), 7033-7041.
+  Technical foundation: booking integrity belongs in the database
+  schema. We extend it: race-proof tstzrange exclusion constraint +
+  row-level security for policy enforcement.
+
+Lalitha et al. (2022) - event-hall booking. IEEE ICCST 2022.
+  doi:10.1109/ICCST55948.2022.10040388
+  Shows the usual shortcut: one facility type so one set of rules
+  works. Our rule engine exists because we refuse that shortcut.
+
+Supporting literature (evidence for HOW to add AI properly):
+  Roy & Dutta (2022) J. Big Data 9:59 - collaborative filtering fits
+    a 7-facility catalogue poorly (cold start, sparsity).
+  Valencia-Arias et al. (2024) Intell. Syst. Appl. 24:200435 -
+    explainable recommendations earn user trust.
+  Okonkwo & Ade-Ibijola (2021) C&E:AI 2:100033 - chatbot benefits
+    and accuracy challenges in education.
+  Rahim et al. (2022) Sustainability 14:12726 - trust and accuracy
+    drive chatbot adoption in universities.
+  Essel et al. (2022) IJETHE 19:57 - controlled study, measurable
+    student benefit from a chatbot.
+  Dempere et al. (2023) Front. Educ. 8:1206936 - integrate LLMs
+    deliberately, with controls.
+
+THE GAP SENTENCE:
+  "Every reviewed system digitizes the booking form; none configures
+  policy per facility, none helps the user when a slot is taken, and
+  none answers questions conversationally. My system is the first in
+  this literature to do all three on one platform."
+  (Point at Table 2.2 in the report: five columns of No, ours Yes.)
+
+=====================================================================
+4. TECH STACK
+=====================================================================
+
+Next.js 16 + React 19 (one app: three dashboards + API routes)
+Supabase - PostgreSQL, Auth, Row Level Security
+Recommendations - pure TypeScript scoring (src/lib/recommend.ts)
+Chatbot - provider-agnostic LLM API (Gemini / Groq / OpenAI) with a
+  no-key mock mode so the demo always works
+Cost: RM 0 infrastructure (all free tiers)
+
+=====================================================================
+5. STATUS
+=====================================================================
+
+Done:
+  - Phase 1 report drafted to official template (11 verified papers,
+    5W1H review, concept design, ERD, Gantt, cost analysis)
+  - Ethics documents (consent form + information sheet) ready
+  - ~30% prototype working: login with roles, student booking flow
+    with AI suggestions, manager approval queue, admin rule editor,
+    grounded chatbot, seeded database
+
+Remaining (Phase 1): fill report placeholders, supervisor feedback,
+  Turnitin, appendices, presentation slides
+Remaining (build): analytics dashboard, notifications, facility CRUD,
+  then UAT with students (SUS questionnaire) per objective 4
+
+Demo script (10 seconds each):
+  1. Book a discussion room - auto-approved instantly
+  2. Book futsal - goes to approval queue (different rule, same code)
+  3. Second account tries clashing slot - database rejects it
+  4. Ask chatbot "is the futsal court free tomorrow?"
+  5. Admin flips a rule - student side obeys immediately

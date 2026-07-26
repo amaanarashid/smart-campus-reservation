@@ -1,0 +1,197 @@
+============================================================
+SMART CAMPUS FACILITY RESERVATION SYSTEM - PROJECT LOG
+============================================================
+Student : Amaan Rashid
+Course  : Final Year Project, APU (Year 4)
+Log generated : Sunday, 26 July 2026, 01:31
+
+This file summarises everything done on the project so far:
+the Phase 1 report, the ethics documents, and the working
+prototype with all its features and database migrations.
+
+============================================================
+1. FINAL YEAR PROJECT PHASE 1 - INVESTIGATION REPORT
+============================================================
+Location: report/FYP-Phase1-Investigation-Report-DRAFT.docx
+
+- Written to the official SOE template (V11): APU logo cover,
+  CLO-PLO tags per chapter, front matter, list of figures/
+  tables, APA references, compulsory appendices.
+- ~6,580 words (within the 6,000-8,000 requirement).
+- Chapter 1  Introduction: problem, aim, four objectives
+             (Bloom C5/C6), justification, SDGs (4 and 9).
+- Chapter 2  Literature review: 11 real, verified papers
+             (2021-2026), 5W1H synthesis, comparison tables,
+             research gap.
+- Chapter 3  Concept design & methodology: tool selection
+             (Next.js, Supabase, Gemini), 7-table ERD,
+             architecture diagram, recommendation scoring
+             equation (3.1), chatbot design, professional
+             engineering practices, 8-SDG mapping, Gantt
+             chart (both phases), cost analysis (~RM 225).
+- Chapter 4  Conclusion + Phase 2 plan.
+- Updated as the build progressed: ERD grew to 7 tables,
+  concept design revised for venues, equipment, manager
+  scoping, and free-form categories.
+
+Supporting documents:
+- report/ethics/Participant-Information-Sheet.docx
+- report/ethics/Consent-Form.docx
+- report/supervisor-meeting-notes.txt (project summary +
+  literature map for the meeting)
+- docs/PHASE1-PLAN.md (week-by-week execution plan)
+- docs/ui-design.md (design system notes)
+- FYP.md (living scope + status log)
+
+STILL TO DO ON THE REPORT: fill cover placeholders (TP no.,
+programme, supervisor, intake), update the Table of Contents
+field in Word, run Turnitin, attach signed appendices
+(log sheets, PSF, ethics form), prepare the oral presentation.
+
+============================================================
+2. THE 11 CITED PAPERS
+============================================================
+Campus booking systems:
+  1. Venkatesh et al. (2026) - MERN campus reservation, IJERT
+  2. Antony et al. (2026)    - EDUNEXUS, IJOEST
+  3. Artes et al. (2024)     - Cardinal Reserve, ACM MSIE
+  4. Hwang et al. (2022)     - reservation database design
+  5. Lalitha et al. (2022)   - event-hall booking, IEEE ICCST
+Recommender systems:
+  6. Roy & Dutta (2022)      - recommender systems review
+  7. Valencia-Arias et al. (2024) - AI recommenders in e-commerce
+Chatbots in education:
+  8. Okonkwo & Ade-Ibijola (2021) - chatbots in education review
+  9. Rahim et al. (2022)     - chatbot adoption in HEIs
+ 10. Essel et al. (2022)     - virtual TA chatbot study
+ 11. Dempere et al. (2023)   - ChatGPT impact on HEIs
+
+============================================================
+3. TECHNOLOGY STACK
+============================================================
+- Next.js 16 (App Router, React 19, React Compiler)
+- TypeScript (strict), Tailwind CSS v4, shadcn/ui
+- Supabase: PostgreSQL, Auth, Row Level Security
+- Recharts (analytics), Fraunces + Inter fonts
+- AI: rule-based recommendation engine + adaptive weights;
+  chatbot via Gemini (gemini-2.5-flash), provider-agnostic
+  (also supports Groq/OpenAI), with a no-key mock fallback.
+- Cost: runs entirely on free tiers.
+
+============================================================
+4. PROTOTYPE - FEATURES BUILT
+============================================================
+AUTH & ROLES
+- Sign up / sign in, three roles (student, facility manager,
+  admin), role-based redirects, profile auto-created from
+  auth metadata (works with email confirmation on or off).
+- Temporary one-tap demo login buttons (Student/Manager/Admin)
+  on the login page - marked TEMPORARY, remove before final.
+
+STUDENT
+- Guided flow: venue -> facility -> time.
+- Venue and facility cards with isometric 2.5D artwork and a
+  live "in use / available now" indicator.
+- Time-first booking validated against per-facility rules
+  (min/max duration, operating hours, advance window,
+  capacity); AI-recommended alternatives shown on conflict.
+- Equipment requests with live inventory checking.
+- "Popular times" chart per facility (busyness by weekday +
+  hour from booking history, Google-Maps style, LIVE label).
+- My bookings: cancel (with notice rule), self check-in
+  around booking time.
+- AI chatbot (availability + rules Q&A, grounded on live data).
+
+FACILITY MANAGER (scoped to assigned facilities only)
+- Approval queue for their facilities' pending requests.
+- Today & upcoming list with attendance tracking
+  (mark attended / no-show).
+- Equipment inventory editor for their facility categories.
+- Lost & found register (log items, track claim status).
+
+ADMIN (organised into tabs: Overview / Analytics / Facilities
+/ Approvals / Equipment / Records)
+- Facility CRUD with free-form categories and full rule
+  configuration (hours, min/max duration, advance, cancel
+  notice, auto-approve, capacity).
+- Multi-manager assignment per facility.
+- Approvals for facilities with no assigned manager.
+- Equipment inventory override.
+- Analytics: KPIs (total, approval rate, no-show rate,
+  avg group size, busiest facility) + charts (bookings over
+  time, peak hours, most-booked facilities, status breakdown).
+- Records: full activity log (audit trail) with filters + search.
+
+AI
+- Recommendation engine (src/lib/recommend.ts): weighted slot
+  scoring S = w1*T + w2*C + w3*U (eq. 3.1) - time preference,
+  capacity fit, off-peak; deterministic and explainable.
+- Adaptive weight learning: weights adjust per user from
+  accepted suggestions (online learning), stored in profiles.
+- Chatbot (src/app/api/chat/route.ts): intent extraction ->
+  RLS-scoped Supabase query -> grounded phrasing; refuses
+  off-topic questions; provider-agnostic.
+
+SYSTEM-WIDE
+- In-app notifications: header bell + unread badge, driven by
+  database triggers (student notified on approve/reject;
+  managers/admins on new requests); polls every 30s.
+- Activity log: database triggers record every booking,
+  approval, facility change, manager assignment, equipment
+  edit, lost-and-found action, and signup.
+- Professional UI: "Campus Reserve" brand, crimson theme,
+  serif display headings, shared app shell, animated landing
+  and login pages, tabbed admin.
+
+============================================================
+5. DATABASE MIGRATIONS (run in order in Supabase SQL Editor)
+============================================================
+Single combined file: supabase/setup-all.sql
+Individual files, in order:
+  1. setup-full.sql           base schema, RLS, seed, no-overlap
+                              conflict constraint
+  2. upgrade-equipment.sql    venues, min duration, equipment
+  3. upgrade-admin.sql        free-form categories, multi-manager,
+                              scoped permissions
+  4. upgrade-lost-found.sql   lost & found register
+  5. upgrade-activity-log.sql audit trail via triggers
+  6. upgrade-notifications.sql notifications via triggers
+  7. upgrade-checkin.sql      check-in / no-show columns
+
+Tables: profiles, facilities, facility_rules, reservations,
+facility_managers, equipment, reservation_equipment,
+lost_and_found, activity_log, notifications.
+Conflict prevention: PostgreSQL exclusion constraint
+(no overlapping pending/approved bookings per facility).
+Access control: row level security throughout, scoped to
+role and facility assignment.
+
+============================================================
+6. CONFIGURATION
+============================================================
+.env.local (not committed):
+  NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
+  AI_PROVIDER=gemini, AI_API_KEY=<your key>
+  (optional AI_MODEL, default gemini-2.5-flash)
+Supabase: disable "Confirm email" for demo accounts.
+Run: npm install, npm run dev -> http://localhost:3000
+
+============================================================
+7. WHAT REMAINS
+============================================================
+Report/admin: cover details, ToC update, Turnitin, appendices,
+  presentation slides.
+Build (optional extras): waitlist, student lost & found search,
+  recurring bookings, dark-mode toggle, automated tests,
+  realtime notifications (currently polling).
+Phase 2 (the graded evaluation): ethics approval, UAT with
+  students (System Usability Scale), measure conflict
+  prevention, recommendation acceptance, chatbot accuracy,
+  no-show rate; write the Phase 2 report, poster, and viva.
+
+Most important immediate step: get the ethics form approved -
+nothing in the Phase 2 evaluation can start until it is.
+
+============================================================
+END OF LOG
+============================================================
