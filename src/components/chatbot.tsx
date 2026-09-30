@@ -13,7 +13,7 @@ interface Msg { role: "user" | "assistant"; content: string; rated?: boolean }
 export default function Chatbot() {
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([
-    { role: "assistant", content: "Hi! Ask me about facility availability or booking rules, e.g. \"Is the futsal court free tomorrow evening?\" or \"What are the rules for discussion rooms?\"" },
+    { role: "assistant", content: "Hi! Ask me about availability, booking rules, or your own bookings, e.g. \"Is the futsal court free tomorrow evening?\", \"Can I book Court 1 at 3pm?\" or \"When is my next booking?\"" },
   ]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);

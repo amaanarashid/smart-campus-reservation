@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import NotificationBell from "@/components/notification-bell";
+import { CampusIcon } from "@/components/campus-icon";
 
 const ROLE_LABELS: Record<string, string> = {
   student: "Student",
@@ -17,8 +18,8 @@ const ROLE_LABELS: Record<string, string> = {
 export function BrandMark({ light = false }: { light?: boolean }) {
   return (
     <Link href="/" className="flex items-center gap-2.5">
-      <span className="font-display flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/80 text-lg font-bold text-primary-foreground shadow-sm">
-        R
+      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-sm">
+        <CampusIcon className="h-5 w-5" />
       </span>
       <span className="leading-tight">
         <span className={`font-display block text-[15px] font-semibold tracking-tight ${light ? "text-white" : ""}`}>

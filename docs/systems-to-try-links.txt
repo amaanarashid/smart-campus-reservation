@@ -1,0 +1,167 @@
+============================================================
+BOOKING SYSTEMS - LINKS TO TRY YOURSELF
+Smart Campus Reservation FYP | Amaan Rashid
+============================================================
+
+Grouped by what you can actually do with each one.
+
+If you only do two things:
+  1. Open the Sunway page and read the two rules printed
+     above the calendar. That is your problem statement.
+  2. Drive the MIDAS demo and try to book a slot that is
+     already taken. That is your closest competitor.
+
+Ten minutes total.
+
+
+------------------------------------------------------------
+1. LIVE BOOKING PAGES - real grids, no login to view
+------------------------------------------------------------
+
+Sunway University - Group Project Pods          [START HERE]
+https://sunway.libcal.com/reserve/gpp
+  Your evidence. Above the calendar it prints:
+  - "Group size, minimum 3 to maximum of 10 persons
+     (For POD 1-5) and minimum 3 to maximum of 6 persons
+     (For POD 6-11)."
+  - "Users must show up at the Service Counter (Ground
+     Level) within the first 15 minutes of the booked
+     timeslot. If not, the bookings will be considered
+     forfeited and may be cancelled."
+  SCREENSHOT THIS with the date visible. It is Appendix F.
+
+Monash University Malaysia
+https://monash.libcal.com/
+  The other Malaysian LibCal deployment.
+
+University of the Pacific
+https://pacific.libcal.com/spaces
+  15-minute forfeiture policy.
+
+Camosun College
+https://camosun.libcal.com/reserve/LANstudyrooms
+  Same pattern, different continent.
+
+College of Charleston
+https://libcal.charleston.edu/reserve/studyrooms
+
+University of Florida - Library West
+https://librarywest.uflib.ufl.edu/spaces/study-rooms
+
+Duke Law Library
+https://law.duke.edu/lib/studyrooms/
+  Policy page rather than a grid.
+
+  WHAT TO NOTICE: they are all near-identical. One product,
+  configured seven ways, and every one of them bolts on
+  policy text that the software does not enforce.
+
+
+------------------------------------------------------------
+2. VENDOR DEMOS - you can actually drive these
+------------------------------------------------------------
+
+MIDAS - online demo                     [MOST IMPORTANT ONE]
+https://mid.as/online-demo
+  Your closest competitor. Look for Booking Alternatives:
+  request a slot that is taken and see what it offers.
+  Then notice what it does NOT do - the alternatives are
+  not ranked, and nothing weighs group size against room
+  size. That is your objective 3.
+
+MIDAS - free trial
+https://mid.as/free-trial
+  If the demo does not expose alternatives, the trial will.
+  You can also configure the substitution table by hand,
+  which is exactly the limitation you are arguing against.
+
+InnoSoft Fusion - education demo portal
+https://edudemo.innosoftfusion.com/
+https://release401.innosoftfusion.com/Facility
+  The campus recreation segment. Courts, memberships,
+  access control.
+
+Skedda
+https://www.skedda.com/
+  Free trial. Look at how conditional booking rules are
+  configured - space, duration, time of day, user tag.
+
+
+------------------------------------------------------------
+3. RESOURCE BOOKER - UK self-service room booking
+------------------------------------------------------------
+
+University of Bristol
+https://resource-booker.bristol.ac.uk/
+
+University of Manchester
+https://resourcebooker.manchester.ac.uk/
+
+University of Bradford
+https://bookings.tt.brad.ac.uk/
+
+  Most need a university login, but the landing pages show
+  the model. Scientia's product, used across UK HE.
+
+
+------------------------------------------------------------
+4. PRODUCT PAGES - reading, not trying
+------------------------------------------------------------
+
+LibCal (Springshare)
+https://www.springshare.com/libcal
+
+LibAnswers chatbot announcement
+https://blog.springshare.com/springshare-newsroom/2023/02/15/springshare-announces-libanswers-chatbot
+  Note the vendor's own words: the chatbot is "rule-based,
+  not AI".
+
+25Live (CollegeNET)
+https://collegenet.com/scheduling/25live
+
+Ad Astra
+https://www.aais.com/solutions/room-scheduling-space-management
+
+InnoSoft Fusion
+https://www.fusionfamily.com/fusion
+
+MIDAS - Intelligent Booking Alternatives
+https://mid.as/features/booking-alternatives
+  Read the configuring section. "A room isn't automatically
+  considered a substitute for every other room - you specify
+  the relationships." That sentence is why your recommender
+  is different.
+
+MIDAS - MCP server announcement, July 2026
+https://mid.as/blog/midas-mcp-server-ai-booking-scheduling/
+  Newest thing in the market. Read it in full - it is a
+  plausible viva question. Note it is an admin add-on on one
+  nominated account, not a student feature.
+
+
+------------------------------------------------------------
+5. EVIDENCE
+------------------------------------------------------------
+
+City University of Hong Kong - Booking Systems
+https://www.cityu.edu.hk/its/services-facilities/list-of-services-facilities/b/booking-systems
+  Fragmentation documented plainly: rooms through one
+  system, sports facilities through a separate system
+  maintained by a different department.
+
+The Michigan Daily - "The library study rooms need a rehaul"
+https://www.michigandaily.com/opinion/columns/the-library-study-rooms-need-a-rehaul/
+  Student account of eight-hour block bookings placed the
+  moment the window opens, and small groups taking rooms
+  built for large ones.
+
+
+------------------------------------------------------------
+BEFORE YOUR VIVA
+------------------------------------------------------------
+ [ ] Screenshot the Sunway page, date visible -> Appendix F
+ [ ] Drive the MIDAS demo at least once, so you can say
+     "I tried it" rather than "I read about it"
+ [ ] Re-check every link still resolves. Live pages change,
+     and two of your citations depend on them
+============================================================

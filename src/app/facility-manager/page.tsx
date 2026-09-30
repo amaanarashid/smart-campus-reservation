@@ -44,7 +44,7 @@ export default function ManagerDashboard() {
   const [newLf, setNewLf] = useState({ ...emptyLf });
 
   const load = useCallback(async (prof: Profile) => {
-    const { data: f } = await supabase.from("facilities").select("*").order("name");
+    const { data: f } = await supabase.from("facilities_full").select("*").order("name");
     const facs = (f as Facility[]) ?? [];
     setFacilities(facs);
 

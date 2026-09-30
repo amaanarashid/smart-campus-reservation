@@ -1,0 +1,211 @@
+============================================================
+MID-POINT DECK - VERIFICATION AND UPDATE
+Smart Campus Reservation FYP | Amaan Rashid
+============================================================
+
+Two parts:
+  PART 1  the deck checked against what the module slide
+          actually asks for
+  PART 2  the new papers/references summary slides, written
+          out ready to build
+
+
+============================================================
+PART 1 - DOES THE DECK MATCH THE REQUIREMENT?
+============================================================
+
+The module deck "FYP Mid-point Oral Presentation", slide 6,
+lists thirteen required items. Current deck is 25 slides.
+
+  REQUIRED ITEM                          WHERE IT IS   OK
+  -------------------------------------- ------------ ----
+  Intro slide                            slide 1       yes
+  Table of contents                      slide 2       yes
+  Problem Statement                      slide 3       yes
+  Aim and Objectives                     slides 4-5    yes
+  Justification for this research        slide 6       yes
+  Literature Review                      slides 8-11   yes
+  Proposed Methodology                   slides 13-14  yes
+  Concept design from fundamental
+    Engineering principles               slides 16-20  yes
+  Professional Engineering Practices     slide 21      yes
+  Project Management, Finance and
+    Entrepreneurship 1                   slide 22      yes
+  Conclusion                             slide 23      yes
+  References                             slide 24      yes
+  Q&A                                    slide 25      yes
+
+All thirteen present, in the order the slide lists them.
+
+ALSO CHECKED, from the same module deck:
+
+  "total duration of 15 minutes"
+      Current timing plan is ~14 min 45 s. Adding the two
+      papers-summary slides below takes it to ~15 min 25 s,
+      so one slide has to go. Cut slide 17, Actors and use
+      cases - it is the weakest and the use case diagram is
+      in the report anyway.
+
+  "visual aids appropriate and legible (not too many words,
+   uncluttered diagram, letters large enough, background is
+   not dark)"
+      Light background throughout, no dark slides except the
+      title and section breaks. Smallest body text is 11.5pt
+      on the four-column slides.
+
+  "Supervisor and Second Marker must be invited for the Q&A"
+      You arrange the slot. Both must be there - the Q&A is
+      separately assessed for active listening and feedback.
+
+
+============================================================
+PART 2 - NEW SLIDES: SUMMARY OF PAPERS AND REFERENCES
+============================================================
+
+Two slides, to sit inside the literature review section
+immediately after "How the literature was reviewed"
+(currently slide 8). Everything after shifts by two.
+
+
+------------------------------------------------------------
+NEW SLIDE 9
+Title:   The eleven papers, and what each one gave the project
+Kicker:  LITERATURE REVIEW
+------------------------------------------------------------
+
+Intro line:
+  Reviewed paper by paper. Problem, method, outcomes, gaps
+  for each. Grouped by what they contribute.
+
+GROUP A - CAMPUS BOOKING SYSTEMS (the baseline to beat)
+
+  Venkatesh et al. (2026), IJERT
+    Web platform, request and approve. Rules fixed in code;
+    conflicts checked in the application.
+    -> Establishes the baseline workflow.
+
+  Antony et al. (2026), IJOEST
+    Node/Mongo, roles, calendar, analytics. Most complete
+    system reviewed.
+    -> Lists AI availability prediction as future work.
+       Evidence the gap is recognised, not invented.
+
+  Artes et al. (2024), ACM MSIE
+    Service-blueprint methodology, user-centred.
+    -> A proposal only. Never implemented, so it never had
+       to solve the concurrency problem.
+
+  Hwang, Jung and Lee (2022), JPSP
+    Database design, real-time via Firestore.
+    -> The argument that conflict prevention belongs in the
+       data layer. Directly behind objective 2.
+
+  Lalitha et al. (2022), IEEE ICCST
+    PHP/MySQL event-hall booking.
+    -> One facility type, one fixed rule set. The floor.
+
+
+------------------------------------------------------------
+NEW SLIDE 10
+Title:   What the AI literature settles
+Kicker:  LITERATURE REVIEW
+------------------------------------------------------------
+
+GROUP B - RECOMMENDATION (2 papers)
+
+  Roy and Dutta (2022), Journal of Big Data
+    Systematic review. Cold start, sparsity, scalability.
+    -> THE key paper. Collaborative filtering fails in
+       exactly my conditions: seven facilities, no history.
+       This is why objective 3 is scored, not trained.
+
+  Valencia-Arias et al. (2024), Intelligent Systems with
+  Applications
+    Bibliometric. Field moving to context-awareness and
+    explainability.
+    -> Why every suggestion carries its reason.
+
+GROUP C - CHATBOTS IN HIGHER EDUCATION (4 papers)
+
+  Okonkwo and Ade-Ibijola (2021), Computers and Education: AI
+    Systematic review. Administrative queries are the
+    strongest use case; incorrect answers the core risk.
+    -> Why the assistant can only phrase retrieved rows.
+
+  Rahim et al. (2022), Sustainability
+    302 Malaysian HEI students, UTAUT2, PLS-SEM-ANN.
+    -> Trust drives adoption. Closest evidence to my actual
+       user population.
+
+  Essel et al. (2022), IJETHE
+    68 students, pretest-posttest, measured learning gain.
+    -> The template for my Phase 2 evaluation design.
+
+  Dempere et al. (2023), Frontiers in Education
+    Risk review: accuracy, privacy, integrity.
+    -> Why the assistant is deliberately narrow.
+
+Closing line:
+  Five papers set the baseline. Two decide the technique.
+  Four set the accuracy and trust requirements.
+  All eleven verified against Crossref or the publisher.
+
+
+------------------------------------------------------------
+SPEAKER NOTES for the two new slides
+------------------------------------------------------------
+
+Slide 9 [45 seconds]
+  Do not read the table. Say: "Five directly comparable
+  systems. Read the arrows - that column is what each one
+  contributes to my design." Then land Antony: the authors
+  themselves list AI availability prediction as work not
+  done, which is evidence from inside the literature that
+  the gap is real.
+
+Slide 10 [45 seconds]
+  Lead with Roy and Dutta. "This is the paper that decides
+  my main technical choice. Collaborative filtering fails on
+  cold start and sparsity, which is exactly my situation, so
+  a trained model would be worse engineering, not better."
+  Then Rahim: 302 Malaysian students is the closest evidence
+  to my own user population.
+
+
+============================================================
+OTHER UPDATES TO MAKE AT THE SAME TIME
+============================================================
+
+1. TIMING
+   Cut slide 17 "Actors and use cases" to stay inside the
+   fifteen minutes. Already flagged as the weakest slide.
+
+2. OBJECTIVES SLIDE - CHECK AGAINST YOUR REPORT
+   The deck currently carries the property-form objectives:
+     01 Design a model where policy is inherited
+     02 Build the no-overlap condition into the database
+     03 Construct an engine that ranks and learns
+     04 Develop an assistant that cannot fabricate or leak
+     05 Evaluate against targets
+   Your submitted report now has objectives 2 to 5 rewritten
+   so they no longer open with a Bloom verb ("In order to
+   implement...", "The aim is to build..."). The deck and the
+   report must say the same thing. Fix the report to match
+   the deck rather than the other way round - the deck's
+   wording is the version that satisfies the C6 requirement.
+
+3. REFERENCES SLIDE
+   Slide 24 lists all eleven. Leave it. It is not read out.
+
+4. CONTENTS SLIDE
+   Item 4 currently reads "Eleven papers, three groups, one
+   gap". Still accurate with the new slides in.
+
+
+============================================================
+WHEN THE BUILD ENVIRONMENT IS BACK
+============================================================
+Say "rebuild the deck with the papers slides" and this gets
+built into FYP-Midpoint-Presentation.pptx, validated, and
+rendered for a visual check.
+============================================================

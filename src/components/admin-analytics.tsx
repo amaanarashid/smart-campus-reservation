@@ -49,7 +49,7 @@ export default function AdminAnalytics() {
     (async () => {
       const [{ data: r }, { data: f }, { data: ev }] = await Promise.all([
         supabase.from("reservations").select("facility_id,start_time,created_at,status,participants,checked_in_at,no_show"),
-        supabase.from("facilities").select("*"),
+        supabase.from("facilities_full").select("*"),
         supabase.from("evaluation_events").select("kind,bool_value"),
       ]);
       setRes((r as Res[]) ?? []);

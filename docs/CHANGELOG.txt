@@ -4,11 +4,243 @@ SMART CAMPUS RESERVATION - DAILY CHANGELOG (ALL-TIME RECORD)
 Student : Amaan Rashid | APU Year 4 FYP
 A dated record of everything done, newest first.
 New entries are appended at the TOP each working session.
-Last updated: Sunday, 26 July 2026, 01:34
+Last updated: Thursday, 13 August 2026
+
+------------------------------------------------------------
+2026-08-13 (Thu)
+------------------------------------------------------------
+- Full compliance audit against the three chapter lecture
+  decks; every requirement now passes. Fixes made:
+  * CONCLUSION was stale - said "ten recent works" (eleven)
+    and "three contributions" (four). Rewritten to match the
+    current gap, the four contributions and objective 5.
+  * 3.3 Proposed methodology carried none of the TLO1 terms.
+    Added public health and safety, whole-life cost, net zero
+    carbon and resource/cultural/societal/environmental
+    considerations, which the slide requires in the
+    methodology section specifically.
+  * 3.5 was missing whole-life cost, net zero, re-use and
+    social awareness. The whole-life paragraph was moved from
+    3.6 (finance) to 3.5, where the slide puts it, and social
+    awareness added.
+  * TLO5 (cultural, language and learning differences -
+    visual, auditory, kinesthetic, social, solo) was absent
+    entirely. Added to 3.5.
+  * 3.6 now states how Phase 1 was managed, including the two
+    items that slipped, which the slide asks for.
+  * GUI layout now dimensioned (twelve-column grid, 1280 px
+    content width, 24 px gutter, breakpoints).
+  * 1.5 heading corrected to the template wording,
+    "Organization of the rest of the chapters".
+  * 1.4 no longer says "a manual queue".
+  Paid for by trimming ~520 words across the eleven paper
+  entries and Chapter 3 prose; no findings removed. Body
+  10,022 words including tables, 9,041 excluding.
+- Research problem widened from campus booking to the class
+  of problem it belongs to: the governance of shared, scarce,
+  time-sliced resources whose rules differ by class. Section
+  1.2 now opens at that level, states three limitations with
+  parallel labels (policy scope, failure handling, policy
+  encoding) plus the concurrency defect beneath them, cites
+  Sunway as current practice, gives the institutional
+  consequence, and then narrows explicitly to campus
+  facilities with generalisation stated as design intent
+  rather than a tested claim.
+- Section 2.6 gained the dependency argument: the three
+  deficiencies are not independent, so the contribution is
+  the integration rather than the components. This is the
+  answer to "you bolted a chatbot onto a booking app".
+- Problem slide rebuilt: statement box, four parallel
+  noun-phrase labels, cited evidence line. Pull-quotes
+  removed - the Sunway detail is now spoken, not displayed.
+- Objectives reworded from activities to properties. An
+  activity ("build a rule engine") cannot fail; a property
+  ("conflict-freedom holds whatever the application does")
+  can, which is what makes an objective testable rather than
+  a task list. Each now names its technique once - inherited
+  policy, declarative constraint, online learning, prevented
+  by construction - and objective 5 gained real targets:
+  zero conflicts under concurrent load and SUS above 68,
+  instead of "measure usability". Verbs unchanged and still
+  Bloom 5/6. Deck slide 4 and PHASE1-PLAN.md updated.
+- Section 1.2 rewritten. The problem is now that online
+  booking removed the friction that limited over-booking and
+  put nothing in its place: booking takes seconds, not
+  turning up costs nothing, so booking early, long and larger
+  than needed is rational, and the grid fills over a building
+  that is not full. Evidenced with Sunway University's live
+  LibCal page, which sets a minimum group size of three for a
+  ten-seat pod and requires students to appear at a service
+  counter within fifteen minutes or forfeit. New reference:
+  Sunway University (2026).
+- Objective 1 extended to record attendance, closing a gap
+  where the problem statement led with costless no-shows but
+  no objective addressed it.
+- Deck slide 3 rebuilt around the Sunway evidence; slide 6
+  justification and the contents/evaluation/market slides
+  reworded so nothing in the deck still claims booking is
+  manual. Report body 10,027 words including tables.
+- docs/booking-systems-landscape.md added: every booking
+  product universities run by market segment, what Monash
+  Malaysia and Sunway actually operate, and four ready
+  problem statements at different lengths.
+- docs/supervisor-meeting-logs.md added: six logs drafted
+  from the project record.
+- Aim, objectives and research problem rewritten in plain
+  language after review: the objectives were precise but
+  unsayable, and the problem statement still claimed booking
+  was manual, which contradicts 2.3 (LibCal alone runs at
+  7,500 institutions). The problem is now framed as
+  "digitisation stopped at the transaction" with four
+  concrete failures: split by facility type, refusal with no
+  alternative, students gaming the window, and rules that
+  still need a human. Deck slides 3 and 4 rebuilt to match.
+- Aim and five objectives rewritten so each names the
+  mechanism that no purchasable product has, after the
+  commercial review showed the old wording ("centralised
+  platform with configurable rules, AI slot suggestions,
+  chatbot") described LibCal, Skedda and MIDAS. Now: two-level
+  inheritance across facility segments; feasibility and
+  overlap as declarative database constraints; ranked
+  multi-criteria recommendation with per-student online
+  learning; assistant answering only from rows retrieved
+  under the asking student's authorisation; evaluation on
+  observed values. Split from four to five so the recommender
+  and the assistant each carry their own claim. Bloom 5/6
+  verbs throughout (design, formulate, construct, develop,
+  evaluate); eight SDGs redistributed two per objective 1-4.
+  Cross-references renumbered; deck slides 4 and 5 rebuilt;
+  PHASE1-PLAN.md and FYP.md updated.
+- Chapter 2 gained 2.3 "Review of systems in current
+  practice" (LibCal, 25Live/EMS, InnoSoft Fusion, Skedda,
+  MIDAS) as grey literature, which the Chapter 2 lecture deck
+  explicitly permits (company websites, blogs, newspaper
+  articles, "similar systems"). Research gap in 2.6 narrowed
+  to three claims that survive against products, not only
+  papers. Michigan Daily evidence added to 1.2. Seven new
+  references. Sections renumbered to 2.7.
+- docs/competitive-analysis.md written: market segmentation
+  by facility type, honest verdict on each gap claim,
+  prepared answers for "why not just buy LibCal?".
+- Mid-point presentation rebuilt to the running order the
+  lecturer's "FYP Mid-point Oral Presentation" deck mandates:
+  intro, contents, problem, aim/objectives, justification,
+  literature review, methodology, concept design, professional
+  practices, PM/finance/entrepreneurship, conclusion,
+  references, Q&A. 25 slides, timed to ~14m45s against the
+  15-minute limit. Report figures embedded (architecture, ERD,
+  Gantt); the use case diagram was rebuilt as native shapes
+  because the image was illegible at projector size.
+  Speaker notes on every slide; SPEAKER-NOTES-AND-QA.txt
+  retimed and given SDG, social-awareness and public-health
+  answers. Validated - all checks pass.
+- Audited the report against the four FYP lecture decks
+  (Ch1, Ch2, Ch3, Mid-point Oral). Chapter 2 already compliant
+  (5W1H, paper-by-paper, 11 refs in the 5-20 band). Two real
+  gaps found and closed.
+- Chapter 1 rewritten for the C3/PLO2 outcome: research
+  problem, aim, all four objectives and the justification now
+  foster social awareness and integrate eight UN-SDGs (3, 4,
+  7, 8, 9, 10, 11, 12), matching the lecturer's sample
+  wording. "Social awareness" previously appeared zero times.
+- Chapter 3 concept design completed against slide 11:
+  added 3.4.1 assumptions and design specifications (new
+  Table 3.3, 8 specs traced to objectives and literature
+  gaps), a designed-parameters table (Table 3.4, all
+  recommender constants with justification), and 3.4.13
+  Graphical user interface with Figures 3.6-3.8 (screenshot
+  placeholders to be replaced). Subsections renumbered
+  3.4.1-3.4.13; a duplicate 3.4.5 heading was fixed.
+- Added continuous professional development / life-long
+  learning to 3.5 (TLO4, C5/PLO11) and made "public health
+  and safety" explicit. Both were missing entirely.
+- Fixed a duplicated sentence in 3.4 and a wrong equation
+  cross-reference (equation 3.1 -> 3.5 in the booking flow).
+- Report figures moved from /tmp to report/figs/ so builds
+  are reproducible; build script reads FIGS_DIR.
+- Trimmed ~570 words of redundancy across Ch1 and Ch3 to
+  absorb the additions. Body is 9,586 words including tables,
+  8,605 excluding them.
+- Verified all 11 references against Crossref or the
+  publisher's article page; all real. Corrected the Lalitha
+  entry (full author list, hyphen in "event-hall", pages
+  972-975). Per-paper notes written to docs/research-papers.md.
 
 ------------------------------------------------------------
 2026-07-26 (Sun)
 ------------------------------------------------------------
+- Chapter 2 restructured to the paper-by-paper approach the
+  supervisor specified: 11 papers each reviewed individually
+  under four headings (problem intended to be solved /
+  methodology used / outcomes achieved / gaps identified),
+  plus 5W1H table, summary table with a gaps column, and the
+  three-part research gap. Report 7,277 -> 8,811 words
+  (limit 10,000). Tables renumbered; the old feature-comparison
+  table was dropped with this structure.
+- Folder organised: removed duplicate FYP.md / PHASE1-PLAN.md
+  copies and a stray Word lock file; moved supervisor notes
+  into docs/; added docs/README.md (index of every doc and
+  diagram) and supabase/README.md (migration run order, which
+  had caused ordering errors); refreshed FYP.md (current
+  12-table schema, corrected milestones, removed the
+  contradictory word-count line).
+- Phase 1 report synced to the built system (~7,280 words):
+  new 12-table ERD (graphviz) replacing the old 7-table one;
+  Chapter 3 rewritten to document the two-level facility model
+  with inheritance + overrides, database-enforced access
+  control, attendance/no-show tracking, trigger-driven
+  notifications and audit logging, lost & found, and the
+  evaluation instrumentation. Figures expanded from 3 to 6
+  (added use case diagram, booking flowchart, admin setup
+  flowchart) with corrected aspect ratios; List of Figures
+  and in-text references updated.
+- Admin Facilities tab redesigned (same two-step process):
+  numbered step cards side by side, rules grouped in a labelled
+  panel with "opening hours / booking length" paired inputs and
+  an explained auto-approve toggle, each type shown with its
+  illustration + venue/room/active badges, rooms as rows with
+  inline capacity, custom-rules badge, manager chips and a
+  delete icon, plus proper empty states and a first-run
+  call to action.
+- Facility artwork now keyword-matched, so admin-invented
+  facility types get sensible pictures instead of a blank
+  placeholder ("Swimming Pool" -> pool, "Tennis Court" ->
+  net court, "Computer Lab" -> room). Added pool and gym
+  scenes plus a proper neutral fallback (walls/door/window).
+- Student dashboard visual overhaul: summary strip (upcoming,
+  awaiting approval, free now), browse/book consolidated into
+  one card with breadcrumb + back button, richer venue/room
+  cards with hover lift and status badges, cleaner booking
+  form with labelled fields and spinner, highlighted AI
+  suggestion panel, equipment as a side panel, and "My
+  bookings" rebuilt as date-chip rows with an empty state.
+  Entrance animations to match the admin page.
+- Diagrams generated from the implemented system (Graphviz,
+  PNG @200dpi + SVG) in docs/diagrams/: whole-system flowchart
+  (swimlanes per role + backend), use case diagram, booking
+  flowchart, admin facility-setup flowchart, chatbot grounding
+  flowchart. Source: outputs/make_diagrams.py
+- Two-level facility model: admin now adds a facility TYPE
+  first (Badminton, Football) carrying the venue + booking
+  rules, then adds rooms/courts under it which inherit those
+  rules; optional per-court override with a "reset to
+  inherit" action. New facility_categories table, facilities
+  gains category_id, facility_rules becomes an override table,
+  and two views (facilities_full, effective_facility_rules)
+  resolve everything for the app. WIPES + reseeds facilities.
+  (supabase/upgrade-categories.sql)
+- Reworked roles/access: removed the open role dropdown at
+  signup - everyone now registers as a student. Added an
+  admin "Users" tab to promote/demote users. Enforced at the
+  database: profiles insert policy restricts self-signup to
+  student; admins may change any role via is_admin() policy.
+  Scoped claim_demo_role() keeps the demo buttons working.
+  (supabase/upgrade-user-roles.sql)
+- Removed "Asia Pacific University" branding from the app UI
+  (kept in the academic report/docs).
+- Chatbot fix: Gemini auth moved to x-goog-api-key header
+  (query-param form was failing silently -> robotic answers);
+  added server-side error logging.
 - Unit tests on the recommendation engine (src/lib/recommend.test.ts):
   16 Vitest cases covering rule enforcement, slot generation,
   conflict exclusion, scoring/ranking, and adaptive weights.

@@ -39,34 +39,41 @@ Auth via `/login` (Supabase). *(TBD: Supabase Auth vs custom; APU email restrict
 - AI: **Gemini Flash** (free tier, function calling) for the chatbot, behind a swappable wrapper; **rule-based scoring** for slot recommendations (deterministic, free, evaluable), optionally LLM-phrased explanations
 - Libraries: react-hook-form + zod, date-fns + react-day-picker, recharts, sonner
 
-## Planned Database Schema *(draft)*
+## Database Schema (implemented)
 
-- `profiles` — user id, name, role (student | facility_manager | admin)
-- `facilities` — name, type (discussion_room | futsal | basketball | badminton | meeting_room | event_hall | other), location, capacity, description, manager_id, status
-- `facility_rules` — facility_id, operating hours, max booking duration, max occupancy, cancellation policy, access permissions (per-facility config)
-- `reservations` — facility_id, user_id, start_time, end_time, participants, status (pending | approved | rejected | cancelled), purpose
-- Conflict rule: no two approved/pending reservations overlap for the same facility
+Twelve tables; full details in `supabase/README.md` and the ERD in `docs/diagrams/erd.png`.
+
+- **Facilities** — `facility_categories` (type + venue + booking rules), `facilities` (individual rooms/courts), `facility_rules` (optional per-room override)
+- **People** — `profiles` (role + recommendation weights), `facility_managers` (many-to-many assignment)
+- **Bookings** — `reservations` (incl. check-in / no-show), `equipment`, `reservation_equipment`
+- **Operations** — `lost_and_found`, `notifications`, `activity_log`, `evaluation_events`
+- Views: `facilities_full`, `effective_facility_rules` (resolve category rules + overrides)
+- Conflict rule: PostgreSQL exclusion constraint prevents overlapping pending/approved bookings
 
 ## Milestones
 
 - [x] Project scaffold (Next.js, Tailwind, shadcn, Supabase client)
 - [x] Title proposal submitted (pending approval)
-- [x] Database schema + RLS policies in Supabase (`supabase/schema.sql` — run in SQL editor)
+- [x] Database schema + RLS policies in Supabase (run `supabase/setup-all.sql` — see `supabase/README.md`)
 - [x] Authentication + role-based routing/guards
 - [x] Landing page (replace default template)
 - [x] Student: facility browsing + booking flow with conflict checks
-- [x] Facility manager: approval queue (facility/schedule management pending)
-- [x] Admin: per-facility rule configuration + basic stats (user/facility CRUD pending)
+- [x] Facility manager: approval queue, attendance tracking, equipment, lost & found (all scoped to assigned facilities)
+- [x] Admin: facility type/room CRUD, rule configuration, manager assignment, user roles, activity records
 - [x] Admin: analytics dashboard (usage trends, recharts) — KPIs + 4 charts
 - [x] AI: booking recommendations (rule-based scoring + adaptive weights)
 - [x] AI: chatbot for availability/policy Q&A (provider-agnostic, grounded)
-- [ ] Notifications (booking status updates)
+- [x] Notifications (booking status updates, trigger-driven)
 - [x] Unit tests on recommendation engine (16 Vitest cases); eval instrumentation for Phase 2 metrics
-- [ ] Documentation for FYP submission
+- [ ] Final submission tasks: cover details, ToC update, Turnitin, appendices, presentation slides
 
 ## Phase 1 (Investigation)
 
-Governed by the SOE Student Project Handbook (v11). Report (6,000–8,000 words) due week 12; oral presentation week 13/14. Full execution plan, draft objectives, and week-by-week schedule in `PHASE1-PLAN.md`.
+> **Word limit: 6,000–10,000 words** (confirmed by supervisor; overrides the 6,000–8,000 figure in the handbook). Current body: ~10,030 including tables, ~9,049 excluding them. Check the count before and after any report edit.
+>
+> Chapter 2 uses the **paper-by-paper** approach the supervisor specified, plus a review of commercial systems in current practice (2.3). Chapter 1 must foster social awareness and integrate at least eight UN-SDGs — see `docs/PHASE1-PLAN.md`.
+
+Governed by the SOE Student Project Handbook (v11) and the four module lecture decks in `FYP Lecture Slides/`. Report due week 12; oral presentation week 13/14. Full execution plan, aim and five objectives, and week-by-week schedule in `docs/PHASE1-PLAN.md`. Competitive positioning against LibCal, MIDAS, Skedda and the rest in `docs/competitive-analysis.md`.
 
 ## Status Log
 

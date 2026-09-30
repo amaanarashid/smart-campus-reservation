@@ -42,7 +42,8 @@ report/                    Phase 1 report + ethics documents
 
 ## Documentation
 
-- `FYP.md` - project scope and status
-- `docs/ui-design.md` - design system
-- `docs/supervisor-meeting-notes.txt` - project summary and literature map
+- `FYP.md` - project scope, milestones and status log
+- `docs/` - project documentation and diagrams (see `docs/README.md`)
+- `supabase/README.md` - database migrations and the order to run them
+- `report/` - Phase 1 report and ethics documents
 - `CLAUDE.md` - conventions for AI-assisted development

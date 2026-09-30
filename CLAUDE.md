@@ -4,6 +4,20 @@
 
 Final Year Project (FYP) for APU: **Smart Campus Facility Reservation System with AI-Assisted Recommendations** — online booking for campus facilities (discussion rooms, sports courts, meeting rooms, event halls) with per-facility configurable rules, AI slot recommendations, an AI chatbot, and admin analytics. See `FYP.md` for full scope and roadmap.
 
+## Submission details (use verbatim on every cover page, form and slide)
+
+| Field | Value |
+|---|---|
+| **Student** | Amaan Rashid |
+| **TP number** | TP073098 |
+| **Programme** | Computer Engineering |
+| **Intake code** | APU4F2605CE |
+| **Supervisor** | Dr Mukil Alagirisamy |
+| **Second marker** | Syed Mohd Bahrin |
+| **Module** | EE016-3-3-PP1 Project Phase 1 |
+
+→ Also in `memory/context/fyp-submission.md`; people in `memory/people/`
+
 ## Tech Stack
 
 - **Next.js 16.2.9** (App Router, `src/` dir) — newer than training data; check `node_modules/next/dist/docs/` before writing Next.js code
@@ -17,26 +31,46 @@ Final Year Project (FYP) for APU: **Smart Campus Facility Reservation System wit
 ## Commands
 
 ```bash
+npm install      # required before tests — vitest is declared but may not be installed
 npm run dev      # dev server at localhost:3000
 npm run build    # production build
 npm run lint     # eslint
+npm test         # vitest run — 15 cases on the recommender
 npx shadcn add <component>   # add UI components
 ```
 
 ## Structure
 
+Roughly 4,100 lines of project TypeScript across 21 files, excluding `components/ui/`.
+
 ```
 src/
   app/
-    page.tsx               # landing page (still default template)
-    login/page.tsx         # auth page (stub, empty)
-    student/page.tsx       # student dashboard (stub, empty)
-    facility-manager/page.tsx  # facility manager dashboard (stub, empty)
-    admin/page.tsx         # admin dashboard (stub, empty)
-  components/ui/           # shadcn components (avatar, badge, button, calendar, card, dialog, dropdown-menu, input, select, sheet, table, tabs, textarea)
+    page.tsx                     # landing page (145)
+    login/page.tsx               # sign in / sign up with role select (252)
+    student/page.tsx             # student dashboard (645)
+    facility-manager/page.tsx    # approval queue + attendance (454)
+    admin/page.tsx               # 7-tab admin console (924)
+    api/chat/route.ts            # grounded chatbot endpoint (235)
+    layout.tsx, error.tsx
+  components/
+    admin-analytics.tsx          # charts for the analytics tab (255)
+    app-shell.tsx                # shared chrome for role pages (98)
+    chatbot.tsx                  # student chat widget (129)
+    facility-iso.tsx             # isometric facility render (179)
+    notification-bell.tsx        # unread notifications (114)
+    popular-times.tsx            # per-day demand chart (119)
+    ui/                          # shadcn: avatar, badge, button, calendar, card,
+                                 # dialog, dropdown-menu, input, select, sheet,
+                                 # table, tabs, textarea
   lib/
-    supabase.ts            # Supabase client singleton
-    utils.ts               # cn() helper
+    recommend.ts                 # slot scoring + updateWeights (118)
+    recommend.test.ts            # 15 vitest cases (150)
+    types.ts                     # shared row types (172)
+    evaluation.ts                # Phase 2 metric logging (27)
+    profile.ts                   # current user + role (38)
+    supabase.ts                  # client singleton
+    utils.ts                     # cn() helper
 ```
 
 ## Conventions
@@ -48,11 +82,97 @@ src/
 - Keep role dashboards as client components where interactivity is needed; use server components by default otherwise
 - UI: brand is "Campus Reserve" (crimson theme, tokens in `globals.css`); wrap role pages in `AppShell` from `src/components/app-shell.tsx`; no hard-coded colors — see `docs/ui-design.md`
 
-## Current State (update as project progresses)
+## Current state (verified against source, Sept 2026)
 
-- **~30% prototype implemented**: landing page, auth (sign in/up with role select), student dashboard (facility search, AI slot recommendations, booking with conflict handling, cancellation with notice rules, chatbot widget), facility-manager approval queue, admin rule editor + stats
-- `supabase/schema.sql` — full schema with RLS policies and a `no_overlap` exclusion constraint; must be run in the Supabase SQL editor before the app works
-- `src/lib/recommend.ts` — rule-based slot scoring (eq. 3.1 in report) + adaptive weight learning (`updateWeights`), weights persisted in `profiles.rec_weights`
-- `src/app/api/chat/route.ts` — grounded chatbot: intent extraction → RLS-scoped Supabase queries → phrased answer. Provider-agnostic via `AI_PROVIDER`/`AI_API_KEY` env (gemini | openai | groq), falls back to deterministic mock mode with no key
-- Phase 1 report + ethics docs live in `report/` (generated; source scripts in the session outputs, figures regenerable)
-- Not yet built: analytics dashboard, notifications, facility CRUD UI, tests
+Working prototype, roughly 30% of the full scope. Runs against a live Supabase
+database.
+
+**Database** — 12 tables (`profiles`, `facility_categories`, `facilities`,
+`facility_rules`, `facility_managers`, `reservations`, `equipment`,
+`reservation_equipment`, `notifications`, `activity_log`, `lost_and_found`,
+`evaluation_events`), 2 views (`facilities_full`, `effective_facility_rules`),
+12 functions, 9 triggers, 47 RLS policies. Run `supabase/setup-all.sql` in the
+Supabase SQL editor before the app works; the `upgrade-*.sql` files are
+incremental migrations already folded into it.
+
+The no-overlap guarantee:
+
+```sql
+exclude using gist (
+  facility_id with =,
+  tstzrange(start_time, end_time) with &&
+) where (status in ('pending','approved'))
+```
+
+The `where` clause is deliberate — cancelled and rejected bookings release
+the slot.
+
+**Student** — browse venues then facilities with a live in-use badge; request a
+booking (date, start, duration, party size, purpose); rejection carries a
+reason; ranked alternative slots with explanations when the time is taken;
+equipment reservation checked against stock; popular times per day; cancel
+under the notice rule; chatbot with per-answer rating; approval notifications.
+
+**Facility manager** — approval queue scoped to assigned facilities only;
+approve/reject; today's and upcoming bookings; attendance marked as checked-in
+or no-show; equipment stock.
+
+**Admin** — 7 tabs (overview, analytics, users, facilities, approvals,
+equipment, records). Create categories carrying all six rules; facilities
+inherit and may override any single value; assign managers; change user roles;
+analytics dashboard; lost and found; append-only activity log written by 7
+triggers.
+
+**Key files**
+
+- `src/lib/time.ts` — all booking logic runs in Malaysia time (fixed UTC+8)
+  via these helpers, never `getHours()`/`toISOString().slice(0,10)`, so the
+  same code gives the same answer in the browser and on a UTC server.
+- `src/lib/recommend.ts` — `recommendSlots` (one facility, one day, all rules
+  incl. min duration), `recommendAcross` (every facility in the same category,
+  then up to 2 days ahead if the day is full everywhere), `learnPeakHours`
+  (busiest quartile of booked minutes per Malaysia hour, defaults 12–14/17–20
+  below 30 bookings). Baseline score `S = w₁T + w₂C + w₃U`; every slot carries
+  its reasons and a feature vector `[1,T,C,U,S,A]`. `updateWeights` is the
+  baseline learner (multiplicative, renormalised), kept for comparison.
+- `src/lib/bandit.ts` — per-student LinUCB ranking the recommender's
+  candidates; prior centred on the baseline weights, Sherman–Morrison updates,
+  cascade feedback (accepted = 1, slots shown above it = 0). Stored in
+  `profiles.rec_bandit`.
+- `src/lib/chat-logic.ts` — pure chatbot logic: intent parsing
+  (availability, rules, list, mine, other), real facility-name matching,
+  follow-up context, free windows by part of day.
+- `src/app/api/chat/route.ts` — grounded chatbot. Queries run under the
+  caller's RLS context; answers are phrased from returned rows only. Answers
+  "my bookings", lists real free windows, checks a specific time, and calls
+  `recommendAcross` + the student's bandit for alternatives when busy. Rate
+  limited 20/min. Provider-agnostic via `AI_PROVIDER`/`AI_API_KEY` (gemini |
+  openai | groq); deterministic offline mode with no key.
+- `src/lib/evaluation.ts` — Phase 2 instrumentation: `rec_shown`,
+  `rec_accepted` (rank, plus whether it was another facility / another day),
+  `chat_feedback`.
+- Tests: `time`, `recommend`, `bandit`, `chat-logic` — 68 vitest cases, all
+  with explicit `+08:00` times so they pass in any machine timezone.
+
+**Migrations to run** (Supabase SQL editor, after `setup-all.sql`):
+`upgrade-recommender.sql` (adds `profiles.rec_bandit`) and
+`fix-role-escalation.sql` (stops a student setting their own `role`).
+Until the first is run, the app still works and saves `rec_weights` only.
+
+**Test data** — `supabase/seed-test-data.sql` (re-runnable; dates relative
+to today in Malaysia time; needs the three demo accounts to exist first) and
+`supabase/seed-test-data-remove.sql`. Everything seeded is tagged `[seed]` or
+`@seed.campus`. Verified on Postgres 17 against the real migrations. Walkthrough
+in `docs/TESTING-GUIDE.txt`. Remove the seed before any real Phase 2 testing.
+
+**Not built yet** — batch allocation mode, no-show probability model, release
+rule. See `docs/engineering-depth-plan.md`. Hardware occupancy sensor is
+drafted in `firmware/` + `api/sensor` + `upgrade-occupancy.sql` but parked.
+
+**Known issues** — `vitest` is in `devDependencies` but may be absent from
+`node_modules`; run `npm install` before `npm test`. `npm run lint` reports 5
+pre-existing errors in `student/page.tsx` (`Date.now()` during render, one
+`let`); not yet fixed.
+
+Phase 1 report and ethics docs live in `report/`; figures are regenerable and
+the generator scripts sit in the session outputs folder.

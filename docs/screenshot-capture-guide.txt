@@ -1,0 +1,236 @@
+============================================================
+SCREENSHOT CAPTURE GUIDE
+What to capture, where from, and how to slot it in
+Smart Campus Reservation FYP | Amaan Rashid
+============================================================
+
+SEVEN screenshots are needed. Two are evidence from other
+systems (Chapter 2). Five are your own system (Chapter 3).
+
+Save every file into:
+    report/figs/
+
+Keep the EXACT filenames listed below. Overwrite the
+placeholder that is already there. Then tell Claude to
+rebuild and the report picks them up automatically.
+
+Format: PNG. Roughly 1600 px wide is plenty.
+
+
+============================================================
+PART 1 - EVIDENCE FROM OTHER SYSTEMS (Chapter 2)
+============================================================
+These two are the important ones. They defend claims a
+marker is most likely to challenge.
+
+
+------------------------------------------------------------
+1. evidence_sunway.png            -> Figure 2.2, section 2.3
+------------------------------------------------------------
+PROVES: institutions enforce booking policy by hand, with
+        policy text and staff time instead of software.
+
+STEPS
+ 1. Open https://sunway.libcal.com/reserve/gpp
+ 2. Do not log in. You do not need to.
+ 3. Scroll until you can see BOTH of these lines together,
+    they sit just above the availability calendar:
+
+      "Group size, minimum 3 to maximum of 10 persons
+       (For POD 1-5) and minimum 3 to maximum of 6 persons
+       (For POD 6-11)."
+
+      "Users must show up at the Service Counter (Ground
+       Level) within the first 15 minutes of the booked
+       timeslot. If not, the bookings will be considered
+       forfeited and may be cancelled."
+
+ 4. Make sure the Sunway library header is visible at the
+    top, so the source is obvious from the image itself.
+ 5. IMPORTANT - get the date into the shot. Either:
+      - leave the browser clock/taskbar visible, or
+      - include part of the availability calendar, which
+        shows the current date range
+    Your caption says "captured August 2026" and the image
+    should back that up.
+ 6. Capture:  Win + Shift + S  -> drag  -> paste into Paint
+    -> save as PNG
+ 7. Save as:  report/figs/evidence_sunway.png
+
+WHY THE DATE MATTERS
+ It is a live page. If Sunway changes it before your viva,
+ a dated screenshot is still valid evidence. An undated one
+ is not.
+
+
+------------------------------------------------------------
+2. evidence_midas.png             -> Figure 2.1, section 2.3
+------------------------------------------------------------
+PROVES: alternatives exist in one commercial product, but
+        they are not ranked and the substitutions are
+        configured by hand.
+
+STEPS
+ 1. Open https://mid.as/online-demo
+    (If the demo will not let you book, use the free trial
+     at https://mid.as/free-trial instead.)
+ 2. Find the booking or availability screen.
+ 3. Pick a room and a time that is ALREADY TAKEN. If nothing
+    is taken, make a booking first, then try to book the
+    same slot again.
+ 4. Submit it. MIDAS should respond with alternatives -
+    other times the same day, the same time on nearby days,
+    or other rooms.
+ 5. Capture that list of alternatives.
+
+ 6. BONUS SHOT, worth the extra two minutes:
+    Look for the admin screen where substitute venues are
+    specified - it is under venue settings, described on
+    https://mid.as/features/booking-alternatives
+    A shot of that screen shows the substitutions are
+    maintained BY HAND, which is exactly your argument.
+    If you get it, put both images side by side in one
+    picture before saving.
+
+ 7. Save as:  report/figs/evidence_midas.png
+
+WHAT TO LOOK FOR WHILE YOU ARE IN THERE
+ - Are the alternatives in any order of quality, or just
+   listed?
+ - Does anything mention how many people are in the group?
+ - Does it remember what you chose last time?
+ The answer to all three is no. That is your objective 3.
+
+
+============================================================
+PART 2 - YOUR OWN SYSTEM (Chapter 3)
+============================================================
+Run the app first:   npm run dev
+Then log in as each role.
+
+Before you start: seed a bit of realistic data. Empty
+dashboards look unfinished. A few facilities, a handful of
+bookings across different days, one or two no-shows.
+
+
+------------------------------------------------------------
+3. gui_student.png                       -> Figure 3.6
+------------------------------------------------------------
+SHOWS: the student dashboard.
+
+ 1. Log in as a student.
+ 2. Land on the dashboard with the summary strip visible
+    (upcoming, awaiting approval, free now).
+ 3. Have at least two bookings in "My bookings" so the
+    section is not empty.
+ 4. Capture the whole window, not just part of it.
+ 5. Save as: report/figs/gui_student.png
+
+
+------------------------------------------------------------
+4. gui_manager.png                       -> Figure 3.7
+------------------------------------------------------------
+SHOWS: the facility manager dashboard, scoped to their
+       assigned facilities only.
+
+ 1. Log in as a facility manager.
+ 2. Open the approval queue with at least two pending
+    requests waiting.
+ 3. If the assigned-facility name is visible anywhere,
+    make sure it is in the shot - it demonstrates scoping.
+ 4. Save as: report/figs/gui_manager.png
+
+
+------------------------------------------------------------
+5. gui_admin.png                         -> Figure 3.8
+------------------------------------------------------------
+SHOWS: the administrator dashboard and facility
+       configuration.
+
+ 1. Log in as administrator.
+ 2. Open the Facilities tab, showing a facility TYPE with
+    its rules, and the rooms underneath it.
+ 3. This is your two-level model on screen - the single
+    most important thing in Chapter 3. Make sure both
+    levels are visible in one shot.
+ 4. Save as: report/figs/gui_admin.png
+
+
+------------------------------------------------------------
+6. gui_recommend.png                     -> Figure 3.9
+------------------------------------------------------------
+SHOWS: the AI recommendation. Objective 3.
+
+ 1. Log in as a student.
+ 2. Pick a facility and request a time you know is ALREADY
+    BOOKED. If nothing is booked, book something as another
+    user first.
+ 3. The system should refuse and offer ranked alternatives.
+ 4. THE CRITICAL PART: the reason text must be visible on
+    each suggestion - "close to your preferred time",
+    "good fit for your group size", "off-peak, likely
+    quieter". That text is what separates your recommender
+    from MIDAS. Do not crop it out.
+ 5. Save as: report/figs/gui_recommend.png
+
+
+------------------------------------------------------------
+7. gui_chatbot.png                       -> Figure 3.10
+------------------------------------------------------------
+SHOWS: the grounded assistant. Objective 4.
+
+ 1. Log in as a student and open the chat widget.
+ 2. Ask something answerable from live data, for example:
+      "Is the badminton court free tomorrow afternoon?"
+      "How long can I book a discussion room for?"
+ 3. Wait for the answer and capture the question AND the
+    answer together.
+ 4. Save as: report/figs/gui_chatbot.png
+
+ OPTIONAL SECOND SHOT, strong for the viva:
+ Ask it something outside its four question families, for
+ example "what is the wifi password?", and capture it
+ declining. That demonstrates the scope limit is real. Keep
+ it on your laptop for the demo even if it does not go in
+ the report.
+
+
+------------------------------------------------------------
+8. gui_analytics.png                     -> Figure 3.11
+------------------------------------------------------------
+SHOWS: the measurement instrumentation. Objective 5.
+
+ 1. Log in as administrator, open the Analytics tab.
+ 2. Capture the KPI row and at least two charts.
+ 3. Make sure the NO-SHOW RATE is visible. It is the
+    measurement that ties back to the problem statement.
+ 4. Save as: report/figs/gui_analytics.png
+
+
+============================================================
+AFTER YOU HAVE THEM ALL
+============================================================
+ [ ] All seven files in report/figs/ with the exact names
+ [ ] Sunway shot has a visible date
+ [ ] Recommendation shot shows the reason text
+ [ ] Analytics shot shows the no-show rate
+ [ ] Tell Claude: "screenshots are in, rebuild the report"
+
+Then in Word: right-click the Table of Contents ->
+Update Field -> update entire table.
+
+
+============================================================
+QUICK REFERENCE
+============================================================
+ evidence_sunway.png   Fig 2.2   Sunway booking rules
+ evidence_midas.png    Fig 2.1   MIDAS alternatives
+ gui_student.png       Fig 3.6   Student dashboard
+ gui_manager.png       Fig 3.7   Manager dashboard
+ gui_admin.png         Fig 3.8   Admin facility config
+ gui_recommend.png     Fig 3.9   AI slot suggestions
+ gui_chatbot.png       Fig 3.10  Assistant answering
+ gui_analytics.png     Fig 3.11  Analytics + no-show rate
+
+ Windows snip:  Win + Shift + S
+============================================================

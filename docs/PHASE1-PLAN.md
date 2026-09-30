@@ -15,26 +15,29 @@ These were due before week 7. Confirm each is done; anything outstanding gets fi
 - [ ] Turnitin account set up via Moodle
 - [ ] Title approval status (proposal was pending — check FYPPGBank)
 
-## Draft aim and objectives — for supervisor sign-off
+## Aim and objectives
 
-Handbook rules: minimum 3 primary objectives at Bloom cognitive level 5/6, varied verbs, last objective must analyse/evaluate/monitor the system. Extensions can be vaguer.
+Handbook rules: minimum 3 primary objectives at Bloom cognitive level 5/6, varied verbs, last objective must analyse/evaluate/monitor the system. Extensions can be vaguer. The Chapter 1 lecture deck adds that the aim, objectives and justification must foster social awareness and integrate at least eight UN-SDGs.
 
-**Aim:** To develop a smart campus facility reservation system that centralizes booking of university facilities through per-facility configurable rules, AI-assisted slot recommendations, and a chatbot for reservation queries.
+**Aim:** To build one booking system for every kind of campus facility, in which an administrator sets the rules without a developer, the database itself refuses to double-book, a student who cannot get the time they wanted is offered the next best options, and questions about availability and rules are answered in plain language — making the sharing of campus space visible and fair, and contributing to at least eight UN-SDGs.
 
 **Primary objectives:**
 
-1. To **design** a centralized web-based reservation platform for campus facilities (discussion rooms, sports courts, meeting rooms, event halls) with role-based access for students, facility managers, and administrators. (C6)
-2. To **develop** a configurable rule engine that lets administrators set per-facility booking policies — operating hours, duration limits, occupancy restrictions, cancellation rules, and access permissions. (C6)
-3. To **construct** an AI-assisted recommendation module that suggests optimal booking slots from facility availability, participant count, and user time preferences, supported by a chatbot for common reservation and policy queries. (C6)
-4. To **evaluate** the developed system through functional testing and user acceptance evaluation, measuring booking-conflict reduction, recommendation relevance, and usability. (C5)
+1. To **design** a two-level facility model in which booking policy is inherited: a category holds the rules, its rooms follow them, and any one room may override a single value — so incompatible facility types are governed within one schema and a new type is added by configuration, not code. Attendance is recorded so unused space becomes measurable. (C6) — SDG 11, 12
+2. To **build** the booking rules and the no-overlap condition into the database rather than the program, so conflict-freedom holds whatever the application does: no sequence of simultaneous requests can produce two bookings for the same facility at the same time. (C6) — SDG 9, 10
+3. To **construct** a recommendation engine that answers an infeasible request with ranked alternatives rather than a refusal, scoring on time proximity, capacity fit and off-peak load, and adapting those weights per student by online learning. Every factor stays inspectable. (C6) — SDG 7, 3
+4. To **develop** a conversational assistant whose answers are constrained to records retrieved under the asking student's own authorisation, so fabrication and disclosure are prevented by construction rather than by instruction. (C6) — SDG 4, 8
+5. To **evaluate** against stated criteria: zero overlapping reservations under concurrent load, acceptance rate and rank of suggestions, assistant accuracy against a known-answer set, no-show rate before and after check-in, and SUS above 68. (C5)
 
-**Extensions (if time allows):** usage-trend analytics dashboard, booking notifications, multi-language chatbot.
+**Extensions (if time allows):** usage-trend analytics dashboard, booking notifications, multilingual assistant.
 
-**SDG mapping:** SDG 9 (resilient infrastructure, innovation) and SDG 4 (equitable access to educational facilities) as the two required in Chapter 1; the Professional Engineering Practices section needs at least eight — candidates: 3, 4, 7 (energy-efficient cloud vs physical queueing), 8, 9, 10 (equal access), 11, 12, 16.
+**SDG mapping:** all eight (3, 4, 7, 8, 9, 10, 11, 12) are distributed across objectives 1–4 and mapped in full in report Table 3.5.
+
+**What each objective delivers that no available product does:** 1 spans facility types that commercial products keep separate; 2 is a guarantee in the storage engine rather than a check in application code; 3 ranks alternatives and learns per student; 4 is student-facing and scoped to the individual asking.
 
 ## Report structure and marks
 
-Target 6,000–8,000 words. Times New Roman 12, 1.5 spacing, APA references, front matter in Roman numerals.
+Target 6,000–10,000 words (supervisor-confirmed; the handbook figure of 6,000–8,000 is superseded). Current body: 10,030 including tables, 9,049 excluding them. Times New Roman 12, 1.5 spacing, APA references, front matter in Roman numerals.
 
 | Component | Weight | Contents |
 |---|---|---|

@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Role } from "@/lib/types";
 import { ensureProfile } from "@/lib/profile";
+import { CampusIcon } from "@/components/campus-icon";
 import {
   CalendarCheck, Sparkles, Trophy, Volleyball, GraduationCap, Building2,
 } from "lucide-react";
@@ -32,7 +32,6 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState<Role>("student");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -114,7 +113,7 @@ export default function LoginPage() {
         {/* copy */}
         <div className="relative flex h-full flex-col justify-between p-12 text-primary-foreground">
           <div className="flex items-center gap-2.5">
-            <span className="font-display flex h-10 w-10 items-center justify-center rounded-lg bg-white/15 text-xl font-bold shadow-lg">R</span>
+            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/15 shadow-lg"><CampusIcon className="h-6 w-6" /></span>
             <span className="font-display text-lg font-semibold">Campus Reserve</span>
           </div>
           <div className="max-w-md">
@@ -146,7 +145,7 @@ export default function LoginPage() {
 
         <div key={mode} className="w-full max-w-sm animate-auth-in">
           <div className="mb-6 flex flex-col items-center text-center lg:hidden">
-            <span className="font-display mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-2xl font-bold text-primary-foreground shadow-lg">R</span>
+            <span className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg"><CampusIcon className="h-7 w-7" /></span>
             <span className="font-display text-lg font-semibold">Campus Reserve</span>
           </div>
 

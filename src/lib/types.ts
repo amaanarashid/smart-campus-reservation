@@ -6,6 +6,8 @@ export interface Profile {
   email: string;
   role: Role;
   rec_weights: RecWeights;
+  /** LinUCB state for slot ranking; null until the student first gives feedback. */
+  rec_bandit?: unknown;
 }
 
 export interface RecWeights {
@@ -14,15 +16,34 @@ export interface RecWeights {
   offpeak: number;
 }
 
+/** A facility category (Badminton, Futsal...). Added first; owns the rules. */
+export interface FacilityCategory {
+  id: string;
+  name: string;
+  slug: string;
+  venue: string;
+  description: string | null;
+  open_time: string;
+  close_time: string;
+  slot_minutes: number;
+  min_duration_mins: number;
+  max_duration_mins: number;
+  max_advance_days: number;
+  cancellation_hours: number;
+  auto_approve: boolean;
+}
+
+/** An individual room/court, read from the `facilities_full` view. */
 export interface Facility {
   id: string;
   name: string;
-  type: string; // free-form category, admin-defined (e.g. "basketball", "swimming_pool")
-  location: string;
+  category_id: string;
+  category_name: string;
+  type: string;      // category slug
   venue: string;
+  location: string;  // mirrors venue
   capacity: number;
   description: string | null;
-  manager_id: string | null;
   status: "active" | "maintenance" | "inactive";
 }
 
@@ -102,9 +123,13 @@ export interface ReservationEquipment {
   qty: number;
 }
 
+/** Resolved rules per facility (category value, or per-court override). */
 export interface FacilityRule {
-  id: string;
   facility_id: string;
+  category_id: string;
+  category_name: string;
+  type: string;
+  venue: string;
   open_time: string; // "08:00:00"
   close_time: string;
   slot_minutes: number;
@@ -113,7 +138,7 @@ export interface FacilityRule {
   max_advance_days: number;
   cancellation_hours: number;
   auto_approve: boolean;
-  allowed_roles: Role[];
+  has_override: boolean;
 }
 
 export interface Reservation {

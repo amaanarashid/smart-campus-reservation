@@ -1,0 +1,298 @@
+============================================================
+MID-POINT ORAL PRESENTATION - SPEAKER GUIDE
+Smart Campus Facility Reservation System with
+AI-Assisted Recommendations | Amaan Rashid
+EE016-3-3-PP1 Project Phase 1
+============================================================
+
+Every slide in the deck also carries these notes in the
+PowerPoint notes pane, with a timing in square brackets.
+Print this page as your backup.
+
+------------------------------------------------------------
+FORMAT (from the lecturer's Mid-point Oral deck)
+------------------------------------------------------------
+  15 minutes maximum, then Q&A.
+  Supervisor AND second marker must both be invited to the
+  Q&A - they assess active listening and feedback skills.
+  You arrange the slot yourself after confirming with both.
+
+  Assessed on: justified behaviour, clear natural voice at
+  proper volume, eye contact and gesture, legible visual aids
+  (few words, uncluttered diagrams, light background), and
+  logical flow within the time limit.
+
+  Audience: engineers, but not from your discipline.
+  Explain, don't name-drop.
+
+------------------------------------------------------------
+RUNNING ORDER AND TIMING - 19 slides, ~15 min
+------------------------------------------------------------
+   1  Title ............................. 20s
+   2  Contents .......................... 25s
+   3  Research problem .................. 70s
+   4  Aim and objectives ................ 60s
+   5  Justification (+ eight SDGs) ...... 55s
+   6  Literature reviewed ............... 55s   ] LIT
+   7  Findings from the literature ...... 65s   ] REVIEW
+   8  The research gap .................. 60s   ]
+   9  System architecture ............... 55s   ]
+  10  Development approach and eval ..... 55s   ] CONCEPT
+  11  Rule model: policy held as data ... 70s   ] DESIGN
+  12  Database and conflict guarantee ... 65s   ]
+  13  Three role interfaces ............. 40s   ] IMPLE-
+  14  AI components in operation ........ 55s   ] MENTATION
+  15  Professional engineering practices  55s
+  16  Management, finance, marketability  45s
+  17  Current status and Phase 2 ........ 65s
+  18  References ........................ 10s
+  19  Thank you / Q&A ................... 10s
+                              TOTAL ~ 14 min 55s
+
+  Cut down from 28 slides. What changed:
+   - all four dark section-break slides removed
+   - "How the literature was reviewed" folded into slide 6
+   - the systems table and the AI-literature slide merged
+     into one three-column slide (7)
+   - the equations slide is gone; the scoring rule now sits
+     on slide 14, next to the screenshot it produced
+   - conclusion and Phase 2 plan merged into slide 17
+
+  Slide 6 is the eleven-paper table. Do not read it -
+  point at the right-hand column and land two entries.
+
+  If you are running long, shorten 6 and 13.
+  Never cut 8, 11, 14 or 17 - they carry the argument,
+  the evidence and the forward plan.
+
+  Slides 13 and 14 are your 30%. This is the section that
+  proves the thing exists. One claim per slide, then offer
+  the live demo.
+
+  Slide 17 does two jobs: what is done, and what you are
+  NOT claiming, with the Phase 2 strip underneath showing
+  how each gets closed. Naming your own limitations before
+  anyone asks is the strongest thirty seconds in the talk.
+
+  The "Actors and use cases" slide is not in the deck.
+  The use case diagram is Figure 3.2 in the report if the
+  panel asks for it.
+
+------------------------------------------------------------
+THE FIVE SENTENCES THAT MATTER MOST
+------------------------------------------------------------
+Memorise these. Everything else can be paraphrased.
+
+1. THE PROBLEM (slide 3)
+   "The university cannot see or control how its own
+    facilities are being used. That makes this a resource
+    management problem with a fairness dimension, not an
+    inconvenience."
+
+1b. THE ELEVEN PAPERS (slide 6)
+   "Eleven papers, three groups. Five set the baseline,
+    two decide the technique, four set the accuracy and
+    trust requirements. Antony's own authors list AI
+    availability prediction as work not done - that is
+    evidence from inside the literature that the gap is
+    real and not something I invented."
+
+2. THE SOCIAL AWARENESS ANGLE (slide 3)
+   "Manual allocation is invisible, so it cannot be shown
+    to be fair and it cannot be optimised. Making it visible
+    is what connects this project to eight SDGs rather
+    than one."
+
+3. THE GAP (slide 8)
+   "Every reviewed system digitises the paperwork. None
+    configures policy per facility, none helps when a slot
+    is taken, and none answers questions conversationally.
+    Mine does all three."
+
+4. THE CONTRIBUTION (slide 11)
+   "Booking policy lives in the database as configuration,
+    not written into the program. That is what lets another
+    university adopt the same software with different rules."
+
+5. THE ENGINEERING (slide 12)
+   "Double booking isn't checked for - it's impossible. The
+    database itself rejects any overlapping reservation."
+
+------------------------------------------------------------
+LIKELY QUESTIONS
+------------------------------------------------------------
+
+Q: Why not just buy LibCal? (MOST LIKELY QUESTION)
+A: Because LibCal is sold to libraries and scoped to library
+   spaces. It would solve the discussion rooms and leave the
+   badminton courts, the futsal pitch and the event halls
+   where they are - which at most universities means a second
+   system, from a different vendor, bought by a different
+   department. That fragmentation is documented: City
+   University of Hong Kong publishes one booking system for
+   rooms and a separate one for sports facilities. My
+   contribution is the inheritance model that puts all of
+   them under one policy engine. And LibCal has no
+   recommendation at all: if your slot is taken you get a
+   grid and you hunt.
+
+Q: MIDAS already suggests alternatives. How is yours better?
+A: MIDAS suggestions come from a substitution table an
+   administrator maintains by hand - their own documentation
+   says a room is not automatically a substitute for another
+   and you must specify the relationships. There is no
+   ranking. Mine scores each candidate on capacity fit
+   against the declared group size, proximity to the
+   requested hour, and campus load, then adapts the weights
+   to the individual student. The MIDAS approach cannot tell
+   that a six-person group should not be offered a
+   two-person room; mine scores that at 0.4 instead of 1.0.
+
+Q: MIDAS shipped an MCP server - that is conversational
+   booking, and it is newer than your project.
+A: It is, July 2026, and it is a fair challenge. But it is
+   an administrator add-on: you generate a confidential key,
+   optionally restrict it by IP, and it inherits the
+   permissions of one nominated account. The student never
+   touches it and would need their own AI subscription.
+   Mine is in the product, available to every student, and
+   each query executes under that student's own row-level
+   security context, so it cannot return another student's
+   booking even if asked.
+
+Q: Is configurable booking policy really novel?
+A: No, and I do not claim it is - it is standard in
+   commercial products. What is not available is
+   configurable policy spanning library rooms, sports courts
+   and event halls in one system, because each product was
+   built for one segment and sold to one department. The
+   novelty is the cross-segment inheritance model.
+
+Q: Is rule-based scoring really "AI"?
+A: I matched the technique to the problem. With seven
+   facilities and no historical preference data there is
+   nothing to train a model on - Roy and Dutta show
+   collaborative filtering fails exactly on cold start and
+   sparsity. My system uses deterministic scoring for
+   ranking, an online-learning layer that adapts the weights
+   per student, and a large language model only where
+   natural language is actually involved. Using an LLM to
+   rank slots would be slower, non-deterministic and
+   impossible to evaluate objectively.
+
+Q: How does this project foster social awareness?
+A: Two ways. The system makes allocation visible - every
+   booking, approval and rule change is recorded in an
+   append-only log, so the university can show that space
+   was allocated by rule rather than by who knew whom. And
+   the utilisation data makes the cost of an empty room
+   visible, which is what turns "we need more rooms" into
+   an evidence question.
+
+Q: Why eight SDGs? Isn't that stretching it?
+A: Each one is a mechanism, not a label. SDG 7 is the
+   clearest example: the no-show tracking tells a manager
+   which rooms are booked but empty, so they stop being
+   lit and cooled. That is a measurable energy claim. If
+   any of the eight were only a label I would drop it.
+
+Q: Why not just use ChatGPT for everything?
+A: Two reasons. It costs money per request and it gives
+   different answers to the same question, so I could not
+   test it against objective 4's criteria. And for booking
+   rules, a confidently wrong answer is worse than none.
+   Dempere and colleagues document exactly that risk.
+
+Q: How do you know your recommendations are any good?
+A: That is Phase 2. The system already logs every
+   recommendation shown and whether the student booked it,
+   so I can report an acceptance rate from real usage rather
+   than an opinion. Same for the chatbot - students rate
+   each answer.
+
+Q: What happens if two students book at the same instant?
+A: The database has an exclusion constraint over the
+   facility and the time range. One insert succeeds, the
+   other is rejected by PostgreSQL itself. The rejected
+   student is immediately shown alternatives. Most reviewed
+   systems check in application code, which can lose that
+   race.
+
+Q: Is this not just another booking website?
+A: The booking part is the baseline. The contribution is
+   that policy is configurable per facility type, the system
+   assists when a request fails, and it answers questions
+   conversationally - no reviewed system does any one of
+   those, let alone all three.
+
+Q: How is student data protected?
+A: Malaysian PDPA. Only what booking requires is collected,
+   retention is bounded, and access is enforced by row-level
+   security in the database - a manager can only touch
+   facilities assigned to them, and that holds even if
+   someone calls the API directly.
+
+Q: Where does public health and safety come in?
+A: The occupancy limit in the rule engine. The system
+   cannot approve a booking above a room's safe capacity,
+   which encodes a fire-safety and crowd-density rule the
+   manual process enforces only by staff vigilance. The
+   same field would impose a health capacity cap during an
+   outbreak with no code change.
+
+Q: What are the limitations?
+A: Three honest ones. Recommendation quality is untested
+   with real students until Phase 2. The chatbot is
+   deliberately narrow - it refuses anything outside
+   availability and rules. And popular-times guidance needs
+   booking history to accumulate before it is useful.
+
+Q: Why these eleven papers?
+A: All within five years, across the three techniques the
+   project needs. Five are directly comparable campus
+   booking systems, two establish which recommendation
+   approaches suit which domains, and four provide the
+   evidence on chatbots in higher education. All eleven
+   verified against Crossref or the publisher directly.
+
+Q: What is your biggest risk?
+A: Ethics approval timing, because no user testing can
+   start without it. I mitigated the schedule risk by
+   building the system during Phase 1, so Phase 2 is
+   evaluation rather than implementation.
+
+Q: Could this be commercialised?
+A: Yes - the configurable rule engine means no code changes
+   per institution, and the whole stack runs on free tiers,
+   so marginal cost is near zero for a small deployment.
+   Private colleges would be the realistic first market.
+
+IF YOU DON'T KNOW AN ANSWER
+   "I haven't investigated that yet, but my instinct is X,
+    and I'd verify it by Y." Never bluff - the marking
+    criterion rewards evidence-backed answers.
+
+------------------------------------------------------------
+DELIVERY REMINDERS
+------------------------------------------------------------
+ - Look at the panel, not the screen. Glance, then turn back.
+ - Slow down on slides 8, 11 and 12. They carry the argument.
+ - Say "for example" often - the audience is not from your
+   discipline.
+ - Offer the demo at the end: "I can show the working system
+   if that's useful." A live booking with an AI suggestion
+   takes 30 seconds and is the strongest evidence you have.
+ - Arrive 5 minutes early. Bring the deck on a USB AND have
+   it in cloud storage.
+
+------------------------------------------------------------
+BEFORE YOU PRESENT
+------------------------------------------------------------
+ [x] Slide 1 filled: Amaan Rashid, TP073098, Computer
+     Engineering, APU4F2605CE, Dr Mukil Alagirisamy
+     (supervisor), Syed Mohd Bahrin (second marker)
+ [ ] Confirm the slot with BOTH Dr Mukil and Syed Mohd Bahrin
+ [ ] Run through once out loud with a timer
+ [ ] Have the app running and seeded, in case they ask
+ [ ] Print slide 6 (the eleven papers) as a handout
+============================================================

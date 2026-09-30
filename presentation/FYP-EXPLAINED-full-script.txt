@@ -1,0 +1,352 @@
+============================================================
+MY FYP, EXPLAINED IN FULL
+Smart Campus Facility Reservation System
+with AI-Assisted Recommendations
+Amaan Rashid | APU School of Engineering
+============================================================
+
+A spoken script for explaining the whole project to a
+supervisor, second marker or panel. Roughly 13-15 minutes
+read at a normal pace. Written to be said out loud, not
+read off the page.
+
+
+------------------------------------------------------------
+WHAT I'M BUILDING
+------------------------------------------------------------
+
+A Smart Campus Facility Reservation System with AI-Assisted
+Recommendations.
+
+One platform for every kind of campus facility - discussion
+rooms, badminton courts, event halls - where the
+administrator sets the booking rules without needing a
+developer, the database itself refuses to double-book, a
+student who can't get the time they wanted is offered the
+next best options, and questions about availability and
+rules get answered in plain language.
+
+
+------------------------------------------------------------
+THE PROBLEM - AND I WANT TO BE CAREFUL HERE
+------------------------------------------------------------
+
+My original proposal said campus booking is manual. Paper
+forms, counter queues. When I actually checked, that turned
+out to be wrong, and I'd rather say so now than have you
+find it.
+
+Booking is already online almost everywhere. LibCal alone
+runs at seven and a half thousand institutions in a hundred
+and six countries. Monash Malaysia uses it. Sunway uses it.
+
+So the problem isn't that booking is undigitised. It's that
+digitisation stopped at the transaction. The system records
+the request and then does nothing.
+
+    [This next part is the core idea. Slow down.]
+
+Booking a room used to cost you something. You walked to a
+counter, in opening hours, and asked a person. That friction
+limited how much space any one student could hold.
+
+Online booking removed the friction and put nothing in its
+place, because not turning up still costs you nothing.
+
+So booking early, booking long, and booking a room bigger
+than you need became the sensible strategy. And when enough
+students do the sensible thing, the screen says full over a
+building that isn't.
+
+    [Now the evidence.]
+
+Sunway's own booking page - running LibCal, twenty minutes
+from here - carries two rules.
+
+It sets a MINIMUM group size of three for a pod that seats
+ten. Nobody writes a minimum unless pairs were taking rooms
+built for groups.
+
+And it requires students to appear at a ground-floor service
+counter within fifteen minutes of the booked time, or
+forfeit.
+
+Think about that second one. You book online, at midnight,
+from your room. To prove you turned up, a member of staff
+has to see your face.
+
+The same fifteen-minute rule appears at Pacific, at Camosun,
+at Duke Law.
+
+That is not a criticism of Sunway. It's a reasonable
+response to real behaviour. And that's exactly the point -
+those are rules written on a web page and enforced by
+people, standing in for logic the software doesn't have.
+
+
+------------------------------------------------------------
+AIM AND FIVE OBJECTIVES
+------------------------------------------------------------
+
+The aim is one booking system for every kind of campus
+facility, making the sharing of campus space visible and
+fair, and contributing to at least eight UN-SDGs.
+
+ONE. Design a facility model where the admin sets the rules
+once for a TYPE of facility and every room of that type
+follows them, with the option to override one room - and
+where attendance is recorded, so a slot booked and never
+used becomes visible. SDG 11 and 12.
+
+TWO. Build the booking rules and the no-overlap rule into
+the database itself rather than the program, so if two
+students request the same court at the same moment, only one
+succeeds. SDG 9 and 10.
+
+THREE. Construct a recommendation engine that, when the
+requested time is gone, offers the best free alternatives
+instead of just refusing - scored on how close they are to
+the time asked for, how well the room size fits the group,
+and how busy that period is - and that learns what each
+student accepts. SDG 7 and 3.
+
+FOUR. Develop a chatbot that answers using only the records
+read back for that particular student, so it can't invent a
+rule or reveal someone else's booking. SDG 4 and 8.
+
+FIVE. Evaluate by measuring how it behaves, not by
+describing it.
+
+
+------------------------------------------------------------
+THE LITERATURE
+------------------------------------------------------------
+
+Eleven papers, 2021 to 2026, reviewed paper by paper as
+instructed - problem, method, outcomes, gaps for each. Five
+on campus booking systems, two on recommender systems, four
+on chatbots in higher education.
+
+Two of them do most of the work.
+
+Roy and Dutta's systematic review shows collaborative
+filtering fails on cold start and sparsity - which is
+exactly my situation, with a handful of facilities and no
+booking history. That's why I use deterministic scoring with
+online weight learning rather than a trained model. It's not
+that I couldn't train one. There's nothing to train it on.
+
+Okonkwo and Ade-Ibijola identify incorrect responses as the
+core chatbot risk. That's why my assistant can only phrase
+facts it retrieved. It never generates a rule.
+
+I also added a section reviewing what universities actually
+BUY, because peer-reviewed papers describe what researchers
+built, not what institutions run. That matters, because two
+of my original gap claims didn't survive it.
+
+
+------------------------------------------------------------
+THE GAP - NARROWED HONESTLY
+------------------------------------------------------------
+
+I originally claimed no system has configurable booking
+rules. That's false. LibCal has them. Skedda has them.
+
+What IS true is that configurable rules always live inside
+one facility segment. The library buys LibCal, the sports
+centre buys Fusion, the registrar buys 25Live. Nothing spans
+them, because each product's data model was built around one
+class of facility. City University of Hong Kong publishes
+this openly: rooms through one system, sports through
+another, run by a different department.
+
+I originally claimed no system helps when a request fails.
+Also false - MIDAS suggests alternatives. But they come from
+a substitution table an administrator maintains by hand.
+There's no ranking, nothing that weighs group size against
+room size, and nothing that learns.
+
+On conversational access - MIDAS shipped an MCP server in
+July, so an AI assistant can book through it. But it's an
+admin add-on on one shared account with a confidential key.
+A student can't touch it.
+
+So the gap is: nothing spans facility types, nothing RANKS
+alternatives or learns from them, and no student gets
+conversational access to live availability under their own
+permissions.
+
+
+------------------------------------------------------------
+THE DESIGN
+------------------------------------------------------------
+
+Architecture is one Next.js application serving three role
+dashboards, Supabase for data and authentication, the
+scoring engine, and a language model behind a swappable
+wrapper.
+
+THE TWO-LEVEL FACILITY MODEL is the contribution. A category
+- Badminton, Discussion Room - carries the venue and six
+rule parameters. Individual courts inherit them and store
+only what differs: name, capacity, status. An optional
+per-room override where any null column inherits the
+category value. So an administrator can create a swimming
+pool with its own rules and no code is deployed.
+
+CONFLICT PREVENTION is the part I'm proudest of, and it's
+provable. I don't check for clashes in my code. I declare it
+to PostgreSQL as an exclusion constraint over the facility
+and the time range. If two students submit at the same
+instant, the database rejects one. There is no race to lose.
+Every reviewed system checks in application code, which can
+lose it.
+
+Row-level security does the same for access: a manager can't
+read another manager's facilities even calling the API
+directly.
+
+THE RECOMMENDER. Six equations. Three feasibility
+constraints - opening hours, duration limits, capacity and
+advance window. One overlap predicate using interval
+algebra, which is the constraint I just described. Then a
+scoring function:
+
+    S = w1.T + w2.C + w3.U
+
+Time proximity, capacity fit, off-peak load. And a sixth
+equation for the learning step - accepted suggestions shift
+the weights by a rate of 0.05, renormalised, stored per
+student.
+
+A worked example. A student wants a room for two at three
+o'clock. It's taken. Two o'clock scores 0.847. One o'clock
+scores 0.645. Two o'clock wins even though both are
+adjacent, because one o'clock falls in a peak period. Raise
+the group to six and two o'clock lifts to 0.938 - the same
+slot scores differently for a different request.
+
+That capacity term is my answer to Sunway. Their system can
+only allow or refuse, so to stop pairs taking ten-seat pods
+they wrote a hard minimum - which also blocks a legitimate
+pair when the small pods are full. Mine ranks, so it steers
+the pair to the six-seater without forbidding them the large
+one.
+
+THE CHATBOT is scoped to four question families. The model
+calls a typed function, the server runs it under the
+student's own row-level security context, and the model
+composes its answer from the returned rows only. Outside
+those four families it deflects to staff. A narrow bot
+that's right beats a broad one that guesses.
+
+
+------------------------------------------------------------
+PROFESSIONAL PRACTICES
+------------------------------------------------------------
+
+PDPA compliance - minimal collection, bounded retention,
+access enforced in the database. OWASP for security, WCAG
+2.1 AA for accessibility.
+
+BEM code 2.1.4 on competence, and 2.1.7 on not expressing
+opinions unfounded on fact - which is precisely why the
+chatbot can't guess. That's a professional obligation
+expressed as an architecture.
+
+Public health and safety through occupancy limits, which
+encode a fire-safety rule and could impose a health capacity
+cap without a code change.
+
+Whole-life cost: hosted, so no hardware to buy, power, cool
+or dispose of. Net zero through eliminating paper, removing
+counter journeys, and using no-show data to stop
+conditioning rooms that are booked and empty.
+
+Continuous professional development - three technologies I
+learned independently during Phase 1, from primary sources,
+verified by testing. One of the models I depended on was
+deprecated mid-project, which is why the design assumes its
+own components will be superseded.
+
+
+------------------------------------------------------------
+MANAGEMENT AND COST
+------------------------------------------------------------
+
+Fortnightly supervisor meetings, logged.
+
+Recurring cost is zero - the whole stack runs on free tiers,
+with a small contingency. Total estimate 225 ringgit, mostly
+printing.
+
+Commercially, the rule engine is the interesting part:
+policy is configuration, so another institution deploys the
+same build. Per-institution subscription, near-zero marginal
+cost. Private colleges first - shorter procurement.
+
+Phase 1 was managed by front-loading. The system is built,
+so Phase 2 is evaluation rather than implementation. Two
+items slipped and are carried in the logs: ethics submission
+and Turnitin.
+
+
+------------------------------------------------------------
+WHERE IT STANDS, AND WHAT I CAN'T YET CLAIM
+------------------------------------------------------------
+
+Complete: the literature review, the concept design, a
+working prototype with all three roles' features, and
+sixteen unit tests on the recommendation engine, all
+passing.
+
+I can demonstrate a booking with an AI suggestion in about
+thirty seconds if that's useful.
+
+    [Offer the demo here. It is the strongest evidence
+     you have.]
+
+Three honest limitations.
+
+Recommendation quality is untested with real students until
+ethics clears. That's the critical path and my biggest risk.
+
+My peak-hour windows are hardcoded rather than learned from
+booking history, even though I now have the data to learn
+them.
+
+And "one system across every facility type" is proven in the
+schema but demonstrated on seven facilities, not a whole
+campus - so I'd say the design removes the barrier, not that
+I've shown it at scale.
+
+I'd also flag one argument rather than a finding. I say
+online booking removed the friction that limited hoarding. I
+can evidence that hoarding happens inside modern systems. I
+can't evidence that it got WORSE than under paper, because
+nobody has measured that.
+
+Happy to take questions.
+
+
+============================================================
+IF YOU ONLY REMEMBER FIVE THINGS
+============================================================
+
+1. Digitising the queue solved the queue, not the
+   allocation.
+
+2. Sunway runs a modern system and still needs a person at
+   a desk to check you turned up.
+
+3. Booking policy lives in the database as configuration,
+   not written into the program.
+
+4. Double-booking isn't checked for. It's impossible - the
+   database rejects it.
+
+5. Nothing on the market ranks the alternatives it offers,
+   and nothing learns from what you pick.
+
+============================================================

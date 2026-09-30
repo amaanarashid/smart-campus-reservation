@@ -6,20 +6,30 @@ import { supabase } from "@/lib/supabase";
 import {
   Facility, FacilityRule, Profile, Reservation, Equipment, typeLabel,
 } from "@/lib/types";
-import { recommendSlots, updateWeights, ScoredSlot, DEFAULT_WEIGHTS } from "@/lib/recommend";
+import {
+  recommendAcross, learnPeakHours, updateWeights, ScoredSlot, PeakModel,
+  DEFAULT_WEIGHTS, DEFAULT_PEAKS,
+} from "@/lib/recommend";
+import {
+  initBandit, isBanditState, rankWithBandit, cascadeUpdate, compactBandit,
+} from "@/lib/bandit";
+import { addDays, fmtRelativeDay, fmtTime, myAt, myDateKey } from "@/lib/time";
 import { ensureProfile } from "@/lib/profile";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast, Toaster } from "sonner";
 import Chatbot from "@/components/chatbot";
 import AppShell from "@/components/app-shell";
 import FacilityIso from "@/components/facility-iso";
 import PopularTimes from "@/components/popular-times";
 import { logEvent } from "@/lib/evaluation";
+import {
+  CalendarDays, Clock, CheckCircle2, ChevronRight, ArrowLeft,
+  Sparkles, MapPin, Users2, CalendarX,
+} from "lucide-react";
 
 const STATUS_COLOR: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   approved: "default", pending: "secondary", rejected: "destructive", cancelled: "outline",
@@ -28,6 +38,7 @@ const STATUS_COLOR: Record<string, "default" | "secondary" | "destructive" | "ou
 export default function StudentDashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [rules, setRules] = useState<Record<string, FacilityRule>>({});
@@ -40,13 +51,16 @@ export default function StudentDashboard() {
   const [facility, setFacility] = useState<Facility | null>(null);
 
   // booking form
-  const [date, setDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState<string>(() => myDateKey());
   const [startTime, setStartTime] = useState("15:00");
   const [duration, setDuration] = useState(60);
   const [participants, setParticipants] = useState(2);
   const [purpose, setPurpose] = useState("");
   const [equipReq, setEquipReq] = useState<Record<string, number>>({});
   const [suggestions, setSuggestions] = useState<ScoredSlot[] | null>(null);
+  // what the student asked for when the suggestions were produced; the form
+  // may change afterwards, but learning must be against the original request
+  const [suggestCtx, setSuggestCtx] = useState<{ preferredHour: number; peaks: PeakModel } | null>(null);
   const [checking, setChecking] = useState(false);
 
   const loadBookings = useCallback(async (uid: string) => {
@@ -61,11 +75,15 @@ export default function StudentDashboard() {
       const p = await ensureProfile();
       if (!p) { router.push("/login"); return; }
       setProfile(p);
-      const [{ data: f }, { data: r }, { data: e }] = await Promise.all([
-        supabase.from("facilities").select("*").eq("status", "active").order("name"),
-        supabase.from("facility_rules").select("*"),
+      const [{ data: f, error: fErr }, { data: r, error: rErr }, { data: e }] = await Promise.all([
+        supabase.from("facilities_full").select("*").eq("status", "active").order("name"),
+        supabase.from("effective_facility_rules").select("*"),
         supabase.from("equipment").select("*").order("name"),
       ]);
+      if (fErr || rErr) {
+        setLoadError((fErr ?? rErr)!.message);
+        console.error("student load:", fErr ?? rErr);
+      }
       setFacilities((f as Facility[]) ?? []);
       const map: Record<string, FacilityRule> = {};
       (r as FacilityRule[] | null)?.forEach((x) => { map[x.facility_id] = x; });
@@ -85,7 +103,7 @@ export default function StudentDashboard() {
 
   // ---------- booking ----------
   function buildWindow(): { start: Date; end: Date } {
-    const start = new Date(`${date}T${startTime}:00`);
+    const start = myAt(date, startTime);
     return { start, end: new Date(start.getTime() + duration * 60000) };
   }
 
@@ -103,10 +121,8 @@ export default function StudentDashboard() {
     if (start > maxDay) return `Bookings open ${rule.max_advance_days} days in advance.`;
     if (participants > facility.capacity)
       return `${facility.name} holds ${facility.capacity}; reduce the group size.`;
-    const [oh, om] = rule.open_time.split(":").map(Number);
-    const [ch, cm] = rule.close_time.split(":").map(Number);
-    const open = new Date(start); open.setHours(oh, om, 0, 0);
-    const close = new Date(start); close.setHours(ch, cm, 0, 0);
+    const open = myAt(date, rule.open_time.slice(0, 5));
+    const close = myAt(date, rule.close_time.slice(0, 5));
     if (start < open || end > close)
       return `${facility.name} operates ${rule.open_time.slice(0, 5)}-${rule.close_time.slice(0, 5)}.`;
     return null;
@@ -141,14 +157,18 @@ export default function StudentDashboard() {
 
   async function bookAt(start: Date, end: Date, fromSuggestion?: ScoredSlot, rank?: number) {
     if (!profile || !facility) return;
-    const rule = rules[facility.id];
+    // a suggestion may be for a different facility of the same category
+    const target = fromSuggestion
+      ? facilities.find((f) => f.id === fromSuggestion.facilityId) ?? facility
+      : facility;
+    const rule = rules[target.id];
 
     const shortfall = await equipmentShortfall(start, end);
     if (shortfall) { toast.error(shortfall); return; }
 
     const status = rule?.auto_approve ? "approved" : "pending";
     const { data: created, error } = await supabase.from("reservations").insert({
-      facility_id: facility.id, user_id: profile.id,
+      facility_id: target.id, user_id: profile.id,
       start_time: start.toISOString(), end_time: end.toISOString(),
       participants, purpose: purpose || null, status,
     }).select().single();
@@ -169,43 +189,91 @@ export default function StudentDashboard() {
       if (eqErr) toast.warning("Booked, but equipment request failed: " + eqErr.message);
     }
 
+    const where = target.id !== facility.id ? ` - ${target.name}` : "";
     toast.success(status === "approved"
-      ? "Booked and auto-approved" + (eqRows.length ? " - equipment reserved" : "")
-      : "Request submitted for approval" + (eqRows.length ? " with equipment" : ""));
+      ? "Booked and auto-approved" + where + (eqRows.length ? " - equipment reserved" : "")
+      : "Request submitted for approval" + where + (eqRows.length ? " with equipment" : ""));
 
-    if (fromSuggestion) {
-      logEvent("rec_accepted", { num: rank ?? 0 });
-      const newW = updateWeights(profile.rec_weights ?? DEFAULT_WEIGHTS, fromSuggestion, start.getHours());
-      await supabase.from("profiles").update({ rec_weights: newW }).eq("id", profile.id);
-      setProfile({ ...profile, rec_weights: newW });
+    if (fromSuggestion && suggestions) {
+      const idx = rank ?? 0;
+      logEvent("rec_accepted", {
+        num: idx,
+        note: `same_facility=${fromSuggestion.features[4]};day_offset=${Math.round(1 / fromSuggestion.features[5] - 1)}`,
+      });
+
+      // Baseline weights: learn against the hour the student ASKED for.
+      const ctx = suggestCtx ?? { preferredHour: Number(startTime.split(":")[0]), peaks: DEFAULT_PEAKS };
+      const newW = updateWeights(profile.rec_weights ?? DEFAULT_WEIGHTS, fromSuggestion, ctx.preferredHour, ctx.peaks);
+
+      // Bandit: cascade feedback over the list the student actually saw.
+      const stored = profile.rec_bandit;
+      const current = isBanditState(stored) ? stored : initBandit();
+      const newB = compactBandit(cascadeUpdate(current, suggestions, idx));
+
+      const { error: upErr } = await supabase
+        .from("profiles").update({ rec_weights: newW, rec_bandit: newB }).eq("id", profile.id);
+      if (upErr) {
+        // rec_bandit column missing until upgrade-recommender.sql is run;
+        // still save the baseline weights rather than lose both
+        console.warn("bandit not saved:", upErr.message);
+        await supabase.from("profiles").update({ rec_weights: newW }).eq("id", profile.id);
+        setProfile({ ...profile, rec_weights: newW });
+      } else {
+        setProfile({ ...profile, rec_weights: newW, rec_bandit: newB });
+      }
     }
     setSuggestions(null);
+    setSuggestCtx(null);
     setEquipReq({});
     await loadBookings(profile.id);
   }
 
   async function suggestAlternatives() {
-    if (!facility) return;
-    const rule = rules[facility.id];
-    if (!rule) return;
-    const dayStart = new Date(`${date}T00:00:00`);
-    const { data: res } = await supabase
-      .from("reservations").select("*")
-      .eq("facility_id", facility.id)
-      .gte("start_time", dayStart.toISOString())
-      .lte("start_time", new Date(`${date}T23:59:59`).toISOString())
-      .in("status", ["pending", "approved"]);
-    const out = recommendSlots({
-      facility, rule, reservations: (res as Reservation[]) ?? [],
-      date: dayStart, durationMins: duration, participants,
-      preferredHour: Number(startTime.split(":")[0]),
+    if (!facility || !rules[facility.id]) return;
+    const LOOK_AHEAD = 2;
+
+    // every facility of the same category is a candidate
+    const ids = facilities.filter((f) => f.category_id === facility.category_id).map((f) => f.id);
+    const from = myAt(date, "00:00").toISOString();
+    const to = myAt(addDays(date, LOOK_AHEAD + 1), "00:00").toISOString();
+    const since = myAt(addDays(myDateKey(), -60), "00:00").toISOString();
+
+    const [{ data: res }, { data: hist }] = await Promise.all([
+      // bookings over the whole search window, for conflict checks
+      supabase.from("reservations").select("*")
+        .in("facility_id", ids).in("status", ["pending", "approved"])
+        .lt("start_time", to).gt("end_time", from),
+      // recent demand for this category, for learning peak hours
+      supabase.from("reservations").select("start_time,end_time,status")
+        .in("facility_id", ids).in("status", ["pending", "approved"])
+        .gte("start_time", since),
+    ]);
+
+    const peaks = learnPeakHours(hist ?? []);
+    const preferredHour = Number(startTime.split(":")[0]);
+    const out = recommendAcross({
+      requested: facility, facilities, rules,
+      reservations: (res as Reservation[]) ?? [],
+      date, durationMins: duration, participants, preferredHour,
       weights: profile?.rec_weights ?? DEFAULT_WEIGHTS,
+      peaks, lookAheadDays: LOOK_AHEAD,
     });
-    const shown = out.slots.slice(0, 4);
+
+    const stored = profile?.rec_bandit;
+    const bandit = isBanditState(stored) ? stored : initBandit();
+    const shown = rankWithBandit(out.slots, bandit).slice(0, 4);
+
     setSuggestions(shown);
-    if (shown.length > 0) logEvent("rec_shown", { num: shown.length });
-    if (out.slots.length === 0)
-      toast.info("No free slots left that day - try another date.");
+    setSuggestCtx({ preferredHour, peaks });
+    if (shown.length > 0) {
+      logEvent("rec_shown", {
+        num: shown.length,
+        note: `peaks=${peaks.learned ? "learned" : "default"};lookahead=${out.usedLookAhead}`,
+      });
+    }
+    if (shown.length === 0) toast.info(out.rejectedReason ?? "No free slots nearby - try another date.");
+    else if (out.usedLookAhead)
+      toast.info(`${fmtRelativeDay(date)} is full everywhere - showing the next days with space.`);
   }
 
   async function checkAndBook() {
@@ -260,6 +328,13 @@ export default function StudentDashboard() {
     if (profile) await loadBookings(profile.id);
   }
 
+  // ---------- derived for the summary strip ----------
+  const now = Date.now();
+  const upcoming = myBookings.filter(
+    (b) => (b.status === "approved" || b.status === "pending") && new Date(b.start_time).getTime() > now
+  );
+  const pendingCount = myBookings.filter((b) => b.status === "pending").length;
+
   return (
     <AppShell
       title="Student Dashboard"
@@ -274,236 +349,356 @@ export default function StudentDashboard() {
         </div>
       ) : (
         <>
-          {/* breadcrumb */}
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <button className="hover:text-foreground" onClick={() => { setVenue(null); setFacility(null); setSuggestions(null); }}>
-              Venues
-            </button>
-            {venue && (
-              <>
-                <span>/</span>
-                <button className="hover:text-foreground" onClick={() => { setFacility(null); setSuggestions(null); }}>
-                  {venue}
-                </button>
-              </>
-            )}
-            {facility && (<><span>/</span><span className="text-foreground">{facility.name}</span></>)}
-          </div>
-
-          {/* step 1: venues */}
-          {!venue && (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {venues.map((v) => {
-                const inVenue = facilities.filter((f) => f.venue === v);
-                const freeCount = inVenue.filter((f) => !busyNow.has(f.id)).length;
-                return (
-                  <button key={v} onClick={() => setVenue(v)}
-                    className="rounded-xl border bg-card p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary hover:shadow-md">
-                    <div className="h-28"><FacilityIso type={inVenue[0].type} busy={freeCount === 0} /></div>
-                    <h3 className="pt-3 text-lg font-semibold">{v}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {inVenue.length} facilit{inVenue.length === 1 ? "y" : "ies"} - {freeCount} free right now
-                    </p>
-                    <p className="pt-1 text-xs text-muted-foreground">
-                      {Array.from(new Set(inVenue.map((f) => typeLabel(f.type)))).join(", ")}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {/* step 2: facilities in venue */}
-          {venue && !facility && (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {venueFacilities.map((f) => {
-                const busy = busyNow.has(f.id);
-                const r = rules[f.id];
-                return (
-                  <button key={f.id} onClick={() => { setFacility(f); setParticipants(Math.min(2, f.capacity)); }}
-                    className="rounded-xl border bg-card p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary hover:shadow-md">
-                    <div className="h-32"><FacilityIso type={f.type} busy={busy} /></div>
-                    <div className="flex items-center justify-between pt-3">
-                      <h3 className="font-semibold">{f.name}</h3>
-                      <Badge variant={busy ? "destructive" : "default"}>
-                        {busy ? "In use" : "Available now"}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {typeLabel(f.type)} - up to {f.capacity} people
-                    </p>
-                    {r && (
-                      <p className="pt-1 text-xs text-muted-foreground">
-                        {r.open_time.slice(0, 5)}-{r.close_time.slice(0, 5)} - {r.min_duration_mins}-{r.max_duration_mins} min
-                        {r.auto_approve ? " - instant booking" : " - needs approval"}
-                      </p>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {/* step 3: booking form */}
-          {facility && (
-            <div className="grid gap-6 lg:grid-cols-5">
-              <Card className="lg:col-span-3">
-                <CardHeader>
-                  <CardTitle className="font-display">Book {facility.name}</CardTitle>
-                  <CardDescription>
-                    Enter your preferred time - if it clashes, the system suggests the closest free slots
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground">Date</label>
-                      <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground">Start time</label>
-                      <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground">
-                        Duration ({rule?.min_duration_mins ?? 30}-{rule?.max_duration_mins ?? 120} min allowed)
-                      </label>
-                      <Select value={String(duration)} onValueChange={(v) => setDuration(Number(v))}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {[30, 60, 90, 120, 180, 240].map((d) => (
-                            <SelectItem key={d} value={String(d)}>{d} min</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground">
-                        People joining (max {facility.capacity})
-                      </label>
-                      <Input type="number" min={1} max={facility.capacity} value={participants}
-                        onChange={(e) => setParticipants(Number(e.target.value))} />
-                    </div>
-                  </div>
+          {/* summary strip */}
+          <div className="grid gap-4 sm:grid-cols-3">
+            {([
+              ["Upcoming bookings", String(upcoming.length), CalendarDays],
+              ["Awaiting approval", String(pendingCount), Clock],
+              ["Facilities available now",
+                String(facilities.filter((f) => !busyNow.has(f.id)).length), CheckCircle2],
+            ] as const).map(([label, value, Icon], i) => (
+              <Card key={label} className="animate-reveal transition-shadow hover:shadow-md"
+                style={{ animationDelay: `${i * 70}ms` }}>
+                <CardContent className="flex items-center gap-4 py-5">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+                    <Icon className="h-5 w-5" />
+                  </span>
                   <div>
-                    <label className="text-xs font-medium text-muted-foreground">Purpose (optional)</label>
-                    <Input placeholder="e.g. group assignment discussion" value={purpose}
-                      onChange={(e) => setPurpose(e.target.value)} />
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
+                    <p className="font-display animate-count text-2xl font-semibold leading-tight"
+                      style={{ animationDelay: `${i * 70 + 150}ms` }}>{value}</p>
                   </div>
-                  <Button className="w-full" onClick={checkAndBook} disabled={checking}>
-                    {checking ? "Checking availability..." : "Check availability & book"}
-                  </Button>
-
-                  {suggestions && suggestions.length > 0 && (
-                    <div className="space-y-2 rounded-lg border bg-accent/40 p-3">
-                      <p className="text-sm font-medium">Suggested alternatives (AI-ranked):</p>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {suggestions.map((s, i) => (
-                          <button key={i} onClick={() => bookAt(s.start, s.end, s, i)}
-                            className="rounded-md border bg-card p-2.5 text-left text-sm transition-colors hover:border-primary">
-                            <span className="font-medium">
-                              {s.start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                              {" - "}
-                              {s.end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                            </span>
-                            {i === 0 && <Badge className="ml-2">Best</Badge>}
-                            {s.reasons.length > 0 && (
-                              <span className="block text-xs text-muted-foreground">{s.reasons.join(" - ")}</span>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
+            ))}
+          </div>
 
-              <Card className="lg:col-span-2">
-                <CardHeader>
-                  <CardTitle>Equipment</CardTitle>
+          {/* browse / book */}
+          <Card className="animate-reveal" style={{ animationDelay: "210ms" }}>
+            <CardHeader className="pb-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="font-display">
+                    {!venue ? "Where do you want to book?"
+                      : !facility ? venue
+                      : `Book ${facility.name}`}
+                  </CardTitle>
                   <CardDescription>
-                    Reserve items with your booking - availability is checked for your time slot
+                    {!venue ? "Pick a venue to see its rooms and courts"
+                      : !facility ? "Choose a room or court - live availability shown"
+                      : "Enter your preferred time; if it clashes we suggest the closest free slots"}
                   </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {facilityEquipment.length === 0 && (
-                    <p className="text-sm text-muted-foreground">No requestable equipment for this facility type.</p>
-                  )}
-                  {facilityEquipment.map((e) => {
-                    const q = equipReq[e.id] ?? 0;
+                </div>
+                {venue && (
+                  <Button variant="outline" size="sm" className="gap-1.5"
+                    onClick={() => { facility ? setFacility(null) : setVenue(null); setSuggestions(null); }}>
+                    <ArrowLeft className="h-4 w-4" />
+                    {facility ? "Other rooms" : "All venues"}
+                  </Button>
+                )}
+              </div>
+
+              {/* breadcrumb */}
+              <nav className="flex flex-wrap items-center gap-1 pt-2 text-xs text-muted-foreground">
+                <button className="rounded px-1.5 py-0.5 hover:bg-muted hover:text-foreground"
+                  onClick={() => { setVenue(null); setFacility(null); setSuggestions(null); }}>
+                  All venues
+                </button>
+                {venue && (<>
+                  <ChevronRight className="h-3 w-3" />
+                  <button className="rounded px-1.5 py-0.5 hover:bg-muted hover:text-foreground"
+                    onClick={() => { setFacility(null); setSuggestions(null); }}>{venue}</button>
+                </>)}
+                {facility && (<>
+                  <ChevronRight className="h-3 w-3" />
+                  <span className="rounded px-1.5 py-0.5 font-medium text-foreground">{facility.name}</span>
+                </>)}
+              </nav>
+            </CardHeader>
+
+            <CardContent>
+              {loadError && (
+                <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
+                  <p className="font-medium text-destructive">Could not load facilities</p>
+                  <p className="pt-1 text-muted-foreground">{loadError}</p>
+                  <p className="pt-1 text-xs text-muted-foreground">
+                    If this mentions a missing table or view, run the latest migration
+                    (supabase/setup-all.sql) in the Supabase SQL editor.
+                  </p>
+                </div>
+              )}
+              {!loadError && facilities.length === 0 && (
+                <div className="flex flex-col items-center gap-2 py-12 text-center">
+                  <MapPin className="h-8 w-8 text-muted-foreground/50" />
+                  <p className="font-medium">No facilities available yet</p>
+                  <p className="text-sm text-muted-foreground">
+                    An administrator needs to add a facility type and its rooms/courts first.
+                  </p>
+                </div>
+              )}
+
+              {/* step 1: venues */}
+              {!venue && (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {venues.map((v, i) => {
+                    const inVenue = facilities.filter((f) => f.venue === v);
+                    const freeCount = inVenue.filter((f) => !busyNow.has(f.id)).length;
                     return (
-                      <div key={e.id} className="flex items-center justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-medium">{e.name}</p>
-                          <p className="text-xs text-muted-foreground">{e.total_qty} in inventory</p>
+                      <button key={v} onClick={() => setVenue(v)}
+                        className="animate-reveal group overflow-hidden rounded-xl border bg-card text-left shadow-sm transition-all hover:-translate-y-1 hover:border-primary hover:shadow-lg"
+                        style={{ animationDelay: `${i * 60}ms` }}>
+                        <div className="h-28 bg-muted/40"><FacilityIso type={inVenue[0].type} busy={freeCount === 0} /></div>
+                        <div className="p-4">
+                          <div className="flex items-center gap-1.5">
+                            <MapPin className="h-4 w-4 text-primary" />
+                            <h3 className="font-display text-lg font-semibold">{v}</h3>
+                          </div>
+                          <p className="pt-1 text-sm text-muted-foreground">
+                            {Array.from(new Set(inVenue.map((f) => typeLabel(f.type)))).join(", ")}
+                          </p>
+                          <div className="flex items-center gap-2 pt-2.5">
+                            <Badge variant={freeCount ? "default" : "destructive"}>
+                              {freeCount} of {inVenue.length} free
+                            </Badge>
+                            <span className="text-xs text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+                              View rooms
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Button size="sm" variant="outline" disabled={q === 0}
-                            onClick={() => setEquipReq({ ...equipReq, [e.id]: q - 1 })}>-</Button>
-                          <span className="w-6 text-center text-sm">{q}</span>
-                          <Button size="sm" variant="outline" disabled={q >= e.total_qty}
-                            onClick={() => setEquipReq({ ...equipReq, [e.id]: q + 1 })}>+</Button>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* step 2: facilities in venue */}
+              {venue && !facility && (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {venueFacilities.map((f, i) => {
+                    const busy = busyNow.has(f.id);
+                    const r = rules[f.id];
+                    return (
+                      <button key={f.id}
+                        onClick={() => { setFacility(f); setParticipants(Math.min(2, f.capacity)); }}
+                        className="animate-reveal overflow-hidden rounded-xl border bg-card text-left shadow-sm transition-all hover:-translate-y-1 hover:border-primary hover:shadow-lg"
+                        style={{ animationDelay: `${i * 60}ms` }}>
+                        <div className="h-32 bg-muted/40"><FacilityIso type={f.type} busy={busy} /></div>
+                        <div className="p-4">
+                          <div className="flex items-start justify-between gap-2">
+                            <h3 className="font-display font-semibold">{f.name}</h3>
+                            <Badge variant={busy ? "destructive" : "default"}>
+                              {busy ? "In use" : "Free now"}
+                            </Badge>
+                          </div>
+                          <p className="flex items-center gap-1.5 pt-1 text-sm text-muted-foreground">
+                            <Users2 className="h-3.5 w-3.5" /> up to {f.capacity} people
+                          </p>
+                          {r && (
+                            <p className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+                              <Clock className="h-3.5 w-3.5" />
+                              {r.open_time.slice(0, 5)}-{r.close_time.slice(0, 5)} - {r.min_duration_mins}-{r.max_duration_mins} min
+                              {r.auto_approve ? " - instant" : " - needs approval"}
+                            </p>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* step 3: booking form */}
+              {facility && (
+                <div className="grid gap-6 lg:grid-cols-5">
+                  <div className="space-y-4 lg:col-span-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium">Date</label>
+                        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium">Start time</label>
+                        <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium">
+                          Duration
+                          <span className="pl-1 font-normal text-muted-foreground">
+                            ({rule?.min_duration_mins ?? 30}-{rule?.max_duration_mins ?? 120} min)
+                          </span>
+                        </label>
+                        <Select value={String(duration)} onValueChange={(v) => setDuration(Number(v))}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {[30, 60, 90, 120, 180, 240].map((d) => (
+                              <SelectItem key={d} value={String(d)}>{d} min</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium">
+                          People joining
+                          <span className="pl-1 font-normal text-muted-foreground">(max {facility.capacity})</span>
+                        </label>
+                        <Input type="number" min={1} max={facility.capacity} value={participants}
+                          onChange={(e) => setParticipants(Number(e.target.value))} />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium">Purpose <span className="font-normal text-muted-foreground">(optional)</span></label>
+                      <Input placeholder="e.g. group assignment discussion" value={purpose}
+                        onChange={(e) => setPurpose(e.target.value)} />
+                    </div>
+                    <Button className="w-full gap-2" size="lg" onClick={checkAndBook} disabled={checking}>
+                      {checking ? (
+                        <><span className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground/40 border-t-primary-foreground" />
+                        Checking availability...</>
+                      ) : (<>Check availability &amp; book</>)}
+                    </Button>
+
+                    {suggestions && suggestions.length > 0 && (
+                      <div className="animate-field-in space-y-2 rounded-xl border border-primary/30 bg-accent/40 p-3">
+                        <p className="flex items-center gap-1.5 text-sm font-medium">
+                          <Sparkles className="h-4 w-4 text-primary" />
+                          That time is taken - AI-ranked alternatives:
+                        </p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {suggestions.map((s, i) => (
+                            <button key={`${s.facilityId}-${s.start.getTime()}`} onClick={() => bookAt(s.start, s.end, s, i)}
+                              className="rounded-lg border bg-card p-3 text-left transition-all hover:-translate-y-0.5 hover:border-primary hover:shadow-sm">
+                              <div className="flex items-center justify-between">
+                                <span className="font-display font-semibold">
+                                  {fmtTime(s.start)} - {fmtTime(s.end)}
+                                </span>
+                                {i === 0 && <Badge>Best</Badge>}
+                              </div>
+                              {(s.facilityId !== facility.id || s.dateKey !== date) && (
+                                <span className="block pt-0.5 text-xs font-medium text-primary">
+                                  {s.facilityId !== facility.id ? s.facilityName : facility.name}
+                                  {s.dateKey !== date && ` - ${fmtRelativeDay(s.dateKey)}`}
+                                </span>
+                              )}
+                              {s.reasons.length > 0 && (
+                                <span className="block pt-0.5 text-xs text-muted-foreground">{s.reasons.join(" - ")}</span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* equipment */}
+                  <div className="lg:col-span-2">
+                    <div className="rounded-xl border bg-muted/30 p-4">
+                      <h4 className="font-display font-semibold">Equipment</h4>
+                      <p className="pb-3 text-xs text-muted-foreground">
+                        Checked against stock for your time slot
+                      </p>
+                      <div className="space-y-2.5">
+                        {facilityEquipment.length === 0 && (
+                          <p className="text-sm text-muted-foreground">Nothing requestable here.</p>
+                        )}
+                        {facilityEquipment.map((e) => {
+                          const q = equipReq[e.id] ?? 0;
+                          return (
+                            <div key={e.id} className="flex items-center justify-between gap-2 rounded-lg bg-card px-3 py-2">
+                              <div>
+                                <p className="text-sm font-medium">{e.name}</p>
+                                <p className="text-xs text-muted-foreground">{e.total_qty} in stock</p>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <Button size="sm" variant="outline" className="h-7 w-7 p-0" disabled={q === 0}
+                                  onClick={() => setEquipReq({ ...equipReq, [e.id]: q - 1 })}>-</Button>
+                                <span className={`w-5 text-center text-sm ${q ? "font-semibold text-primary" : ""}`}>{q}</span>
+                                <Button size="sm" variant="outline" className="h-7 w-7 p-0" disabled={q >= e.total_qty}
+                                  onClick={() => setEquipReq({ ...equipReq, [e.id]: q + 1 })}>+</Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* popular times */}
+                  <div className="lg:col-span-5">
+                    <div className="rounded-xl border bg-card p-4">
+                      <PopularTimes
+                        facilityId={facility.id}
+                        openHour={rule ? Number(rule.open_time.slice(0, 2)) : 8}
+                        closeHour={rule ? Number(rule.close_time.slice(0, 2)) : 22}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* my bookings */}
+          <Card className="animate-reveal" style={{ animationDelay: "280ms" }}>
+            <CardHeader>
+              <CardTitle className="font-display flex items-center gap-2">
+                <CalendarDays className="h-5 w-5 text-primary" />
+                My bookings
+              </CardTitle>
+              <CardDescription>Check in when your session starts, or cancel in advance</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {myBookings.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 py-12 text-center">
+                  <CalendarX className="h-8 w-8 text-muted-foreground/50" />
+                  <p className="font-medium">No bookings yet</p>
+                  <p className="text-sm text-muted-foreground">Pick a venue above to make your first reservation.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {myBookings.map((b) => {
+                    const f = facilities.find((x) => x.id === b.facility_id);
+                    const start = new Date(b.start_time);
+                    const canCheckIn = b.status === "approved" && !b.checked_in_at && !b.no_show &&
+                      Date.now() >= start.getTime() - 15 * 60000 &&
+                      Date.now() <= new Date(b.end_time).getTime();
+                    const canCancel = (b.status === "pending" || b.status === "approved") &&
+                      start.getTime() > Date.now() && !b.checked_in_at;
+                    return (
+                      <div key={b.id}
+                        className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3 transition-colors hover:bg-muted/30">
+                        <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-lg bg-accent text-accent-foreground">
+                          <span className="text-[10px] uppercase leading-none">
+                            {start.toLocaleDateString([], { month: "short" })}
+                          </span>
+                          <span className="font-display text-base font-semibold leading-tight">
+                            {start.getDate()}
+                          </span>
+                        </div>
+                        <div className="min-w-[9rem] flex-1">
+                          <p className="font-medium">{f?.name ?? "Facility"}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            {" - "}
+                            {new Date(b.end_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            {f ? ` - ${f.venue}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Badge variant={STATUS_COLOR[b.status]}>{b.status}</Badge>
+                          {b.checked_in_at && <Badge variant="outline">checked in</Badge>}
+                          {b.no_show && <Badge variant="destructive">no-show</Badge>}
+                        </div>
+                        <div className="ml-auto flex gap-1.5">
+                          {canCheckIn && <Button size="sm" onClick={() => checkIn(b)}>Check in</Button>}
+                          {canCancel && (
+                            <Button size="sm" variant="outline" onClick={() => cancel(b)}>Cancel</Button>
+                          )}
                         </div>
                       </div>
                     );
                   })}
-                </CardContent>
-              </Card>
-
-              {/* popular times */}
-              <Card className="lg:col-span-5">
-                <CardContent className="pt-6">
-                  <PopularTimes
-                    facilityId={facility.id}
-                    openHour={rule ? Number(rule.open_time.slice(0, 2)) : 8}
-                    closeHour={rule ? Number(rule.close_time.slice(0, 2)) : 22}
-                  />
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {/* my bookings */}
-          <Card>
-            <CardHeader><CardTitle>My bookings</CardTitle></CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Facility</TableHead><TableHead>When</TableHead>
-                    <TableHead>Status</TableHead><TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {myBookings.map((b) => (
-                    <TableRow key={b.id}>
-                      <TableCell>{facilities.find((f) => f.id === b.facility_id)?.name ?? "-"}</TableCell>
-                      <TableCell>
-                        {new Date(b.start_time).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={STATUS_COLOR[b.status]}>{b.status}</Badge>
-                        {b.checked_in_at && <Badge variant="outline" className="ml-1">checked in</Badge>}
-                        {b.no_show && <Badge variant="destructive" className="ml-1">no-show</Badge>}
-                      </TableCell>
-                      <TableCell className="space-x-1 whitespace-nowrap">
-                        {b.status === "approved" && !b.checked_in_at && !b.no_show &&
-                          Date.now() >= new Date(b.start_time).getTime() - 15 * 60000 &&
-                          Date.now() <= new Date(b.end_time).getTime() && (
-                            <Button size="sm" onClick={() => checkIn(b)}>Check in</Button>
-                          )}
-                        {(b.status === "pending" || b.status === "approved") &&
-                          new Date(b.start_time) > new Date() && !b.checked_in_at && (
-                            <Button size="sm" variant="outline" onClick={() => cancel(b)}>Cancel</Button>
-                          )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {myBookings.length === 0 && (
-                    <TableRow><TableCell colSpan={4} className="text-muted-foreground">No bookings yet</TableCell></TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </>

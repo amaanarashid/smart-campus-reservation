@@ -1,0 +1,450 @@
+==========================================================================
+ CAMPUS RESERVE - HOW TO TEST THE WHOLE SYSTEM
+ Smart Campus Facility Reservation System with AI-Assisted Recommendations
+==========================================================================
+
+Work through the parts in order. Each step says what to do and what you
+should see. Tick the box when it passes. If something fails, note the step
+number and the exact error.
+
+Demo accounts (created automatically the first time you tap the button):
+  Student           student@demo.campus            password demo1234
+  Facility manager  facility_manager@demo.campus   password demo1234
+  Administrator     admin@demo.campus              password demo1234
+
+
+--------------------------------------------------------------------------
+ PART 0 - ONE-TIME SETUP
+--------------------------------------------------------------------------
+
+[ ] 0.1  Supabase dashboard -> Authentication -> Providers -> Email.
+         Turn "Confirm email" OFF. The demo buttons need this.
+
+[ ] 0.2  Supabase -> SQL editor. Run these files, in this order:
+           1. supabase/setup-all.sql            (skip if already done)
+           2. supabase/upgrade-recommender.sql  (adds the AI learning column)
+           3. supabase/fix-role-escalation.sql  (security fix)
+         Expected: each says "Success. No rows returned".
+
+[ ] 0.3  In PowerShell, inside the project folder:
+           npm install
+         Expected: finishes without errors.
+
+[ ] 0.4  Check .env.local has these four lines (values hidden here):
+           NEXT_PUBLIC_SUPABASE_URL=...
+           NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+           AI_PROVIDER=gemini
+           AI_API_KEY=...
+
+
+--------------------------------------------------------------------------
+ PART 1 - AUTOMATED TESTS
+--------------------------------------------------------------------------
+
+[ ] 1.1  npm test
+         Expected: "Test Files 4 passed (4)"  and  "Tests 68 passed (68)".
+         The four files cover: Malaysia time, the recommender, the LinUCB
+         bandit, and the chatbot logic.
+
+[ ] 1.2  Screenshot the result. This is evidence for your report.
+
+
+--------------------------------------------------------------------------
+ PART 2 - START THE APP
+--------------------------------------------------------------------------
+
+[ ] 2.1  npm run dev
+         Open http://localhost:3000
+         Expected: the Campus Reserve landing page.
+
+         If you get a 404 on the home page, stop the server and run:
+           Remove-Item -Recurse -Force .next
+           npm run dev
+
+
+--------------------------------------------------------------------------
+ PART 3 - LOGIN AND ROLES
+--------------------------------------------------------------------------
+
+[ ] 3.1  Go to /login. Tap the Student demo button.
+         Expected: you land on the Student Dashboard.
+
+[ ] 3.2  Sign out. Tap the Facility Manager demo button.
+         Expected: you land on Facility Management.
+
+[ ] 3.3  Sign out. Tap the Admin demo button.
+         Expected: you land on Administration with 7 tabs.
+
+[ ] 3.4  Sign up a brand new account with your own email.
+         Expected: it becomes a STUDENT, never anything else.
+
+
+--------------------------------------------------------------------------
+ PART 3B - LOAD THE TEST DATA  (do this once, after 3.1-3.3)
+--------------------------------------------------------------------------
+
+[ ] 3B.1 Supabase -> SQL editor. Run supabase/seed-test-data.sql.
+         Expected: a 12-row summary table. SCREENSHOT IT - it tells you
+         the exact courts and dates to use below, e.g.
+           "Court 1 on Thu 01 Oct, 3:00-4:00 pm. Court 2 and Court 3
+            are free then."
+           "Sat 03 Oct: all 3 active Badminton Court courts full"
+
+         The seed uses YOUR facilities. Where a category or court the
+         tests need is missing, it creates one tagged "[seed]" - rows 4
+         and 5 of the summary list exactly what it had to create.
+         It never changes your real facilities or their rules.
+
+         Below, "Court 1 / Court 2 / Court 3" mean the three courts named
+         in the summary (row 3), TOMORROW is the day after you ran the
+         seed, and FULL DAY is the date in row 7.
+
+[ ] 3B.2 What you now have:
+           - 5 extra students, password demo1234:
+               aina@seed.campus, ben@, chong@, divya@, ethan@seed.campus
+           - Badminton Courts 1, 2, 3 active (Court 3 closes at 20:00)
+             and Court 4 under maintenance
+           - ~200 past bookings, so the AI can learn busy hours
+           - 7 pending requests for the manager
+           - the demo manager already assigned to Courts 1-3 + futsal
+           - bookings for the demo student: one in progress NOW, the next
+             one tomorrow 4 pm, one pending, one starting in ~3 hours,
+             one 10 days away, and 3 past ones (one a no-show)
+
+         Re-run the seed any time to reset everything with fresh dates.
+         Run supabase/seed-test-data-remove.sql to delete it all.
+
+
+--------------------------------------------------------------------------
+ PART 4 - ADMIN: FACILITIES AND RULES
+--------------------------------------------------------------------------
+Signed in as admin.
+
+[ ] 4.1  Facilities tab. Open a category (e.g. Badminton).
+         Expected: its six rules show - open, close, min duration,
+         max duration, advance days, cancellation notice.
+
+[ ] 4.2  Change the category's closing time (e.g. 22:00 -> 21:00). Save.
+         Expected: every court under it now closes at 21:00.
+
+[ ] 4.3  On one court only, override one value (e.g. max duration).
+         Expected: only that court changes; the others still follow the
+         category.
+
+[ ] 4.4  Badminton should show Courts 1-4. Court 3 shows its own closing
+         time (20:00) as an override; Court 4 shows "maintenance".
+         (Both added by the seed.)
+
+[ ] 4.5  Users tab. The facility manager demo account is already
+         assigned to Courts 1-3 and the futsal court. Assign it to one
+         more facility and remove it again.
+         Expected: both changes save.
+
+[ ] 4.6  Records tab.
+         Expected: the changes you just made appear in the activity log.
+
+Put the rules back how they were before you continue.
+
+
+--------------------------------------------------------------------------
+ PART 5 - STUDENT: BASIC BOOKING
+--------------------------------------------------------------------------
+Signed in as student.
+
+[ ] 5.1  Pick a venue, then a facility.
+         Expected: the booking form shows that facility's rules.
+
+[ ] 5.2  Book a free time today or tomorrow, 60 minutes.
+         Expected: "Booked and auto-approved" or "Request submitted for
+         approval", depending on the facility's rule.
+
+[ ] 5.3  Try each rule break. Each must be REFUSED with a clear reason:
+           a. more people than the capacity
+           b. longer than the maximum duration
+           c. shorter than the minimum duration
+           d. a date beyond the advance-booking window
+           e. a start time before opening or finishing after closing
+           f. a time in the past
+
+[ ] 5.4  Early-morning date check. The date box should show TODAY'S
+         Malaysian date, even if you test between midnight and 8 am.
+
+[ ] 5.5  My bookings list shows the new booking.
+
+[ ] 5.6  In My bookings, cancel the Meeting Room booking 10 days away.
+         Expected: cancelled.
+         Now cancel the Court 2 booking that starts in about 3 hours.
+         Expected: refused - "needs 12h cancellation notice".
+
+[ ] 5.7  The Discussion Room A booking is IN PROGRESS right now.
+         Expected: a Check in button. Press it; it becomes checked in.
+
+[ ] 5.8  Court 4 must not appear anywhere in the facility list
+         (it is under maintenance).
+
+
+--------------------------------------------------------------------------
+ PART 6 - AI RECOMMENDATION SYSTEM
+--------------------------------------------------------------------------
+Signed in as student. All of this uses Badminton, set up by the seed.
+
+[ ] 6.1  SAME FACILITY, OTHER TIMES
+         Badminton -> Court 1 -> TOMORROW, 15:00, 60 min, 2 people.
+         Press Check availability & book.
+         Expected: "That time is taken - AI-ranked alternatives".
+         4 cards, one marked "Best", each with reasons such as
+         "close to your preferred time" or "off-peak, likely quieter".
+         Seed-verified result, roughly:
+           Court 1 2:00 pm   Court 1 4:00 pm   Court 2 3:00 pm   Court 3 3:00 pm
+
+[ ] 6.2  OTHER FACILITIES OF THE SAME TYPE
+         Expected: Court 2 AND Court 3 appear at 3:00 pm, labelled with
+         the court name and the reason "same type of facility".
+         Their scores are within 0.002 of the top cards - a near tie.
+         Before any learning, the AI very slightly favours slots on the
+         court you picked; this evens out as it learns (see 6.6).
+
+[ ] 6.3  NEVER A DIFFERENT CATEGORY OR A CLOSED COURT
+         Expected: no futsal court, and no Court 4 (maintenance).
+
+[ ] 6.4  BOOK A SUGGESTION ON ANOTHER COURT
+         Click the Court 2 3:00 pm card.
+         Expected: the success message ends "- Court 2", and My bookings
+         shows Court 2, not Court 1.
+
+[ ] 6.5  LOOK-AHEAD WHEN THE DAY IS FULL
+         Badminton -> Court 1 -> the FULL DAY date, 15:00, 60 min.
+         Expected: a message "<that day> is full everywhere - showing the
+         next days with space", and cards for the FOLLOWING day with the
+         reason "nearest day with space". No setup needed - the seed
+         booked every court all day.
+
+[ ] 6.5b COURT 3 KEEPS ITS OWN RULES
+         Badminton -> Court 1 -> TOMORROW, 19:00, 60 min.
+         Expected: if Court 3 appears, never later than 7:00 pm start
+         (it closes at 20:00, Courts 1-2 close at 22:00).
+
+[ ] 6.5c EQUIPMENT STOCK
+         Badminton -> Court 2 -> TOMORROW, 15:00, 60 min, request
+         2 Rackets.
+         Expected: refused - "Only 1 of "Racket" available at that time".
+         Request 1 Racket instead: accepted.
+
+[ ] 6.6  THE AI LEARNS
+         Supabase -> Table editor -> profiles -> the demo student's row.
+         Note the rec_bandit column (empty at first).
+         Accept a suggestion (click one of the cards).
+         Refresh the table.
+         Expected: rec_bandit now holds numbers, and "n" has gone up.
+         Accept a few more; "n" keeps rising.
+
+[ ] 6.7  EVALUATION LOGGING
+         Supabase -> evaluation_events.
+         Expected: a "rec_shown" row for each list you saw and a
+         "rec_accepted" row for each card you clicked. The note column
+         says whether it was another facility and how many days ahead.
+
+[ ] 6.8  PEAK HOURS - LEARNED vs DEFAULT
+         Rule: under 30 bookings in a category -> campus defaults
+         (12-2 pm and 5-8 pm). 30 or more -> learned from history.
+         a. After 6.1, open evaluation_events. The newest rec_shown note
+            should say "peaks=learned" (badminton has 106 bookings; the
+            seed-verified peak is 5-9 pm, so 12-2 pm now counts as
+            off-peak - unlike the defaults).
+         b. Try a clash on the futsal court, then check again.
+            Expected: "peaks=default" (futsal only has 12 bookings).
+
+
+--------------------------------------------------------------------------
+ PART 7 - AI CHATBOT
+--------------------------------------------------------------------------
+Signed in as student. Open the chat bubble. Type each question exactly as
+written, one at a time, and check the answer.
+
+AVAILABILITY
+[ ] 7.1  "Is badminton court 1 free tomorrow?"
+         Expected (seed-verified): "free tomorrow: 12:00 pm to 3:00 pm,
+         4:00 pm to 10:00 pm". The gaps are Ben's 10-12 booking and the
+         3-4 pm clash. (Different if you booked Court 1 tomorrow yourself.)
+
+[ ] 7.2  "What about the evening?"
+         Expected: it REMEMBERS court 1 and tomorrow, and shows only
+         evening times.
+
+[ ] 7.3  "And on Monday?"
+         Expected: same court, now Monday.
+
+[ ] 7.4  "Can I book badminton court 1 tomorrow at 2pm?"
+         Expected: YES - free at 2:00 pm.
+
+[ ] 7.5  "Can I book badminton court 1 tomorrow at 3pm?"
+         Expected: NO - "not free tomorrow at 3:00 pm", PLUS
+         "Best alternatives:" listing other times and Court 2 / Court 3.
+         This is the chatbot calling the recommender.
+
+[ ] 7.5b "Is badminton free on <FULL DAY>?"   (type the date, e.g. "3 oct")
+         Expected: no free time on any court, then alternatives for the
+         next day with space.
+
+[ ] 7.6  "Is badminton free today?"
+         Expected: answers for every badminton court.
+
+YOUR OWN BOOKINGS
+[ ] 7.7  "What are my bookings?"   (as the demo student)
+         Expected: Discussion Room A today (in progress), Court 2 today in
+         about 3 hours, Discussion Room B tomorrow 4 pm, the futsal
+         request, and so on - with court, day, time and status.
+
+[ ] 7.8  "When is my next booking?"
+         Expected: just the first one, plus "You have N more after that."
+
+[ ] 7.9  Sign out. Sign in as aina@seed.campus / demo1234. Ask 7.7.
+         Expected: ONLY Aina's bookings (e.g. Court 1 tomorrow 3 pm,
+         Discussion Room B tomorrow 1 pm), never the demo student's.
+
+RULES AND LISTING
+[ ] 7.10 "What are the rules for discussion rooms?"
+         Expected: hours, min and max duration, capacity, advance days,
+         cancellation notice, whether approval is needed.
+
+[ ] 7.11 "What is the cancellation policy for discussion rooms?"
+         Expected: rules, NOT a list of facilities.
+
+[ ] 7.12 "Which facilities can I book?"
+         Expected: facilities grouped by type, with venue and capacity.
+
+OUT OF SCOPE AND SAFETY
+[ ] 7.13 "Where do I pay my fine?"
+         Expected: politely says it only handles availability, rules and
+         your bookings, and points to the service desk. It must NOT
+         invent an answer.
+
+[ ] 7.14 "Is the swimming pool free?" (a facility that doesn't exist)
+         Expected: says no such facility, and lists the real ones.
+
+[ ] 7.15 Send 25 messages quickly.
+         Expected: after 20 in a minute it asks you to slow down.
+
+[ ] 7.16 Rate an answer with thumbs up or down.
+         Expected: a "chat_feedback" row appears in evaluation_events.
+
+OFFLINE MODE (no AI key)
+[ ] 7.17 In .env.local, put a # in front of AI_API_KEY. Restart the
+         server. Repeat 7.1, 7.2, 7.7 and 7.13.
+         Expected: all still work, with plainer wording, and it still
+         recognises your real facility names like "Court 2".
+         Remove the # and restart when done.
+
+
+--------------------------------------------------------------------------
+ PART 8 - FACILITY MANAGER
+--------------------------------------------------------------------------
+Signed in as facility manager (assigned to Courts 1-3 + futsal by the seed).
+
+[ ] 8.1  Approval queue.
+         Expected (seed-verified): 4 requests - Court 2 tomorrow 5 pm
+         (Ben), Court 3 tomorrow 6 pm (Chong), futsal tomorrow 8 pm
+         (Divya), futsal in 2 days 6 pm (demo student).
+         NOT shown: the meeting room and basketball requests - those
+         have no manager, so they went to the admin instead.
+
+[ ] 8.1b Bell icon.
+         Expected: 4 "New booking request" notifications.
+
+[ ] 8.2  Approve one request.
+         Expected: its status becomes approved, and the student gets a
+         notification (bell icon) next time they log in.
+
+[ ] 8.3  Reject one request.
+         Expected: status rejected, student notified, and that time slot
+         becomes bookable again.
+
+[ ] 8.4  Today's list: Aina's Court 2 booking is in progress right now.
+         Mark it checked in (or no-show).
+         Expected: the mark saves.
+
+[ ] 8.5  Equipment stock for your facility.
+         Expected: you can see and update quantities.
+
+
+--------------------------------------------------------------------------
+ PART 9 - DOUBLE-BOOKING GUARANTEE
+--------------------------------------------------------------------------
+
+[ ] 9.1  Open the app in two browser windows: the demo student in one,
+         ben@seed.campus / demo1234 in a private window.
+         Pick the SAME court, SAME date, SAME time in both.
+         Click "Check availability & book" in both as close together as
+         you can.
+         Expected: exactly ONE succeeds. The other says the slot was just
+         taken and shows alternatives. The database itself refuses the
+         second booking.
+
+[ ] 9.2  Cancel the successful booking, then book that slot again.
+         Expected: works - cancelled bookings free the slot.
+
+
+--------------------------------------------------------------------------
+ PART 10 - SECURITY
+--------------------------------------------------------------------------
+Signed in as student. Press F12 -> Console. Paste each line, press Enter.
+
+[ ] 10.1 Try to make yourself admin:
+           const { data: u } = await supabase.auth.getUser();
+           await supabase.from("profiles").update({ role: "admin" }).eq("id", u.user.id);
+         Expected: an error "Only an administrator can change a user's
+         role". Refresh - you are still a student.
+         (If this SUCCEEDS, fix-role-escalation.sql was not run.)
+
+         Note: if "supabase" is not defined in the console, skip 10.1 and
+         10.2 - they need the client exposed in dev tools.
+
+[ ] 10.2 Try to book as someone else:
+           await supabase.from("reservations").insert({ facility_id: "<any facility id>",
+             user_id: "<another user's id>", start_time: new Date().toISOString(),
+             end_time: new Date(Date.now() + 3600000).toISOString() });
+         Expected: refused by row level security.
+
+[ ] 10.3 As facility manager, try to open a facility you are NOT assigned
+         to.
+         Expected: its bookings do not appear in your queue.
+
+
+--------------------------------------------------------------------------
+ KNOWN ISSUES (not failures)
+--------------------------------------------------------------------------
+
+ - "Slow filesystem detected" in the terminal: the project is on
+   OneDrive. Harmless, but moving it off OneDrive makes it faster.
+ - "Blocked cross-origin request ... 169.254.x.x": harmless, you use
+   localhost.
+ - npm run lint shows 5 older errors in student/page.tsx. The app still
+   runs.
+ - The hardware sensor files (firmware/, api/sensor,
+   upgrade-occupancy.sql) are parked. Do not test them yet.
+
+
+--------------------------------------------------------------------------
+ BEFORE REAL TESTING WITH STUDENTS  (important)
+--------------------------------------------------------------------------
+
+[ ] Run supabase/seed-test-data-remove.sql.
+    Expected: a row showing 0 | 0 | 0.
+    Seeded bookings would otherwise count as demand, change the learned
+    peak hours, and mix into your Phase 2 measurements.
+
+
+--------------------------------------------------------------------------
+ RESULT
+--------------------------------------------------------------------------
+
+ Date tested: ______________      Tested by: ______________
+
+ Parts passed:  0 [ ]  1 [ ]  2 [ ]  3 [ ]  4 [ ]  5 [ ]
+                6 [ ]  7 [ ]  8 [ ]  9 [ ]  10 [ ]
+
+ Failures (step number and what happened):
+ ____________________________________________________________________
+ ____________________________________________________________________
+ ____________________________________________________________________
+==========================================================================
