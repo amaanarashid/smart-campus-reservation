@@ -31,6 +31,7 @@ export interface FacilityCategory {
   max_advance_days: number;
   cancellation_hours: number;
   auto_approve: boolean;
+  checkin_grace_mins?: number | null;
 }
 
 /** An individual room/court, read from the `facilities_full` view. */
@@ -139,6 +140,8 @@ export interface FacilityRule {
   cancellation_hours: number;
   auto_approve: boolean;
   has_override: boolean;
+  /** Minutes after start before an un-checked-in booking is released; null = off. */
+  checkin_grace_mins?: number | null;
 }
 
 export interface Reservation {
@@ -153,6 +156,9 @@ export interface Reservation {
   checked_in_at: string | null;
   no_show: boolean;
   created_at: string;
+  /** Why it was cancelled: user | no_checkin | early_leave | admin. */
+  cancel_reason?: string | null;
+  released_at?: string | null;
 }
 
 export const FACILITY_TYPE_LABELS: Record<string, string> = {

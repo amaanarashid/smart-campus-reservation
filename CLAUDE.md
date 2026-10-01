@@ -154,10 +154,23 @@ triggers.
 - Tests: `time`, `recommend`, `bandit`, `chat-logic` — 68 vitest cases, all
   with explicit `+08:00` times so they pass in any machine timezone.
 
-**Migrations to run** (Supabase SQL editor, after `setup-all.sql`):
-`upgrade-recommender.sql` (adds `profiles.rec_bandit`) and
-`fix-role-escalation.sql` (stops a student setting their own `role`).
-Until the first is run, the app still works and saves `rec_weights` only.
+**Migrations to run** (Supabase SQL editor, after `setup-all.sql`), in order:
+`upgrade-recommender.sql` (adds `profiles.rec_bandit`),
+`fix-role-escalation.sql` (stops a student setting their own `role`),
+`upgrade-auto-release.sql` (check-in grace rule + `release_no_shows()` on
+pg_cron every minute; discussion rooms default to 10 min; also fixes UTC times
+in booking notifications), `upgrade-room-access.sql` (`room_devices`,
+`room_events`, `door_facilities` view, `register_room_device()`).
+Until they are run, the app still works without those features.
+
+**Smart room (library demo)** — `src/lib/room-logic.ts` (door codes derived as
+HMAC-SHA256(secret, booking id) → 6 digits, never stored; code windows;
+room status), `src/lib/room-server.ts` (service-role client, device auth),
+endpoints `api/room/unlock`, `api/room/status`, `api/bookings/code`. Vercel
+needs `SUPABASE_SERVICE_ROLE_KEY` and `ROOM_CODE_SECRET`. Wokwi door firmware
+in `firmware/door-wokwi/` (keypad, OLED, servo, door switch; setup in its
+README). Rooms with a door have no in-app check-in: the keypad is the check-in.
+Still to build: presence → lights/AC, reminders, pre-cooling, energy metrics.
 
 **Test data** — `supabase/seed-test-data.sql` (re-runnable; dates relative
 to today in Malaysia time; needs the three demo accounts to exist first) and

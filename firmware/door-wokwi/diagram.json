@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "author": "Amaan Rashid",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    { "type": "board-ssd1306", "id": "oled", "top": -150, "left": -10, "attrs": { "i2cAddress": "0x3c" } },
+    { "type": "wokwi-membrane-keypad", "id": "keypad", "top": -60, "left": 220, "attrs": {} },
+    { "type": "wokwi-servo", "id": "lock", "top": 250, "left": -40, "attrs": {} },
+    { "type": "wokwi-slide-switch", "id": "door", "top": 250, "left": 160, "attrs": {} },
+    { "type": "wokwi-led", "id": "ledOk", "top": -60, "left": -160, "attrs": { "color": "green", "label": "OPEN" } },
+    { "type": "wokwi-led", "id": "ledNo", "top": -60, "left": -110, "attrs": { "color": "red", "label": "DENIED" } },
+    { "type": "wokwi-resistor", "id": "rOk", "top": 20, "left": -175, "rotate": 90, "attrs": { "value": "220" } },
+    { "type": "wokwi-resistor", "id": "rNo", "top": 20, "left": -125, "rotate": 90, "attrs": { "value": "220" } },
+    { "type": "wokwi-buzzer", "id": "buzzer", "top": -70, "left": -250, "attrs": { "volume": "0.1" } }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+
+    [ "oled:VCC", "esp:3V3", "red", [] ],
+    [ "oled:GND", "esp:GND.1", "black", [] ],
+    [ "oled:SDA", "esp:21", "blue", [] ],
+    [ "oled:SCL", "esp:22", "purple", [] ],
+
+    [ "keypad:R1", "esp:13", "gold", [] ],
+    [ "keypad:R2", "esp:16", "gold", [] ],
+    [ "keypad:R3", "esp:14", "gold", [] ],
+    [ "keypad:R4", "esp:27", "gold", [] ],
+    [ "keypad:C1", "esp:26", "orange", [] ],
+    [ "keypad:C2", "esp:25", "orange", [] ],
+    [ "keypad:C3", "esp:33", "orange", [] ],
+    [ "keypad:C4", "esp:32", "orange", [] ],
+
+    [ "lock:GND", "esp:GND.1", "black", [] ],
+    [ "lock:V+", "esp:5V", "red", [] ],
+    [ "lock:PWM", "esp:18", "green", [] ],
+
+    [ "door:2", "esp:4", "cyan", [] ],
+    [ "door:1", "esp:GND.1", "black", [] ],
+
+    [ "esp:23", "rOk:1", "green", [] ],
+    [ "rOk:2", "ledOk:A", "green", [] ],
+    [ "ledOk:C", "esp:GND.1", "black", [] ],
+    [ "esp:19", "rNo:1", "red", [] ],
+    [ "rNo:2", "ledNo:A", "red", [] ],
+    [ "ledNo:C", "esp:GND.1", "black", [] ],
+
+    [ "buzzer:2", "esp:5", "magenta", [] ],
+    [ "buzzer:1", "esp:GND.1", "black", [] ]
+  ],
+  "dependencies": {}
+}

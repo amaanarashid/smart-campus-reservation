@@ -432,8 +432,12 @@ begin
 
   -- ---------- the demo student's own bookings ----------
   if v_student is not null then
-    -- in progress now -> the student can check in
-    perform pg_temp.seed_res(f_dra, v_student, hr, hr + interval '1 hour', 'approved', 3, 'in progress - check in');
+    -- started 1 minute ago -> the student can check in. If discussion rooms
+    -- have a check-in grace rule (upgrade-auto-release.sql sets 10 min), this
+    -- booking is auto-released after that time: check in to keep it, or wait
+    -- to watch the release happen.
+    perform pg_temp.seed_res(f_dra, v_student, date_trunc('minute', now()) - interval '1 minute',
+      date_trunc('minute', now()) + interval '59 minutes', 'approved', 3, 'in progress - check in');
     -- next booking -> chatbot "when is my next booking?"
     perform pg_temp.seed_res(f_drb, v_student, pg_temp.my_at(d1,'16:00'), pg_temp.my_at(d1,'17:00'), 'approved', 4, 'my next booking');
     perform pg_temp.seed_res(f_fut, v_student, pg_temp.my_at(d2,'18:00'), pg_temp.my_at(d2,'19:00'), 'pending', 10, 'my pending request');

@@ -45,6 +45,9 @@ export default function StudentDashboard() {
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [busyNow, setBusyNow] = useState<Set<string>>(new Set());
   const [myBookings, setMyBookings] = useState<Reservation[]>([]);
+  // rooms fitted with a smart door: check-in happens at the keypad, not in the app
+  const [doorRooms, setDoorRooms] = useState<Set<string>>(new Set());
+  const [codes, setCodes] = useState<Record<string, { code: string; hint: string }>>({});
 
   // navigation: venue -> facility -> booking form
   const [venue, setVenue] = useState<string | null>(null);
@@ -96,6 +99,9 @@ export default function StudentDashboard() {
         .in("status", ["pending", "approved"])
         .lte("start_time", nowIso).gte("end_time", nowIso);
       setBusyNow(new Set((cur ?? []).map((x) => x.facility_id)));
+      // view added by upgrade-room-access.sql; if it is not there yet, no doors
+      const { data: doors } = await supabase.from("door_facilities").select("facility_id");
+      setDoorRooms(new Set((doors ?? []).map((d: { facility_id: string }) => d.facility_id)));
       await loadBookings(p.id);
       setLoading(false);
     })();
@@ -316,6 +322,16 @@ export default function StudentDashboard() {
     if (profile) await loadBookings(profile.id);
   }
 
+  async function showDoorCode(r: Reservation) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(`/api/bookings/code?id=${encodeURIComponent(r.id)}`, {
+      headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) { toast.error(j.error ?? "Could not get the door code"); return; }
+    setCodes((prev) => ({ ...prev, [r.id]: { code: j.code, hint: j.hint } }));
+  }
+
   async function cancel(r: Reservation) {
     const ru = rules[r.facility_id];
     const hoursLeft = (new Date(r.start_time).getTime() - Date.now()) / 3600000;
@@ -323,7 +339,13 @@ export default function StudentDashboard() {
       toast.error(`This facility needs ${ru.cancellation_hours}h cancellation notice.`);
       return;
     }
-    await supabase.from("reservations").update({ status: "cancelled" }).eq("id", r.id);
+    const { error } = await supabase.from("reservations")
+      .update({ status: "cancelled", cancel_reason: "user" }).eq("id", r.id);
+    if (error) {
+      // cancel_reason column arrives with upgrade-auto-release.sql; cancel regardless
+      const retry = await supabase.from("reservations").update({ status: "cancelled" }).eq("id", r.id);
+      if (retry.error) { toast.error(retry.error.message); return; }
+    }
     toast.success("Booking cancelled");
     if (profile) await loadBookings(profile.id);
   }
@@ -658,11 +680,20 @@ export default function StudentDashboard() {
                   {myBookings.map((b) => {
                     const f = facilities.find((x) => x.id === b.facility_id);
                     const start = new Date(b.start_time);
-                    const canCheckIn = b.status === "approved" && !b.checked_in_at && !b.no_show &&
+                    const hasDoor = doorRooms.has(b.facility_id);
+                    const canCheckIn = !hasDoor && b.status === "approved" && !b.checked_in_at && !b.no_show &&
                       Date.now() >= start.getTime() - 15 * 60000 &&
                       Date.now() <= new Date(b.end_time).getTime();
+                    const canShowCode = hasDoor && b.status === "approved" &&
+                      new Date(b.end_time).getTime() > Date.now();
+                    const code = codes[b.id];
                     const canCancel = (b.status === "pending" || b.status === "approved") &&
                       start.getTime() > Date.now() && !b.checked_in_at;
+                    const grace = rules[b.facility_id]?.checkin_grace_mins;
+                    const checkInBy = grace ? new Date(start.getTime() + grace * 60000) : null;
+                    const showDeadline = !!checkInBy && b.status === "approved" && !b.checked_in_at &&
+                      Date.now() < checkInBy.getTime();
+                    const released = b.status === "cancelled" && b.cancel_reason === "no_checkin";
                     return (
                       <div key={b.id}
                         className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3 transition-colors hover:bg-muted/30">
@@ -682,14 +713,31 @@ export default function StudentDashboard() {
                             {new Date(b.end_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                             {f ? ` - ${f.venue}` : ""}
                           </p>
+                          {showDeadline && checkInBy && (
+                            <p className="pt-0.5 text-xs font-medium text-primary">
+                              {hasDoor ? "Enter your door code by " : "Check in by "}
+                              {fmtTime(checkInBy)} or this booking is released
+                            </p>
+                          )}
+                          {code && (
+                            <div className="mt-1.5 inline-block rounded-lg border border-primary/40 bg-accent/60 px-3 py-1.5">
+                              <span className="font-display text-xl font-semibold tracking-[0.3em]">{code.code}</span>
+                              <span className="block text-[11px] text-muted-foreground">{code.hint}</span>
+                            </div>
+                          )}
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <Badge variant={STATUS_COLOR[b.status]}>{b.status}</Badge>
+                          {released
+                            ? <Badge variant="destructive">released - no check-in</Badge>
+                            : <Badge variant={STATUS_COLOR[b.status]}>{b.status}</Badge>}
                           {b.checked_in_at && <Badge variant="outline">checked in</Badge>}
-                          {b.no_show && <Badge variant="destructive">no-show</Badge>}
+                          {b.no_show && !released && <Badge variant="destructive">no-show</Badge>}
                         </div>
                         <div className="ml-auto flex gap-1.5">
                           {canCheckIn && <Button size="sm" onClick={() => checkIn(b)}>Check in</Button>}
+                          {canShowCode && !code && (
+                            <Button size="sm" onClick={() => showDoorCode(b)}>Door code</Button>
+                          )}
                           {canCancel && (
                             <Button size="sm" variant="outline" onClick={() => cancel(b)}>Cancel</Button>
                           )}

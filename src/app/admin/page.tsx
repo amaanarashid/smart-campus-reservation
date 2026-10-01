@@ -30,6 +30,7 @@ const NEW_CATEGORY_DEFAULTS = {
   open_time: "08:00", close_time: "22:00", slot_minutes: 60,
   min_duration_mins: 30, max_duration_mins: 120,
   max_advance_days: 14, cancellation_hours: 24, auto_approve: false,
+  checkin_grace_mins: null as number | null,
 };
 // step 2: a court/room under a category
 const NEW_COURT_DEFAULTS = { category_id: "", name: "", capacity: 10, description: "" };
@@ -117,7 +118,11 @@ export default function AdminDashboard() {
   async function createCategory() {
     if (!nc.name || !nc.venue) { toast.error("Category name and venue are required"); return; }
     const slug = nc.name.trim().toLowerCase().replace(/\s+/g, "_");
-    const { error } = await supabase.from("facility_categories").insert({ ...nc, slug });
+    // only send the grace rule when set, so this still works before
+    // upgrade-auto-release.sql has added the column
+    const { checkin_grace_mins, ...base } = nc;
+    const { error } = await supabase.from("facility_categories")
+      .insert({ ...base, slug, ...(checkin_grace_mins ? { checkin_grace_mins } : {}) });
     if (error) {
       toast.error(error.message.includes("duplicate") ? "That category already exists" : error.message);
       return;
@@ -461,6 +466,17 @@ export default function AdminDashboard() {
                         <Input type="number" min={0} value={nc.cancellation_hours}
                           onChange={(e) => setNc({ ...nc, cancellation_hours: Number(e.target.value) })} />
                       </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">
+                          Check-in grace (min) - blank = never auto-release
+                        </label>
+                        <Input type="number" min={1} max={120} placeholder="off"
+                          value={nc.checkin_grace_mins ?? ""}
+                          onChange={(e) => setNc({
+                            ...nc,
+                            checkin_grace_mins: e.target.value === "" ? null : Number(e.target.value),
+                          })} />
+                      </div>
                     </div>
                     <label className="flex cursor-pointer items-center justify-between rounded-lg bg-card px-3 py-2">
                       <span>
@@ -583,7 +599,7 @@ export default function AdminDashboard() {
                       <Clock className="h-3.5 w-3.5" />
                       Booking rules - apply to every room in {c.name}
                     </p>
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">Opening hours</label>
                         <div className="flex items-center gap-1.5">
@@ -627,6 +643,17 @@ export default function AdminDashboard() {
                           onClick={() => saveCategoryRule(c.id, { auto_approve: !c.auto_approve })}>
                           {c.auto_approve ? "On - instant booking" : "Off - needs approval"}
                         </Button>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Check-in grace (min)</label>
+                        <Input type="number" min={1} max={120} placeholder="off - never release"
+                          defaultValue={c.checkin_grace_mins ?? ""}
+                          title="Release a booking if nobody checks in within this many minutes of its start. Blank = off."
+                          onKeyDown={(e) => {
+                            if (e.key !== "Enter") return;
+                            const v = (e.target as HTMLInputElement).value;
+                            saveCategoryRule(c.id, { checkin_grace_mins: v === "" ? null : Number(v) });
+                          }} />
                       </div>
                     </div>
                     <p className="pt-2 text-[11px] text-muted-foreground">

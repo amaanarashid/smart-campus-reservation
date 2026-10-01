@@ -176,8 +176,23 @@ Signed in as student.
          Now cancel the Court 2 booking that starts in about 3 hours.
          Expected: refused - "needs 12h cancellation notice".
 
-[ ] 5.7  The Discussion Room A booking is IN PROGRESS right now.
-         Expected: a Check in button. Press it; it becomes checked in.
+[ ] 5.7  The discussion room booking started 1 minute before you ran the
+         seed. Expected: a Check in button, and the text "Check in by
+         <time> or this booking is released" (10 minutes after start).
+         Press Check in within that time; it becomes checked in and the
+         warning disappears.
+
+[ ] 5.7b AUTO-RELEASE (needs upgrade-auto-release.sql)
+         Re-run the seed, and this time do NOT check in. Wait 11 minutes,
+         then refresh.
+         Expected: the booking shows "released - no check-in", the bell
+         shows "Booking released", and the slot can be booked again.
+         In Supabase:  select status, return_message from
+                       cron.job_run_details order by start_time desc limit 3;
+         shows the job running every minute.
+
+[ ] 5.7c Admin -> Facilities -> a category -> "Check-in grace (min)".
+         Type 15, press Enter. Clear it and press Enter to switch it off.
 
 [ ] 5.8  Court 4 must not appear anywhere in the facility list
          (it is under maintenance).

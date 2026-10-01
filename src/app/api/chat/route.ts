@@ -143,7 +143,10 @@ function rulesFacts(matched: Facility[], rules: Record<string, FacilityRule>): s
     return `${f.name} (${f.category_name}): open ${r.open_time.slice(0, 5)} to ${r.close_time.slice(0, 5)}, ` +
       `bookings of ${r.min_duration_mins} to ${r.max_duration_mins} minutes, up to ${f.capacity} people, ` +
       `bookable up to ${r.max_advance_days} days ahead, cancel at least ${r.cancellation_hours} hours before, ` +
-      `${r.auto_approve ? "approved automatically" : "needs manager approval"}.`;
+      `${r.auto_approve ? "approved automatically" : "needs manager approval"}` +
+      (r.checkin_grace_mins
+        ? `, and you must check in within ${r.checkin_grace_mins} minutes of the start or the booking is released.`
+        : ".");
   }).join(" ");
 }
 

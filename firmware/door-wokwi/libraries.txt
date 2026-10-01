@@ -1,0 +1,6 @@
+# Wokwi installs these automatically (Library Manager names)
+Keypad
+Adafruit SSD1306
+Adafruit GFX Library
+ESP32Servo
+ArduinoJson
