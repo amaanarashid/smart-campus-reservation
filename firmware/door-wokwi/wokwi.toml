@@ -1,0 +1,6 @@
+# Tells the Wokwi VS Code extension where PlatformIO puts the compiled program.
+# diagram.json (the circuit) is read from this same folder.
+[wokwi]
+version = 1
+firmware = '.pio/build/esp32/firmware.bin'
+elf = '.pio/build/esp32/firmware.elf'

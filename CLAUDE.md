@@ -166,11 +166,16 @@ Until they are run, the app still works without those features.
 **Smart room (library demo)** — `src/lib/room-logic.ts` (door codes derived as
 HMAC-SHA256(secret, booking id) → 6 digits, never stored; code windows;
 room status), `src/lib/room-server.ts` (service-role client, device auth),
-endpoints `api/room/unlock`, `api/room/status`, `api/bookings/code`. Vercel
-needs `SUPABASE_SERVICE_ROLE_KEY` and `ROOM_CODE_SECRET`. Wokwi door firmware
-in `firmware/door-wokwi/` (keypad, OLED, servo, door switch; setup in its
-README). Rooms with a door have no in-app check-in: the keypad is the check-in.
-Still to build: presence → lights/AC, reminders, pre-cooling, energy metrics.
+endpoints `api/room/unlock`, `api/room/status`, `api/room/event` (device
+reports presence/lights/AC/door/reminders; `released_early` ends a checked-in
+booking early via `earlyReleaseDecision`), `api/bookings/code`. Vercel needs
+`SUPABASE_SERVICE_ROLE_KEY` and `ROOM_CODE_SECRET`. Firmware in
+`firmware/door-wokwi/` (one sketch: door + room automation; PlatformIO build
+for the Wokwi VS Code extension; setup and test steps in its README). Presence
+is filtered on-device (IIR a=0.1, hysteresis 0.35/0.08, vacancy timer, warning
+blink); lights follow presence, AC follows bookings (pre-cool 5 min) and
+presence. Rooms with a door have no in-app check-in: the keypad is the
+check-in. Still to build: energy metrics, admin room panel, 3D digital twin.
 
 **Test data** — `supabase/seed-test-data.sql` (re-runnable; dates relative
 to today in Malaysia time; needs the three demo accounts to exist first) and

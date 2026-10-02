@@ -731,6 +731,9 @@ export default function StudentDashboard() {
                             ? <Badge variant="destructive">released - no check-in</Badge>
                             : <Badge variant={STATUS_COLOR[b.status]}>{b.status}</Badge>}
                           {b.checked_in_at && <Badge variant="outline">checked in</Badge>}
+                          {b.cancel_reason === "early_leave" && b.status === "approved" && (
+                            <Badge variant="secondary">ended early - room empty</Badge>
+                          )}
                           {b.no_show && !released && <Badge variant="destructive">no-show</Badge>}
                         </div>
                         <div className="ml-auto flex gap-1.5">

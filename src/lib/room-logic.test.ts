@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { checkCode, codeWindow, doorCode, openableNow, roomStatus, safeEqual, type DoorBooking } from "./room-logic";
+import {
+  checkCode, codeWindow, doorCode, earlyReleaseDecision, isDeviceEvent, openableNow, roomStatus, safeEqual,
+  type DoorBooking,
+} from "./room-logic";
 import { myAt } from "./time";
 
 const SECRET = "test-secret-at-least-16-chars";
@@ -73,6 +76,41 @@ describe("when a code opens the door", () => {
     expect(openableNow([first, second], now).map((x) => x.id)).toEqual(["A", "B"]);
     expect(checkCode(doorCode("A", SECRET), [first, second], now, SECRET)).toMatchObject({ ok: true, booking: { id: "A" } });
     expect(checkCode(doorCode("B", SECRET), [first, second], now, SECRET)).toMatchObject({ ok: true, booking: { id: "B" } });
+  });
+});
+
+describe("early release when the room empties", () => {
+  const checkedIn = bk("b1", "15:00", "17:00", { checked_in_at: myAt(day, "15:02").toISOString() });
+
+  it("ends a checked-in booking now and frees the rest, rounded to the minute", () => {
+    const now = new Date(myAt(day, "15:40").getTime() + 20_000);   // 15:40:20
+    const d = earlyReleaseDecision(checkedIn, now);
+    expect(d).toMatchObject({ ok: true, freedMins: 79 });
+    if (d.ok) expect(d.newEnd.toISOString()).toBe(myAt(day, "15:41").toISOString());
+  });
+
+  it("refuses when nobody ever checked in (auto-release handles that case)", () => {
+    expect(earlyReleaseDecision({ ...checkedIn, checked_in_at: null }, myAt(day, "15:40")))
+      .toMatchObject({ ok: false, reason: expect.stringContaining("never checked in") });
+  });
+
+  it("refuses with under 15 minutes left - not worth giving back", () => {
+    expect(earlyReleaseDecision(checkedIn, myAt(day, "16:50")))
+      .toMatchObject({ ok: false, reason: expect.stringContaining("15 min") });
+  });
+
+  it("refuses outside the booking, for cancelled bookings, and with no booking", () => {
+    expect(earlyReleaseDecision(checkedIn, myAt(day, "17:05")).ok).toBe(false);
+    expect(earlyReleaseDecision({ ...checkedIn, status: "cancelled" }, myAt(day, "15:40")).ok).toBe(false);
+    expect(earlyReleaseDecision(undefined, myAt(day, "15:40")).ok).toBe(false);
+  });
+
+  it("only accepts known device events", () => {
+    expect(isDeviceEvent("lights_on")).toBe(true);
+    expect(isDeviceEvent("released_early")).toBe(true);
+    expect(isDeviceEvent("unlock_ok")).toBe(false);    // only the unlock endpoint may log that
+    expect(isDeviceEvent("drop table")).toBe(false);
+    expect(isDeviceEvent(42)).toBe(false);
   });
 });
 

@@ -86,6 +86,39 @@ export function checkCode(
   return { ok: false, reason: "wrong_code" };
 }
 
+/** Events a room device may report. Anything else is rejected. */
+export const DEVICE_EVENTS = [
+  "presence_on", "presence_off", "lights_on", "lights_off", "ac_on", "ac_off",
+  "door_open", "door_closed", "reminder", "released_early", "heartbeat",
+] as const;
+export type DeviceEvent = (typeof DEVICE_EVENTS)[number];
+export const isDeviceEvent = (k: unknown): k is DeviceEvent =>
+  typeof k === "string" && (DEVICE_EVENTS as readonly string[]).includes(k);
+
+/** Releasing the tail of a booking is only worth it if at least this much is left. */
+export const MIN_RELEASE_MINS = 15;
+
+/**
+ * Early release: the group checked in, then left. If the room has been empty
+ * long enough (the device decides that), give the rest of the slot back.
+ * Only a booking that is running, checked in, and has a worthwhile amount of
+ * time left qualifies; the booking keeps its approved status - it was used -
+ * and simply ends now.
+ */
+export function earlyReleaseDecision(b: DoorBooking | undefined, now: Date):
+  { ok: true; newEnd: Date; freedMins: number } | { ok: false; reason: string } {
+  if (!b) return { ok: false, reason: "no booking running" };
+  if (b.status !== "approved") return { ok: false, reason: "booking not approved" };
+  if (!b.checked_in_at) return { ok: false, reason: "never checked in - auto-release handles this" };
+  const start = new Date(b.start_time).getTime(), end = new Date(b.end_time).getTime(), t = now.getTime();
+  if (t < start || t >= end) return { ok: false, reason: "booking not running" };
+  const freedMins = Math.floor((end - t) / 60_000);
+  if (freedMins < MIN_RELEASE_MINS) return { ok: false, reason: `under ${MIN_RELEASE_MINS} min left` };
+  // end on the next whole minute so the freed slot starts cleanly
+  const newEnd = new Date(Math.ceil(t / 60_000) * 60_000);
+  return { ok: true, newEnd, freedMins: Math.floor((end - newEnd.getTime()) / 60_000) };
+}
+
 /** Two short lines for the 128x64 OLED at the door. */
 export function display(line1: string, line2 = ""): { line1: string; line2: string } {
   return { line1: line1.slice(0, 21), line2: line2.slice(0, 21) };
