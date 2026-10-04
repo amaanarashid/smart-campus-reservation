@@ -4,7 +4,7 @@ The interface follows a small design system so every screen looks like it belong
 
 ## Brand
 
-The product presents as **Campus Reserve** under the Asia Pacific University name. The brand mark is a crimson square with a serif "R", paired with the university name in small text. It appears in the top-left of every page and links home.
+The product presents as **Campus Reserve**. The brand mark is a crimson rounded square with a white campus building (`src/components/campus-icon.tsx`, drawn in `currentColor`), paired with the product name. It appears in the top-left of every page and links home. The same building is the browser tab icon (`src/app/icon.svg`, `favicon.ico`, `apple-icon.png`).
 
 ## Color
 
@@ -37,6 +37,42 @@ Dark mode mirrors the palette with a navy-black background and a brighter crimso
 Organised into five tabs via a sticky section nav (Overview, Facilities, Approvals, Equipment, Records) so the admin never scrolls through everything at once — only the active section renders. The nav sits just under the app header (`sticky top-16`), scrolls horizontally on mobile, highlights the active tab in crimson, and shows live count badges (facility count, pending approvals). Switching tabs replays the `animate-reveal` entrance via React `key`.
 
 Within tabs: stat cards carry an icon tile, an uppercase label, and a serif number that pops in (`animate-count`). The dense "Add a facility" form is collapsed behind a full-width toggle header (Plus icon + rotating chevron). Section titles use the serif display font with a leading crimson icon. All entrance animations respect `prefers-reduced-motion`.
+
+## Student dashboard
+
+- **Loading:** a skeleton in the shape of the real page (stat cards and venue
+  grid) with a shimmer, so nothing jumps when the data arrives.
+- **Steps:** venue, then room, then booking form. Each step slides in
+  (`animate-step-in`, keyed by step), and venue and room cards cascade in.
+- **AI suggestions:** cards cascade in (`.stagger`). The best option has a
+  ring and a "Best" badge that pops in. While a booking is being made, every
+  card is disabled and the chosen one shows a spinner, which prevents double
+  bookings from double clicks.
+- **My bookings:** upcoming and running bookings come first, soonest first.
+  History sits under a collapsible "Past and cancelled" toggle. A running
+  booking is highlighted with a pulsing "Now" dot. The Check in / Door code
+  button pulses gently while a check-in deadline is close. The door code is
+  revealed digit by digit and has a copy button.
+- **The form follows the rules:** the duration list only offers what the room
+  allows, and the date picker is limited to today through the advance-booking
+  window.
+- **Time-dependent UI** (check-in buttons, deadlines, "Now") runs off a clock
+  that ticks every 30 seconds, never `Date.now()` during render. That keeps it
+  current and React-Compiler-safe.
+
+## Motion system
+
+Defined in `globals.css`. Every animation stops under `prefers-reduced-motion`.
+
+| Utility | Use |
+|---|---|
+| `animate-reveal` | general entrance: fade and rise |
+| `stagger` + `style={{"--i": n}}` | cascade a list 55 ms apart |
+| `animate-step-in` | moving between steps of a flow |
+| `animate-pop-in` | something the user should notice arriving |
+| `animate-digit-in` | per-digit reveal, used for door codes |
+| `animate-soft-pulse` | gentle "action needed soon" cue |
+| `skeleton` | loading placeholder with shimmer |
 
 ## Texture
 

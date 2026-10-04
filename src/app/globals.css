@@ -180,16 +180,57 @@
   from { opacity: 0; transform: scale(0.9); }
   to { opacity: 1; transform: scale(1); }
 }
+@keyframes step-in {
+  from { opacity: 0; transform: translateX(14px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes pop-in {
+  0% { opacity: 0; transform: scale(0.92); }
+  60% { opacity: 1; transform: scale(1.02); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes digit-in {
+  from { opacity: 0; transform: translateY(-60%) rotateX(70deg); }
+  to { opacity: 1; transform: translateY(0) rotateX(0); }
+}
+@keyframes soft-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 oklch(0.46 0.17 25 / 0%); }
+  50% { box-shadow: 0 0 0 4px oklch(0.46 0.17 25 / 18%); }
+}
+
 .animate-reveal { animation: reveal-up 0.55s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .animate-count { animation: count-pop 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .animate-blob { animation: blob 14s ease-in-out infinite; }
 .animate-float-y { animation: float-y 6s ease-in-out infinite; }
 .animate-auth-in { animation: auth-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .animate-field-in { animation: field-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
+/* moving between venue -> room -> booking form */
+.animate-step-in { animation: step-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+/* something new arrives that the user should notice (best suggestion, door code) */
+.animate-pop-in { animation: pop-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-digit-in { animation: digit-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; display: inline-block; }
+/* gentle attention cue: action needed soon (check-in deadline) */
+.animate-soft-pulse { animation: soft-pulse 2.4s ease-in-out infinite; }
+
+/* Staggered lists: set style={{ "--i": index }} on each item and the
+   delay follows, so lists cascade in without per-item inline delays. */
+.stagger { animation-delay: calc(var(--i, 0) * 55ms); }
+
+/* Loading placeholders that match the shape of the real content, so the page
+   does not jump when data arrives. */
+.skeleton {
+  border-radius: var(--radius);
+  background: linear-gradient(90deg,
+    var(--muted) 0%, color-mix(in oklch, var(--muted), white 45%) 50%, var(--muted) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .animate-blob, .animate-float-y, .animate-auth-in, .animate-field-in,
-  .animate-reveal, .animate-count {
+  .animate-reveal, .animate-count, .animate-step-in, .animate-pop-in,
+  .animate-digit-in, .animate-soft-pulse, .skeleton {
     animation: none;
   }
+  .stagger { animation-delay: 0ms; }
 }

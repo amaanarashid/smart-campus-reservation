@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import {
@@ -13,7 +13,7 @@ import {
 import {
   initBandit, isBanditState, rankWithBandit, cascadeUpdate, compactBandit,
 } from "@/lib/bandit";
-import { addDays, fmtRelativeDay, fmtTime, myAt, myDateKey } from "@/lib/time";
+import { addDays, fmtDay, fmtRelativeDay, fmtTime, myAt, myDateKey } from "@/lib/time";
 import { ensureProfile } from "@/lib/profile";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,13 +27,57 @@ import FacilityIso from "@/components/facility-iso";
 import PopularTimes from "@/components/popular-times";
 import { logEvent } from "@/lib/evaluation";
 import {
-  CalendarDays, Clock, CheckCircle2, ChevronRight, ArrowLeft,
-  Sparkles, MapPin, Users2, CalendarX,
+  CalendarDays, Clock, CheckCircle2, ChevronRight, ChevronDown, ArrowLeft,
+  Sparkles, MapPin, Users2, CalendarX, Copy, KeyRound,
 } from "lucide-react";
 
 const STATUS_COLOR: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   approved: "default", pending: "secondary", rejected: "destructive", cancelled: "outline",
 };
+
+/** Index for the .stagger utility: list items cascade in 55 ms apart. */
+const stagger = (i: number) => ({ "--i": i }) as CSSProperties;
+
+/** Durations the facility actually allows, in steps of its slot size. */
+function durationOptions(rule: FacilityRule | null | undefined): number[] {
+  const min = rule?.min_duration_mins ?? 30;
+  const max = rule?.max_duration_mins ?? 120;
+  const step = rule?.slot_minutes && rule.slot_minutes >= 15 ? rule.slot_minutes : 30;
+  const out: number[] = [];
+  for (let d = Math.ceil(min / step) * step; d <= max && out.length < 16; d += step) out.push(d);
+  if (out.length === 0) out.push(min);
+  return out;
+}
+
+const clampDuration = (want: number, rule: FacilityRule | undefined) => {
+  const opts = durationOptions(rule);
+  return opts.reduce((best, d) => (Math.abs(d - want) < Math.abs(best - want) ? d : best), opts[0]);
+};
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6" aria-busy="true" aria-label="Loading your dashboard">
+      <div className="grid gap-4 sm:grid-cols-3">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="flex items-center gap-4 rounded-xl border bg-card p-5">
+            <div className="skeleton h-11 w-11 rounded-xl" />
+            <div className="flex-1 space-y-2">
+              <div className="skeleton h-3 w-2/3" />
+              <div className="skeleton h-6 w-10" />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="rounded-xl border bg-card p-6">
+        <div className="skeleton h-6 w-64" />
+        <div className="skeleton mt-2 h-4 w-80 max-w-full" />
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[0, 1, 2].map((i) => <div key={i} className="skeleton h-48 rounded-xl" />)}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function StudentDashboard() {
   const router = useRouter();
@@ -65,6 +109,17 @@ export default function StudentDashboard() {
   // may change afterwards, but learning must be against the original request
   const [suggestCtx, setSuggestCtx] = useState<{ preferredHour: number; peaks: PeakModel } | null>(null);
   const [checking, setChecking] = useState(false);
+  // which suggestion is being booked right now; blocks double clicks
+  const [bookingKey, setBookingKey] = useState<string | null>(null);
+  const [showPast, setShowPast] = useState(false);
+  // A clock the UI re-renders from. Reading Date.now() during render is impure
+  // (React Compiler can memoise it, leaving check-in buttons and deadlines
+  // stale); this ticks every 30 s so time-dependent UI stays current.
+  const [nowMs, setNowMs] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   const loadBookings = useCallback(async (uid: string) => {
     const { data } = await supabase
@@ -103,6 +158,7 @@ export default function StudentDashboard() {
       const { data: doors } = await supabase.from("door_facilities").select("facility_id");
       setDoorRooms(new Set((doors ?? []).map((d: { facility_id: string }) => d.facility_id)));
       await loadBookings(p.id);
+      setNowMs(Date.now());
       setLoading(false);
     })();
   }, [router, loadBookings]);
@@ -144,7 +200,7 @@ export default function StudentDashboard() {
       .in("status", ["pending", "approved"])
       .lt("start_time", end.toISOString()).gt("end_time", start.toISOString());
     const ids = (overlapping ?? []).map((x) => x.id);
-    let used: Record<string, number> = {};
+    const used: Record<string, number> = {};
     if (ids.length > 0) {
       const { data: re } = await supabase
         .from("reservation_equipment").select("equipment_id, qty")
@@ -322,6 +378,27 @@ export default function StudentDashboard() {
     if (profile) await loadBookings(profile.id);
   }
 
+  // One booking at a time: a fast double click on a suggestion used to send
+  // two inserts, and the second came back as a confusing "slot was taken".
+  async function bookSuggestion(s: ScoredSlot, rank: number) {
+    if (bookingKey) return;
+    setBookingKey(`${s.facilityId}-${s.start.getTime()}`);
+    try {
+      await bookAt(s.start, s.end, s, rank);
+    } finally {
+      setBookingKey(null);
+    }
+  }
+
+  async function copyCode(code: string) {
+    try {
+      await navigator.clipboard.writeText(code);
+      toast.success("Code copied");
+    } catch {
+      toast.info(`Your code is ${code}`);
+    }
+  }
+
   async function showDoorCode(r: Reservation) {
     const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch(`/api/bookings/code?id=${encodeURIComponent(r.id)}`, {
@@ -351,11 +428,121 @@ export default function StudentDashboard() {
   }
 
   // ---------- derived for the summary strip ----------
-  const now = Date.now();
+  const now = nowMs;
   const upcoming = myBookings.filter(
     (b) => (b.status === "approved" || b.status === "pending") && new Date(b.start_time).getTime() > now
   );
   const pendingCount = myBookings.filter((b) => b.status === "pending").length;
+
+  // My bookings: anything still to come or running first (soonest first),
+  // history underneath and collapsed by default
+  const isActive = (b: Reservation) =>
+    (b.status === "approved" || b.status === "pending") && new Date(b.end_time).getTime() > now;
+  const activeBookings = myBookings.filter(isActive)
+    .sort((a, b) => a.start_time.localeCompare(b.start_time));
+  const pastBookings = myBookings.filter((b) => !isActive(b));
+
+  const todayKey = myDateKey(new Date(now || 0));
+  const stepKey = !venue ? "venues" : !facility ? `venue:${venue}` : `facility:${facility.id}`;
+
+  function renderBooking(b: Reservation, i: number) {
+    const f = facilities.find((x) => x.id === b.facility_id);
+    const start = new Date(b.start_time);
+    const end = new Date(b.end_time);
+    const [, dayNum, mon] = fmtDay(myDateKey(start)).split(" ");
+    const hasDoor = doorRooms.has(b.facility_id);
+    const running = b.status === "approved" && start.getTime() <= now && now < end.getTime();
+    const canCheckIn = !hasDoor && b.status === "approved" && !b.checked_in_at && !b.no_show &&
+      now >= start.getTime() - 15 * 60000 && now <= end.getTime();
+    const canShowCode = hasDoor && b.status === "approved" && end.getTime() > now;
+    const code = codes[b.id];
+    const canCancel = (b.status === "pending" || b.status === "approved") &&
+      start.getTime() > now && !b.checked_in_at;
+    const grace = rules[b.facility_id]?.checkin_grace_mins;
+    const checkInBy = grace ? new Date(start.getTime() + grace * 60000) : null;
+    const showDeadline = !!checkInBy && b.status === "approved" && !b.checked_in_at &&
+      now >= start.getTime() - 15 * 60000 && now < checkInBy.getTime();
+    const released = b.status === "cancelled" && b.cancel_reason === "no_checkin";
+    const faded = b.status === "cancelled" || b.status === "rejected" || end.getTime() <= now;
+
+    return (
+      <div key={b.id} style={stagger(i)}
+        className={`animate-reveal stagger flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3 transition-all hover:shadow-sm
+          ${running ? "border-primary/50 bg-accent/30" : "hover:bg-muted/30"} ${faded ? "opacity-70" : ""}`}>
+        <div className={`flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-lg
+          ${running ? "bg-primary text-primary-foreground" : "bg-accent text-accent-foreground"}`}>
+          <span className="text-[10px] uppercase leading-none">{mon}</span>
+          <span className="font-display text-lg font-semibold leading-tight">{dayNum}</span>
+        </div>
+        <div className="min-w-[9rem] flex-1">
+          <p className="flex items-center gap-2 font-medium">
+            {f?.name ?? "Facility"}
+            {running && (
+              <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-primary">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                </span>
+                Now
+              </span>
+            )}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {fmtRelativeDay(myDateKey(start), new Date(now || 0))}, {fmtTime(start)} - {fmtTime(end)}
+            {f ? ` - ${f.venue}` : ""}
+          </p>
+          {showDeadline && checkInBy && (
+            <p className="pt-0.5 text-xs font-medium text-primary">
+              {hasDoor ? "Enter your door code by " : "Check in by "}
+              {fmtTime(checkInBy)} or this booking is released
+            </p>
+          )}
+          {code && (
+            <div className="animate-pop-in mt-2 inline-flex items-center gap-3 rounded-lg border border-primary/40 bg-accent/60 px-3 py-2">
+              <span className="flex gap-1" style={{ perspective: "400px" }} aria-label={`Door code ${code.code}`}>
+                {code.code.split("").map((d, k) => (
+                  <span key={k} style={{ animationDelay: `${120 + k * 70}ms` }}
+                    className="animate-digit-in font-display flex h-9 w-7 items-center justify-center rounded-md bg-card text-xl font-semibold shadow-sm">
+                    {d}
+                  </span>
+                ))}
+              </span>
+              <Button size="sm" variant="ghost" className="h-8 w-8 p-0" title="Copy code"
+                onClick={() => copyCode(code.code)}>
+                <Copy className="h-4 w-4" />
+              </Button>
+              <span className="hidden max-w-[16rem] text-[11px] leading-snug text-muted-foreground sm:block">{code.hint}</span>
+            </div>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {released
+            ? <Badge variant="destructive">released - no check-in</Badge>
+            : <Badge variant={STATUS_COLOR[b.status]}>{b.status}</Badge>}
+          {b.checked_in_at && <Badge variant="outline" className="gap-1"><CheckCircle2 className="h-3 w-3" />checked in</Badge>}
+          {b.cancel_reason === "early_leave" && b.status === "approved" && (
+            <Badge variant="secondary">ended early - room empty</Badge>
+          )}
+          {b.no_show && !released && <Badge variant="destructive">no-show</Badge>}
+        </div>
+        <div className="ml-auto flex gap-1.5">
+          {canCheckIn && (
+            <Button size="sm" className={showDeadline ? "animate-soft-pulse" : ""} onClick={() => checkIn(b)}>
+              Check in
+            </Button>
+          )}
+          {canShowCode && !code && (
+            <Button size="sm" className={`gap-1.5 ${showDeadline ? "animate-soft-pulse" : ""}`} onClick={() => showDoorCode(b)}>
+              <KeyRound className="h-3.5 w-3.5" /> Door code
+            </Button>
+          )}
+          {canCancel && (
+            <Button size="sm" variant="outline" onClick={() => cancel(b)}>Cancel</Button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <AppShell
@@ -366,9 +553,7 @@ export default function StudentDashboard() {
     >
       <Toaster richColors />
       {loading ? (
-        <div className="flex items-center justify-center py-24 text-muted-foreground">
-          Loading your dashboard...
-        </div>
+        <DashboardSkeleton />
       ) : (
         <>
           {/* summary strip */}
@@ -413,7 +598,10 @@ export default function StudentDashboard() {
                 </div>
                 {venue && (
                   <Button variant="outline" size="sm" className="gap-1.5"
-                    onClick={() => { facility ? setFacility(null) : setVenue(null); setSuggestions(null); }}>
+                    onClick={() => {
+                      if (facility) setFacility(null); else setVenue(null);
+                      setSuggestions(null);
+                    }}>
                     <ArrowLeft className="h-4 w-4" />
                     {facility ? "Other rooms" : "All venues"}
                   </Button>
@@ -459,6 +647,8 @@ export default function StudentDashboard() {
                 </div>
               )}
 
+              {/* keyed by step so moving venue -> room -> form replays the slide-in */}
+              <div key={stepKey} className="animate-step-in">
               {/* step 1: venues */}
               {!venue && (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -501,7 +691,12 @@ export default function StudentDashboard() {
                     const r = rules[f.id];
                     return (
                       <button key={f.id}
-                        onClick={() => { setFacility(f); setParticipants(Math.min(2, f.capacity)); }}
+                        onClick={() => {
+                          setFacility(f);
+                          setParticipants(Math.min(2, f.capacity));
+                          setDuration((d) => clampDuration(d, rules[f.id]));
+                          setSuggestions(null);
+                        }}
                         className="animate-reveal overflow-hidden rounded-xl border bg-card text-left shadow-sm transition-all hover:-translate-y-1 hover:border-primary hover:shadow-lg"
                         style={{ animationDelay: `${i * 60}ms` }}>
                         <div className="h-32 bg-muted/40"><FacilityIso type={f.type} busy={busy} /></div>
@@ -536,7 +731,10 @@ export default function StudentDashboard() {
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="space-y-1">
                         <label className="text-xs font-medium">Date</label>
-                        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                        <Input type="date" value={date}
+                          min={todayKey}
+                          max={rule ? addDays(todayKey, rule.max_advance_days) : undefined}
+                          onChange={(e) => { setDate(e.target.value); setSuggestions(null); }} />
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-medium">Start time</label>
@@ -552,8 +750,10 @@ export default function StudentDashboard() {
                         <Select value={String(duration)} onValueChange={(v) => setDuration(Number(v))}>
                           <SelectTrigger><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            {[30, 60, 90, 120, 180, 240].map((d) => (
-                              <SelectItem key={d} value={String(d)}>{d} min</SelectItem>
+                            {durationOptions(rule).map((d) => (
+                              <SelectItem key={d} value={String(d)}>
+                                {d < 60 ? `${d} min` : d % 60 === 0 ? `${d / 60} h` : `${Math.floor(d / 60)} h ${d % 60} min`}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -586,14 +786,32 @@ export default function StudentDashboard() {
                           That time is taken - AI-ranked alternatives:
                         </p>
                         <div className="grid gap-2 sm:grid-cols-2">
-                          {suggestions.map((s, i) => (
-                            <button key={`${s.facilityId}-${s.start.getTime()}`} onClick={() => bookAt(s.start, s.end, s, i)}
-                              className="rounded-lg border bg-card p-3 text-left transition-all hover:-translate-y-0.5 hover:border-primary hover:shadow-sm">
+                          {suggestions.map((s, i) => {
+                            const key = `${s.facilityId}-${s.start.getTime()}`;
+                            const isBooking = bookingKey === key;
+                            return (
+                            <button key={key} onClick={() => bookSuggestion(s, i)}
+                              disabled={bookingKey !== null}
+                              style={stagger(i)}
+                              className={`animate-reveal stagger relative rounded-lg border bg-card p-3 text-left transition-all
+                                hover:-translate-y-0.5 hover:border-primary hover:shadow-md active:translate-y-0 active:scale-[0.99]
+                                disabled:cursor-wait disabled:opacity-60 disabled:hover:translate-y-0
+                                ${i === 0 ? "border-primary/60 ring-2 ring-primary/15" : ""}
+                                ${isBooking ? "!opacity-100 border-primary" : ""}`}>
                               <div className="flex items-center justify-between">
                                 <span className="font-display font-semibold">
                                   {fmtTime(s.start)} - {fmtTime(s.end)}
                                 </span>
-                                {i === 0 && <Badge>Best</Badge>}
+                                {isBooking ? (
+                                  <span className="flex items-center gap-1.5 text-xs font-medium text-primary">
+                                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+                                    Booking
+                                  </span>
+                                ) : i === 0 && (
+                                  <Badge className="animate-pop-in gap-1" style={{ animationDelay: "250ms" }}>
+                                    <Sparkles className="h-3 w-3" /> Best
+                                  </Badge>
+                                )}
                               </div>
                               {(s.facilityId !== facility.id || s.dateKey !== date) && (
                                 <span className="block pt-0.5 text-xs font-medium text-primary">
@@ -605,7 +823,8 @@ export default function StudentDashboard() {
                                 <span className="block pt-0.5 text-xs text-muted-foreground">{s.reasons.join(" - ")}</span>
                               )}
                             </button>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -656,6 +875,7 @@ export default function StudentDashboard() {
                   </div>
                 </div>
               )}
+              </div>
             </CardContent>
           </Card>
 
@@ -676,78 +896,29 @@ export default function StudentDashboard() {
                   <p className="text-sm text-muted-foreground">Pick a venue above to make your first reservation.</p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {myBookings.map((b) => {
-                    const f = facilities.find((x) => x.id === b.facility_id);
-                    const start = new Date(b.start_time);
-                    const hasDoor = doorRooms.has(b.facility_id);
-                    const canCheckIn = !hasDoor && b.status === "approved" && !b.checked_in_at && !b.no_show &&
-                      Date.now() >= start.getTime() - 15 * 60000 &&
-                      Date.now() <= new Date(b.end_time).getTime();
-                    const canShowCode = hasDoor && b.status === "approved" &&
-                      new Date(b.end_time).getTime() > Date.now();
-                    const code = codes[b.id];
-                    const canCancel = (b.status === "pending" || b.status === "approved") &&
-                      start.getTime() > Date.now() && !b.checked_in_at;
-                    const grace = rules[b.facility_id]?.checkin_grace_mins;
-                    const checkInBy = grace ? new Date(start.getTime() + grace * 60000) : null;
-                    const showDeadline = !!checkInBy && b.status === "approved" && !b.checked_in_at &&
-                      Date.now() < checkInBy.getTime();
-                    const released = b.status === "cancelled" && b.cancel_reason === "no_checkin";
-                    return (
-                      <div key={b.id}
-                        className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3 transition-colors hover:bg-muted/30">
-                        <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-lg bg-accent text-accent-foreground">
-                          <span className="text-[10px] uppercase leading-none">
-                            {start.toLocaleDateString([], { month: "short" })}
-                          </span>
-                          <span className="font-display text-base font-semibold leading-tight">
-                            {start.getDate()}
-                          </span>
+                <div className="space-y-5">
+                  <div className="space-y-2">
+                    {activeBookings.length === 0 ? (
+                      <p className="rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground">
+                        Nothing coming up - pick a venue above to book.
+                      </p>
+                    ) : activeBookings.map((b, i) => renderBooking(b, i))}
+                  </div>
+                  {pastBookings.length > 0 && (
+                    <div>
+                      <button onClick={() => setShowPast((v) => !v)}
+                        className="flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                        aria-expanded={showPast}>
+                        <ChevronDown className={`h-4 w-4 transition-transform duration-300 ${showPast ? "rotate-180" : ""}`} />
+                        Past and cancelled ({pastBookings.length})
+                      </button>
+                      {showPast && (
+                        <div className="space-y-2 pt-2">
+                          {pastBookings.map((b, i) => renderBooking(b, i))}
                         </div>
-                        <div className="min-w-[9rem] flex-1">
-                          <p className="font-medium">{f?.name ?? "Facility"}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                            {" - "}
-                            {new Date(b.end_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                            {f ? ` - ${f.venue}` : ""}
-                          </p>
-                          {showDeadline && checkInBy && (
-                            <p className="pt-0.5 text-xs font-medium text-primary">
-                              {hasDoor ? "Enter your door code by " : "Check in by "}
-                              {fmtTime(checkInBy)} or this booking is released
-                            </p>
-                          )}
-                          {code && (
-                            <div className="mt-1.5 inline-block rounded-lg border border-primary/40 bg-accent/60 px-3 py-1.5">
-                              <span className="font-display text-xl font-semibold tracking-[0.3em]">{code.code}</span>
-                              <span className="block text-[11px] text-muted-foreground">{code.hint}</span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {released
-                            ? <Badge variant="destructive">released - no check-in</Badge>
-                            : <Badge variant={STATUS_COLOR[b.status]}>{b.status}</Badge>}
-                          {b.checked_in_at && <Badge variant="outline">checked in</Badge>}
-                          {b.cancel_reason === "early_leave" && b.status === "approved" && (
-                            <Badge variant="secondary">ended early - room empty</Badge>
-                          )}
-                          {b.no_show && !released && <Badge variant="destructive">no-show</Badge>}
-                        </div>
-                        <div className="ml-auto flex gap-1.5">
-                          {canCheckIn && <Button size="sm" onClick={() => checkIn(b)}>Check in</Button>}
-                          {canShowCode && !code && (
-                            <Button size="sm" onClick={() => showDoorCode(b)}>Door code</Button>
-                          )}
-                          {canCancel && (
-                            <Button size="sm" variant="outline" onClick={() => cancel(b)}>Cancel</Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
