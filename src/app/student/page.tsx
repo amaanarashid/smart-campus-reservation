@@ -28,7 +28,7 @@ import PopularTimes from "@/components/popular-times";
 import { logEvent } from "@/lib/evaluation";
 import {
   CalendarDays, Clock, CheckCircle2, ChevronRight, ChevronDown, ArrowLeft,
-  Sparkles, MapPin, Users2, CalendarX, Copy, KeyRound,
+  Sparkles, MapPin, Users2, CalendarX, Copy, KeyRound, Loader2,
 } from "lucide-react";
 
 const STATUS_COLOR: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -71,7 +71,7 @@ function DashboardSkeleton() {
       <div className="rounded-xl border bg-card p-6">
         <div className="skeleton h-6 w-64" />
         <div className="skeleton mt-2 h-4 w-80 max-w-full" />
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
           {[0, 1, 2].map((i) => <div key={i} className="skeleton h-48 rounded-xl" />)}
         </div>
       </div>
@@ -112,6 +112,7 @@ export default function StudentDashboard() {
   // which suggestion is being booked right now; blocks double clicks
   const [bookingKey, setBookingKey] = useState<string | null>(null);
   const [showPast, setShowPast] = useState(false);
+  const [extendingId, setExtendingId] = useState<string | null>(null);
   // A clock the UI re-renders from. Reading Date.now() during render is impure
   // (React Compiler can memoise it, leaving check-in buttons and deadlines
   // stale); this ticks every 30 s so time-dependent UI stays current.
@@ -409,6 +410,29 @@ export default function StudentDashboard() {
     setCodes((prev) => ({ ...prev, [r.id]: { code: j.code, hint: j.hint } }));
   }
 
+  // +30 min on a running, checked-in booking, if the room is free next
+  async function extend(r: Reservation) {
+    if (extendingId) return;
+    setExtendingId(r.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/bookings/extend", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ id: r.id }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j.ok) { toast.error(j.error ?? "Could not extend the booking"); return; }
+      toast.success(j.message);
+      if (profile) await loadBookings(profile.id);
+    } finally {
+      setExtendingId(null);
+    }
+  }
+
   async function cancel(r: Reservation) {
     const ru = rules[r.facility_id];
     const hoursLeft = (new Date(r.start_time).getTime() - Date.now()) / 3600000;
@@ -462,6 +486,8 @@ export default function StudentDashboard() {
     const checkInBy = grace ? new Date(start.getTime() + grace * 60000) : null;
     const showDeadline = !!checkInBy && b.status === "approved" && !b.checked_in_at &&
       now >= start.getTime() - 15 * 60000 && now < checkInBy.getTime();
+    const canExtend = running && !!b.checked_in_at;
+    const endingSoon = canExtend && end.getTime() - now <= 10 * 60000;
     const released = b.status === "cancelled" && b.cancel_reason === "no_checkin";
     const faded = b.status === "cancelled" || b.status === "rejected" || end.getTime() <= now;
 
@@ -524,6 +550,7 @@ export default function StudentDashboard() {
             <Badge variant="secondary">ended early - room empty</Badge>
           )}
           {b.no_show && !released && <Badge variant="destructive">no-show</Badge>}
+          {!!b.extended_mins && <Badge variant="outline">extended +{b.extended_mins} min</Badge>}
         </div>
         <div className="ml-auto flex gap-1.5">
           {canCheckIn && (
@@ -534,6 +561,15 @@ export default function StudentDashboard() {
           {canShowCode && !code && (
             <Button size="sm" className={`gap-1.5 ${showDeadline ? "animate-soft-pulse" : ""}`} onClick={() => showDoorCode(b)}>
               <KeyRound className="h-3.5 w-3.5" /> Door code
+            </Button>
+          )}
+          {canExtend && (
+            <Button size="sm" variant={endingSoon ? "default" : "outline"}
+              className={`gap-1.5 ${endingSoon ? "animate-soft-pulse" : ""}`}
+              disabled={!!extendingId} onClick={() => extend(b)}
+              title="Add 30 minutes if the room is free next">
+              {extendingId === b.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Clock className="h-3.5 w-3.5" />}
+              +30 min
             </Button>
           )}
           {canCancel && (
@@ -580,8 +616,10 @@ export default function StudentDashboard() {
             ))}
           </div>
 
+          {/* wide screens: booking flow on the left, my bookings as a sidebar */}
+          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_400px] 2xl:grid-cols-[minmax(0,1fr)_460px]">
           {/* browse / book */}
-          <Card className="animate-reveal" style={{ animationDelay: "210ms" }}>
+          <Card className="animate-reveal min-w-0" style={{ animationDelay: "210ms" }}>
             <CardHeader className="pb-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -651,7 +689,7 @@ export default function StudentDashboard() {
               <div key={stepKey} className="animate-step-in">
               {/* step 1: venues */}
               {!venue && (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                   {venues.map((v, i) => {
                     const inVenue = facilities.filter((f) => f.venue === v);
                     const freeCount = inVenue.filter((f) => !busyNow.has(f.id)).length;
@@ -685,7 +723,7 @@ export default function StudentDashboard() {
 
               {/* step 2: facilities in venue */}
               {venue && !facility && (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                   {venueFacilities.map((f, i) => {
                     const busy = busyNow.has(f.id);
                     const r = rules[f.id];
@@ -880,7 +918,7 @@ export default function StudentDashboard() {
           </Card>
 
           {/* my bookings */}
-          <Card className="animate-reveal" style={{ animationDelay: "280ms" }}>
+          <Card className="animate-reveal xl:sticky xl:top-20" style={{ animationDelay: "280ms" }}>
             <CardHeader>
               <CardTitle className="font-display flex items-center gap-2">
                 <CalendarDays className="h-5 w-5 text-primary" />
@@ -888,7 +926,7 @@ export default function StudentDashboard() {
               </CardTitle>
               <CardDescription>Check in when your session starts, or cancel in advance</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="xl:max-h-[calc(100vh-13rem)] xl:overflow-y-auto">
               {myBookings.length === 0 ? (
                 <div className="flex flex-col items-center gap-2 py-12 text-center">
                   <CalendarX className="h-8 w-8 text-muted-foreground/50" />
@@ -923,6 +961,7 @@ export default function StudentDashboard() {
               )}
             </CardContent>
           </Card>
+          </div>
         </>
       )}
       <Chatbot />

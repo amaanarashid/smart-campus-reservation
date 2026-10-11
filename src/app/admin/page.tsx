@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Facility, FacilityCategory, FacilityRule, Profile, Equipment, Reservation, ActivityLog, typeLabel } from "@/lib/types";
@@ -16,13 +16,39 @@ import { ensureProfile } from "@/lib/profile";
 import {
   Users, CalendarRange, Clock, Building2, ClipboardCheck, Package,
   Plus, ChevronDown, ScrollText, LayoutDashboard, BarChart3,
-  Trash2, MapPin, Users2,
+  Trash2, MapPin, Users2, ShieldCheck, GraduationCap, UserCog, Activity,
+  ArrowRight, Check, X, Loader2, Search, Cpu,
 } from "lucide-react";
 import AdminAnalytics from "@/components/admin-analytics";
+import AdminRoomPanel from "@/components/admin-room-panel";
 import FacilityIso from "@/components/facility-iso";
+import { fmtRelativeDay, fmtTime, myAt, myDateKey } from "@/lib/time";
 
 interface FmRow { id: string; facility_id: string; manager_id: string }
 interface PendingRow extends Reservation { profiles: { full_name: string } | null }
+
+const stagger = (i: number) => ({ "--i": i }) as CSSProperties;
+const initials = (name?: string | null) =>
+  (name ?? "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
+const ROLE_META = {
+  student: { label: "Student", Icon: GraduationCap },
+  facility_manager: { label: "Facility Manager", Icon: UserCog },
+  admin: { label: "Administrator", Icon: ShieldCheck },
+} as const;
+
+function AdminSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="skeleton h-11" />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => <div key={i} className="skeleton h-[88px]" />)}
+      </div>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="skeleton h-80" /><div className="skeleton h-80" />
+      </div>
+    </div>
+  );
+}
 
 // step 1: a category owns the venue and the rules
 const NEW_CATEGORY_DEFAULTS = {
@@ -55,9 +81,13 @@ export default function AdminDashboard() {
   const [activity, setActivity] = useState<ActivityLog[]>([]);
   const [logFilter, setLogFilter] = useState<string>("all");
   const [logSearch, setLogSearch] = useState("");
-  const [tab, setTab] = useState<"overview" | "analytics" | "facilities" | "users" | "approvals" | "equipment" | "records">("overview");
+  const [tab, setTab] = useState<"overview" | "analytics" | "rooms" | "facilities" | "users" | "approvals" | "equipment" | "records">("overview");
   const [allUsers, setAllUsers] = useState<Profile[]>([]);
   const [userSearch, setUserSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"all" | keyof typeof ROLE_META>("all");
+  const [todayRes, setTodayRes] = useState<Reservation[]>([]); // approved + pending, today (MYT)
+  const [acting, setActing] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(0); // ticking clock; never Date.now() during render
 
   const load = useCallback(async () => {
     const [{ data: f }, { data: r }, { data: m }, { data: fm }, { data: eq }, { data: cats }] = await Promise.all([
@@ -98,6 +128,15 @@ export default function AdminDashboard() {
     ]);
     setStats({ users: users ?? 0, bookings: bookings ?? 0, pending: pending ?? 0 });
 
+    // today's bookings across campus, for the live venue overview
+    const today = myDateKey();
+    const { data: td } = await supabase
+      .from("reservations").select("*")
+      .in("status", ["approved", "pending"])
+      .gte("start_time", myAt(today, "00:00").toISOString())
+      .lt("start_time", myAt(today, "23:59").toISOString());
+    setTodayRes((td as Reservation[]) ?? []);
+
     const { data: log } = await supabase
       .from("activity_log").select("*")
       .order("at", { ascending: false }).limit(300);
@@ -110,8 +149,11 @@ export default function AdminDashboard() {
       if (!prof || prof.role !== "admin") { router.push("/login"); return; }
       setProfile(prof);
       await load();
+      setNowMs(Date.now());
       setLoading(false);
     })();
+    const t = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(t);
   }, [router, load]);
 
   // ---------- step 1: categories (own the rules) ----------
@@ -224,10 +266,13 @@ export default function AdminDashboard() {
 
   // ---------- unassigned approvals ----------
   async function decide(r: Reservation, status: "approved" | "rejected") {
+    if (acting) return;
+    setActing(r.id);
     const { error } = await supabase.from("reservations").update({ status }).eq("id", r.id);
-    if (error) { toast.error(error.message); return; }
+    if (error) { toast.error(error.message); setActing(null); return; }
     toast.success(`Request ${status}`);
     await load();
+    setActing(null);
   }
 
   // ---------- equipment (admin fallback) ----------
@@ -272,6 +317,20 @@ export default function AdminDashboard() {
     deleted: "destructive", disposed: "destructive", unassigned: "destructive",
   };
 
+  // ---------- live overview ----------
+  const now = nowMs;
+  const inUse = new Set(todayRes.filter((r) =>
+    r.status === "approved" &&
+    new Date(r.start_time).getTime() <= now && new Date(r.end_time).getTime() > now,
+  ).map((r) => r.facility_id));
+  const facVenues = Array.from(new Set(facilities.map((f) => f.venue)));
+  const roleCount = (r: keyof typeof ROLE_META) => allUsers.filter((u) => u.role === r).length;
+  const shownUsers = allUsers.filter((u) => {
+    const q = userSearch.trim().toLowerCase();
+    const inRole = roleFilter === "all" || u.role === roleFilter;
+    return inRole && (!q || u.full_name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
+  });
+
   return (
     <AppShell
       title="Administration"
@@ -281,14 +340,15 @@ export default function AdminDashboard() {
     >
       <Toaster richColors />
       {loading ? (
-        <div className="flex items-center justify-center py-24 text-muted-foreground">Loading...</div>
+        <AdminSkeleton />
       ) : (
         <>
           {/* section nav */}
-          <nav className="sticky top-16 z-30 -mx-4 mb-2 flex gap-1 overflow-x-auto border-b bg-background/95 px-4 py-2 backdrop-blur">
+          <nav className="sticky top-16 z-30 -mx-4 mb-2 flex gap-1 overflow-x-auto border-b bg-background/95 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
             {([
               ["overview", "Overview", LayoutDashboard, 0],
               ["analytics", "Analytics", BarChart3, 0],
+              ["rooms", "Smart room", Cpu, 0],
               ["users", "Users", Users, allUsers.length],
               ["facilities", "Facilities", Building2, facilities.length],
               ["approvals", "Approvals", ClipboardCheck, unassignedPending.length],
@@ -311,32 +371,135 @@ export default function AdminDashboard() {
           </nav>
 
           {tab === "overview" && (
-          <div key="ov" className="grid gap-4 md:grid-cols-3">
-            {([
-              ["Registered users", stats.users, Users],
-              ["Total bookings", stats.bookings, CalendarRange],
-              ["Pending approval", stats.pending, Clock],
-            ] as const).map(([label, n, Icon], i) => (
-              <Card key={label}
-                className="animate-reveal overflow-hidden transition-shadow hover:shadow-md"
-                style={{ animationDelay: `${i * 70}ms` }}>
-                <CardContent className="flex items-center gap-4 py-5">
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
-                    <Icon className="h-6 w-6" />
-                  </span>
-                  <div>
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
-                    <p className="font-display animate-count text-3xl font-semibold leading-tight"
-                      style={{ animationDelay: `${i * 70 + 150}ms` }}>{n}</p>
+          <div key="ov" className="space-y-6">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {([
+                ["Registered users", stats.users, Users, "users"],
+                ["Total bookings", stats.bookings, CalendarRange, "analytics"],
+                ["Pending approval", stats.pending, Clock, "approvals"],
+                ["Rooms in use now", `${inUse.size} / ${facilities.length}`, Building2, "facilities"],
+              ] as const).map(([label, n, Icon, go], i) => (
+                <button key={label} onClick={() => setTab(go)}
+                  className="animate-reveal stagger group rounded-xl border bg-card text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary hover:shadow-md"
+                  style={stagger(i)}>
+                  <div className="flex items-center gap-4 p-5">
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                      <Icon className="h-6 w-6" />
+                    </span>
+                    <div className="flex-1">
+                      <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
+                      <p className="font-display animate-count text-3xl font-semibold leading-tight">{n}</p>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                   </div>
+                </button>
+              ))}
+            </div>
+
+            <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+              {/* campus right now */}
+              <Card className="animate-reveal" style={{ animationDelay: "200ms" }}>
+                <CardHeader>
+                  <CardTitle className="font-display flex items-center gap-2">
+                    <MapPin className="h-5 w-5 text-primary" /> Campus right now
+                  </CardTitle>
+                  <CardDescription>Every venue at a glance: rooms in use and bookings today</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {facVenues.length === 0 ? (
+                    <div className="flex flex-col items-center gap-2 py-12 text-center">
+                      <Building2 className="h-9 w-9 text-muted-foreground/50" />
+                      <p className="font-medium">No facilities yet</p>
+                      <Button size="sm" className="mt-1 gap-1.5" onClick={() => setTab("facilities")}>
+                        <Plus className="h-4 w-4" /> Add your first facility
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
+                      {facVenues.map((v, i) => {
+                        const rooms = facilities.filter((f) => f.venue === v);
+                        const busy = rooms.filter((f) => inUse.has(f.id)).length;
+                        const today = todayRes.filter((r) => rooms.some((f) => f.id === r.facility_id));
+                        const waiting = today.filter((r) => r.status === "pending").length;
+                        const pct = rooms.length ? Math.round((busy / rooms.length) * 100) : 0;
+                        return (
+                          <button key={v} onClick={() => setTab("facilities")}
+                            className="animate-reveal stagger overflow-hidden rounded-xl border bg-card text-left shadow-sm transition-all hover:-translate-y-1 hover:border-primary hover:shadow-lg"
+                            style={stagger(i)}>
+                            <div className="relative h-28 bg-muted/40">
+                              <FacilityIso type={rooms[0].type} busy={busy === rooms.length && busy > 0} />
+                              {waiting > 0 && (
+                                <span className="animate-pop-in absolute right-2 top-2 rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground shadow">
+                                  {waiting} pending today
+                                </span>
+                              )}
+                            </div>
+                            <div className="space-y-2 p-4">
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <h3 className="font-display font-semibold leading-tight">{v}</h3>
+                                  <p className="text-xs text-muted-foreground">
+                                    {Array.from(new Set(rooms.map((f) => typeLabel(f.type)))).join(", ")}
+                                  </p>
+                                </div>
+                                <Badge variant={busy ? "destructive" : "default"} className="shrink-0">
+                                  {busy} / {rooms.length} in use
+                                </Badge>
+                              </div>
+                              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                                <div className="h-full rounded-full bg-primary transition-all duration-700" style={{ width: `${pct}%` }} />
+                              </div>
+                              <p className="text-xs text-muted-foreground">{today.length} booking{today.length === 1 ? "" : "s"} today</p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
-            ))}
+
+              {/* recent activity */}
+              <Card className="animate-reveal xl:sticky xl:top-36" style={{ animationDelay: "260ms" }}>
+                <CardHeader>
+                  <CardTitle className="font-display flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-primary" /> Recent activity
+                  </CardTitle>
+                  <CardDescription>Latest actions across the system</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {activity.length === 0 ? (
+                    <p className="py-8 text-center text-sm text-muted-foreground">Nothing recorded yet.</p>
+                  ) : (
+                    <ol className="relative space-y-4 border-l pl-5">
+                      {activity.slice(0, 8).map((a, i) => (
+                        <li key={a.id} className="animate-reveal stagger relative" style={stagger(i)}>
+                          <span className={`absolute -left-[1.6rem] top-1.5 h-2.5 w-2.5 rounded-full ring-4 ring-card ${
+                            ACTION_COLOR[a.action] === "destructive" ? "bg-destructive" : "bg-primary"}`} />
+                          <p className="text-sm leading-snug">{a.summary}</p>
+                          <p className="pt-0.5 text-xs text-muted-foreground">
+                            {fmtRelativeDay(myDateKey(new Date(a.at)), new Date(now || 0))}, {fmtTime(new Date(a.at))}
+                            {a.actor_name ? ` · ${a.actor_name}` : ""}
+                          </p>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                  <Button variant="ghost" size="sm" className="mt-4 w-full gap-1.5" onClick={() => setTab("records")}>
+                    View all records <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
           </div>
           )}
 
           {tab === "analytics" && (
             <div key="an" className="animate-reveal"><AdminAnalytics /></div>
+          )}
+
+          {tab === "rooms" && (
+            <div key="rooms" className="animate-reveal"><AdminRoomPanel /></div>
           )}
 
           {tab === "users" && (
@@ -351,9 +514,27 @@ export default function AdminDashboard() {
                 or administrator here.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <Input placeholder="Search by name or email..." value={userSearch}
-                onChange={(e) => setUserSearch(e.target.value)} className="max-w-xs" />
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                {([
+                  ["all", "Everyone", allUsers.length, Users],
+                  ["student", "Students", roleCount("student"), GraduationCap],
+                  ["facility_manager", "Managers", roleCount("facility_manager"), UserCog],
+                  ["admin", "Admins", roleCount("admin"), ShieldCheck],
+                ] as const).map(([key, label, n, Icon]) => (
+                  <button key={key} onClick={() => setRoleFilter(key)}
+                    className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                      roleFilter === key ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
+                    <Icon className="h-3.5 w-3.5" /> {label}
+                    <span className={`rounded-full px-1.5 ${roleFilter === key ? "bg-primary-foreground/20" : "bg-muted"}`}>{n}</span>
+                  </button>
+                ))}
+                <div className="relative ml-auto w-full sm:w-64">
+                  <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input placeholder="Search by name or email..." value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)} className="pl-8" />
+                </div>
+              </div>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -361,31 +542,41 @@ export default function AdminDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {allUsers
-                    .filter((u) => {
-                      const q = userSearch.trim().toLowerCase();
-                      return !q || u.full_name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
-                    })
-                    .map((u) => (
+                  {shownUsers.map((u) => (
                       <TableRow key={u.id}>
                         <TableCell className="font-medium">
-                          {u.full_name}{u.id === profile?.id && <span className="text-xs text-muted-foreground"> (you)</span>}
+                          <span className="flex items-center gap-2.5">
+                            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
+                              u.role === "admin" ? "bg-primary text-primary-foreground" : "bg-accent text-accent-foreground"}`}>
+                              {initials(u.full_name)}
+                            </span>
+                            <span>
+                              {u.full_name}{u.id === profile?.id && <span className="text-xs text-muted-foreground"> (you)</span>}
+                            </span>
+                          </span>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">{u.email}</TableCell>
                         <TableCell>
                           <Select value={u.role} onValueChange={(v) => changeRole(u, v)}>
                             <SelectTrigger className="h-8 w-44"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="student">Student</SelectItem>
-                              <SelectItem value="facility_manager">Facility Manager</SelectItem>
-                              <SelectItem value="admin">Administrator</SelectItem>
+                              {(Object.keys(ROLE_META) as (keyof typeof ROLE_META)[]).map((k) => {
+                                const { label, Icon } = ROLE_META[k];
+                                return (
+                                  <SelectItem key={k} value={k}>
+                                    <span className="flex items-center gap-2"><Icon className="h-3.5 w-3.5" />{label}</span>
+                                  </SelectItem>
+                                );
+                              })}
                             </SelectContent>
                           </Select>
                         </TableCell>
                       </TableRow>
                     ))}
-                  {allUsers.length === 0 && (
-                    <TableRow><TableCell colSpan={3} className="text-muted-foreground">No users yet</TableCell></TableRow>
+                  {shownUsers.length === 0 && (
+                    <TableRow><TableCell colSpan={3} className="py-8 text-center text-muted-foreground">
+                      {allUsers.length === 0 ? "No users yet" : "Nobody matches this filter"}
+                    </TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -669,19 +860,35 @@ export default function AdminDashboard() {
                       <p className="text-xs text-muted-foreground">Add one using step 2 above.</p>
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      {courts.map((f) => {
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                      {courts.map((f, fi) => {
                         const r = rules[f.id];
                         const assigned = fmRows.filter((x) => x.facility_id === f.id);
                         const unassignedManagers = managers.filter(
                           (m) => !assigned.some((a) => a.manager_id === m.id)
                         );
+                        const busy = inUse.has(f.id);
+                        const off = f.status !== "active";
                         return (
-                          <div key={f.id}
-                            className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3 transition-colors hover:bg-muted/30">
+                          <div key={f.id} style={stagger(fi)}
+                            className={`animate-reveal stagger flex flex-col overflow-hidden rounded-xl border bg-card shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${off ? "opacity-75" : ""}`}>
+                            <div className="relative h-28 bg-muted/40">
+                              <div className={off ? "h-full grayscale" : "h-full"}>
+                                <FacilityIso type={f.type} busy={busy} />
+                              </div>
+                              <span className="absolute left-2 top-2 rounded-full bg-card/90 px-2 py-0.5 text-[11px] font-medium shadow">
+                                {off ? f.status : busy ? "In use" : "Free now"}
+                              </span>
+                              <Button size="sm" variant="ghost"
+                                className="absolute right-1.5 top-1.5 h-7 w-7 bg-card/80 p-0 text-destructive hover:bg-destructive/10"
+                                onClick={() => deleteCourt(f)} aria-label={`Delete ${f.name}`}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                            <div className="flex flex-1 flex-col gap-3 p-3">
                             {/* name + capacity */}
-                            <div className="min-w-[8rem] flex-1">
-                              <p className="font-medium">{f.name}</p>
+                            <div>
+                              <p className="font-display font-semibold">{f.name}</p>
                               <div className="flex items-center gap-1.5 pt-0.5">
                                 <Users2 className="h-3.5 w-3.5 text-muted-foreground" />
                                 <Input type="number" defaultValue={f.capacity} className="h-7 w-16 text-xs"
@@ -697,7 +904,7 @@ export default function AdminDashboard() {
                             </div>
 
                             {/* rules badge */}
-                            <div className="min-w-[7rem]">
+                            <div>
                               {r?.has_override ? (
                                 <div className="flex items-center gap-1.5">
                                   <Badge variant="secondary">custom rules</Badge>
@@ -719,7 +926,8 @@ export default function AdminDashboard() {
                             </div>
 
                             {/* managers */}
-                            <div className="min-w-[10rem] flex-1">
+                            <div className="flex-1">
+                              <p className="pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Managers</p>
                               <div className="flex flex-wrap items-center gap-1">
                                 {assigned.map((a) => {
                                   const m = managers.find((x) => x.id === a.manager_id);
@@ -750,15 +958,10 @@ export default function AdminDashboard() {
                             </div>
 
                             {/* actions */}
-                            <div className="ml-auto flex items-center gap-1.5">
-                              <Button size="sm" variant={f.status === "active" ? "outline" : "destructive"}
-                                onClick={() => toggleStatus(f)}>
-                                {f.status}
-                              </Button>
-                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10"
-                                onClick={() => deleteCourt(f)} aria-label={`Delete ${f.name}`}>
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                            <Button size="sm" className="w-full" variant={off ? "default" : "outline"}
+                              onClick={() => toggleStatus(f)}>
+                              {off ? "Reactivate" : "Take offline"}
+                            </Button>
                             </div>
                           </div>
                         );
@@ -800,33 +1003,61 @@ export default function AdminDashboard() {
               <CardDescription>{unassignedPending.length} request(s) waiting on you</CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Facility</TableHead><TableHead>Requested by</TableHead>
-                    <TableHead>When</TableHead><TableHead>Pax</TableHead><TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {unassignedPending.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell>{fname(r.facility_id)}</TableCell>
-                      <TableCell>{r.profiles?.full_name ?? "-"}</TableCell>
-                      <TableCell>
-                        {new Date(r.start_time).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
-                      </TableCell>
-                      <TableCell>{r.participants}</TableCell>
-                      <TableCell className="space-x-2 whitespace-nowrap">
-                        <Button size="sm" onClick={() => decide(r, "approved")}>Approve</Button>
-                        <Button size="sm" variant="outline" onClick={() => decide(r, "rejected")}>Reject</Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {unassignedPending.length === 0 && (
-                    <TableRow><TableCell colSpan={5} className="text-muted-foreground">Nothing waiting</TableCell></TableRow>
-                  )}
-                </TableBody>
-              </Table>
+              {unassignedPending.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 py-12 text-center">
+                  <ClipboardCheck className="h-9 w-9 text-primary/60" />
+                  <p className="font-medium">All caught up</p>
+                  <p className="text-sm text-muted-foreground">
+                    Requests for rooms without a manager land here.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-3 2xl:grid-cols-2">
+                  {unassignedPending.map((r, i) => {
+                    const f = facilities.find((x) => x.id === r.facility_id);
+                    const start = new Date(r.start_time);
+                    const over = f ? r.participants > f.capacity : false;
+                    return (
+                      <div key={r.id} style={stagger(i)}
+                        className="animate-reveal stagger flex gap-3 rounded-xl border bg-card p-3 transition-all hover:shadow-sm">
+                        <div className="hidden h-20 w-24 shrink-0 overflow-hidden rounded-lg bg-muted/40 sm:block">
+                          {f && <FacilityIso type={f.type} busy={false} />}
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-[11px] font-semibold text-accent-foreground">
+                              {initials(r.profiles?.full_name)}
+                            </span>
+                            <span className="font-medium">{r.profiles?.full_name ?? "Student"}</span>
+                            <span className="text-xs text-muted-foreground">wants {fname(r.facility_id)}</span>
+                          </div>
+                          <p className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1 font-medium text-foreground">
+                              <CalendarRange className="h-3.5 w-3.5 text-primary" />
+                              <span className="capitalize">{fmtRelativeDay(myDateKey(start), new Date(now || 0))}</span>,
+                              {" "}{fmtTime(start)} - {fmtTime(new Date(r.end_time))}
+                            </span>
+                            <span className={`flex items-center gap-1 ${over ? "font-medium text-destructive" : ""}`}>
+                              <Users2 className="h-3.5 w-3.5" /> {r.participants}{f ? ` / ${f.capacity}` : ""}
+                            </span>
+                          </p>
+                          {r.purpose && <p className="line-clamp-2 text-sm">&ldquo;{r.purpose}&rdquo;</p>}
+                        </div>
+                        <div className="flex shrink-0 flex-col gap-1.5">
+                          <Button size="sm" className="gap-1" disabled={!!acting} onClick={() => decide(r, "approved")}>
+                            {acting === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                            Approve
+                          </Button>
+                          <Button size="sm" variant="outline" className="gap-1" disabled={!!acting}
+                            onClick={() => decide(r, "rejected")}>
+                            <X className="h-3.5 w-3.5" /> Reject
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
           )}
@@ -908,7 +1139,7 @@ export default function AdminDashboard() {
                   onChange={(e) => setLogSearch(e.target.value)}
                   className="ml-auto h-8 w-48" />
               </div>
-              <div className="max-h-[420px] overflow-y-auto rounded-lg border">
+              <div className="max-h-[420px] overflow-y-auto rounded-lg border xl:max-h-[calc(100vh-22rem)]">
                 <Table>
                   <TableHeader className="sticky top-0 bg-card">
                     <TableRow>

@@ -45,7 +45,7 @@ export default function Home() {
     <div className="flex min-h-screen flex-col bg-background">
       <div className="h-1 bg-gradient-to-r from-primary via-primary/70 to-primary" />
       <header className="sticky top-0 z-40 border-b bg-card/95 shadow-sm backdrop-blur">
-        <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4">
+        <div className="mx-auto flex h-16 w-full max-w-[1680px] items-center justify-between px-4 sm:px-6 lg:px-10">
           <BrandMark />
           <Button asChild>
             <Link href="/login">Sign in</Link>
@@ -56,7 +56,7 @@ export default function Home() {
       {/* hero */}
       <section className="relative overflow-hidden bg-gradient-to-br from-primary via-primary to-primary/80 text-primary-foreground">
         <div className="pattern-dots absolute inset-0" aria-hidden />
-        <div className="relative mx-auto w-full max-w-6xl px-4 py-24 text-center">
+        <div className="relative mx-auto w-full max-w-[1680px] px-4 sm:px-6 lg:px-10 py-24 text-center">
           <span className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-1.5 text-xs font-medium tracking-wide">
             <Sparkles className="h-3.5 w-3.5" />
             AI-assisted campus reservations
@@ -81,7 +81,7 @@ export default function Home() {
 
       {/* stats strip */}
       <section className="border-b bg-card">
-        <div className="mx-auto grid w-full max-w-6xl grid-cols-2 divide-x divide-border px-4 py-8 text-center sm:grid-cols-4">
+        <div className="mx-auto grid w-full max-w-[1680px] grid-cols-2 divide-x divide-border px-4 sm:px-6 lg:px-10 py-8 text-center sm:grid-cols-4">
           {STATS.map(([n, label]) => (
             <div key={label} className="px-2">
               <p className="font-display text-3xl font-semibold text-primary">{n}</p>
@@ -91,11 +91,11 @@ export default function Home() {
         </div>
       </section>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-20">
+      <main className="mx-auto w-full max-w-[1680px] flex-1 px-4 sm:px-6 lg:px-10 py-20">
         <h2 className="font-display text-center text-3xl font-semibold">
           Built for students, managers and administrators
         </h2>
-        <div className="grid gap-5 pt-10 md:grid-cols-2">
+        <div className="grid gap-5 pt-10 md:grid-cols-2 xl:grid-cols-4">
           {FEATURES.map((f) => (
             <div key={f.title}
               className="group rounded-2xl border bg-card p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
@@ -126,7 +126,7 @@ export default function Home() {
       {/* closing CTA */}
       <section className="relative overflow-hidden bg-gradient-to-br from-primary via-primary to-primary/80 text-primary-foreground">
         <div className="pattern-dots absolute inset-0" aria-hidden />
-        <div className="relative mx-auto flex w-full max-w-6xl flex-col items-center gap-5 px-4 py-14 text-center">
+        <div className="relative mx-auto flex w-full max-w-[1680px] flex-col items-center gap-5 px-4 sm:px-6 lg:px-10 py-14 text-center">
           <h2 className="font-display text-3xl font-semibold">Ready to skip the queue?</h2>
           <Button size="lg" variant="secondary" className="shadow-lg" asChild>
             <Link href="/login">Book your first facility</Link>
@@ -135,7 +135,7 @@ export default function Home() {
       </section>
 
       <footer className="border-t bg-card">
-        <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-2 px-4 py-6 text-xs text-muted-foreground sm:flex-row">
+        <div className="mx-auto flex w-full max-w-[1680px] flex-col items-center justify-between gap-2 px-4 sm:px-6 lg:px-10 py-6 text-xs text-muted-foreground sm:flex-row">
           <span>Campus Reserve - Smart Facility Reservation System</span>
           <span>Book campus facilities in seconds</span>
         </div>

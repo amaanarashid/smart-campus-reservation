@@ -90,6 +90,7 @@ export function checkCode(
 export const DEVICE_EVENTS = [
   "presence_on", "presence_off", "lights_on", "lights_off", "ac_on", "ac_off",
   "door_open", "door_closed", "reminder", "released_early", "heartbeat",
+  "booking_ended", "overstay",
 ] as const;
 export type DeviceEvent = (typeof DEVICE_EVENTS)[number];
 export const isDeviceEvent = (k: unknown): k is DeviceEvent =>
@@ -119,6 +120,47 @@ export function earlyReleaseDecision(b: DoorBooking | undefined, now: Date):
   return { ok: true, newEnd, freedMins: Math.floor((end - newEnd.getTime()) / 60_000) };
 }
 
+// ------------------------------------------------------------ extension --
+
+/** Reasons extend_booking() can refuse, as two OLED lines and an app message. */
+export const EXTEND_REASONS: Record<string, { line1: string; line2: string; app: string }> = {
+  next_slot_taken: { line1: "Can't extend", line2: "Room booked next", app: "The room is booked straight after you, so it can't be extended." },
+  closing_time:    { line1: "Can't extend", line2: "Room closes soon", app: "The room closes before another 15 minutes." },
+  max_length:      { line1: "Can't extend", line2: "Max length reached", app: "This booking is already at the room's maximum length." },
+  not_checked_in:  { line1: "Check in first", line2: "then extend", app: "Check in first - only a booking in use can be extended." },
+  not_running:     { line1: "No booking now", line2: "", app: "Only a booking that is running now can be extended." },
+  not_approved:    { line1: "Can't extend", line2: "Not approved", app: "Only approved bookings can be extended." },
+  not_yours:       { line1: "Can't extend", line2: "", app: "That is not your booking." },
+  not_found:       { line1: "Can't extend", line2: "", app: "Booking not found." },
+};
+export const extendReason = (r: string | undefined) =>
+  EXTEND_REASONS[r ?? ""] ?? { line1: "Can't extend", line2: "Try the app", app: "The booking could not be extended." };
+
+// ------------------------------------------------------------- overstay --
+
+/** How long after the end a booking can still be blamed for people in the room. */
+export const OVERSTAY_LOOKBACK_MINS = 60;
+
+/**
+ * Which booking an "overstay" report belongs to: the checked-in booking that
+ * ended most recently, within the lookback, as long as nothing is running
+ * now (if the next group has checked in, the people inside are them).
+ */
+export function overstayBooking(bookings: DoorBooking[], now: Date): DoorBooking | null {
+  const t = now.getTime();
+  const approved = bookings.filter((b) => b.status === "approved");
+  if (approved.some((b) => new Date(b.start_time).getTime() <= t && t < new Date(b.end_time).getTime() && b.checked_in_at))
+    return null;
+  const ended = approved
+    .filter((b) => b.checked_in_at)
+    .filter((b) => {
+      const end = new Date(b.end_time).getTime();
+      return end <= t && t - end <= OVERSTAY_LOOKBACK_MINS * 60_000;
+    })
+    .sort((a, b) => b.end_time.localeCompare(a.end_time));
+  return ended[0] ?? null;
+}
+
 /** Two short lines for the 128x64 OLED at the door. */
 export function display(line1: string, line2 = ""): { line1: string; line2: string } {
   return { line1: line1.slice(0, 21), line2: line2.slice(0, 21) };
@@ -127,7 +169,7 @@ export function display(line1: string, line2 = ""): { line1: string; line2: stri
 export interface RoomStatus {
   state: "free" | "booked" | "in_use";
   current: null | {
-    ends_at: string; ends_local: string; minutes_left: number; checked_in: boolean;
+    ends_at: string; ends_local: string; minutes_left: number; seconds_left: number; checked_in: boolean;
   };
   next: null | { starts_at: string; starts_local: string; minutes_until: number };
   display: { line1: string; line2: string };
@@ -150,6 +192,8 @@ export function roomStatus(bookings: DoorBooking[], now: Date): RoomStatus {
     ends_at: cur.end_time,
     ends_local: fmtTime(new Date(cur.end_time)),
     minutes_left: Math.max(0, Math.ceil((new Date(cur.end_time).getTime() - t) / 60_000)),
+    // the device counts down from this for the last-10-minutes display
+    seconds_left: Math.max(0, Math.floor((new Date(cur.end_time).getTime() - t) / 1000)),
     checked_in: !!cur.checked_in_at,
   } : null;
   const next = nxt ? {
@@ -164,6 +208,8 @@ export function roomStatus(bookings: DoorBooking[], now: Date): RoomStatus {
       ? display("FREE", next ? `Next: ${next.starts_local}` : "No more bookings")
       : state === "booked"
       ? display("BOOKED - enter code", `until ${current!.ends_local}`)
+      : current!.minutes_left <= 10
+      ? display("IN USE", `${current!.minutes_left} min left A=extend`)
       : display("IN USE", `until ${current!.ends_local}`);
   return { state, current, next, display: d };
 }

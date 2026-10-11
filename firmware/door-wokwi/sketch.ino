@@ -12,7 +12,14 @@
  *
  * SCHEDULE  Every 30 s the device asks the server about the booking:
  *             - air-con on 5 min BEFORE a booking starts (pre-cooling)
- *             - reminders at 10 and 5 min before the end
+ *             - reminders at 10 and 5 min before the end, and a live
+ *               countdown on the screen for the last 10 minutes
+ *             - EXTEND: press A, the booking's code, # -> +30 min if the room
+ *               is free next (the server decides)
+ *             - END: "Time's up" with beeps and a light blink; the air-con
+ *               switches off with the booking
+ *             - OVERSTAY: still occupied well after the end -> the server is
+ *               told and the facility manager is notified (no penalty)
  *             - if a checked-in group leaves early and the room stays empty,
  *               the rest of the booking is released for others
  *
@@ -27,7 +34,7 @@
  *               ROOM_WARNING: lights blink, then EMPTY unless presence returns
  *
  * Controls in the simulation:
- *   keypad        0-9 code, * clear, # submit
+ *   keypad        0-9 code, * clear, # submit, A extend the booking in use
  *   DOOR switch   door closed / open
  *   PEOPLE switch simulated occupants in the room (they fidget, so motion is
  *                 intermittent - the filter has to cope with that)
@@ -94,6 +101,10 @@ const bool  LOG_SIGNAL = true;
 const unsigned long VACANCY_MS       = 60000UL;   // demo 1 min   | real 10 min
 const unsigned long WARNING_MS       = 10000UL;   // lights blink before switching off
 const unsigned long EARLY_RELEASE_MS = 120000UL;  // demo 2 min   | real 15 min
+// overstay must outlast "people just left" (vacancy + warning) so leaving
+// on time is never reported as overstaying
+const unsigned long OVERSTAY_MS      = VACANCY_MS + WARNING_MS + 60000UL;  // demo ~2 min | real 15 min
+const long COUNTDOWN_S = 600;                     // live countdown for the last 10 min
 const long PRECOOL_MIN = 5;                       // AC on this long before a booking
 const unsigned long STATUS_EVERY_MS = 30000;
 const unsigned long MESSAGE_MS      = 3500;
@@ -122,10 +133,15 @@ bool lightsOn = false, acOn = false;
 
 // booking, as last reported by the server
 String bookingState = "free";            // free | booked | in_use
-long minutesLeftAtPoll = -1, nextMinutesAtPoll = -1;
+long minutesLeftAtPoll = -1, nextMinutesAtPoll = -1, secsLeftAtPoll = -1;
 unsigned long polledAt = 0;
 String bookingKey = "";                  // current booking's end time; resets reminders
 bool remind10 = false, remind5 = false, releaseSent = false;
+// end of booking
+bool extendMode = false;                 // A pressed: the next code extends instead of unlocking
+String endedKey = "";                    // booking whose end has been handled
+unsigned long endedAt = 0;               // when the last booking ended (0 = not watching)
+bool overstaySent = false;
 
 // =============================================================== helpers ==
 float frand() { return (float)(esp_random() % 10000) / 10000.0f; }
@@ -138,6 +154,11 @@ long minutesToNext() {
   if (nextMinutesAtPoll < 0) return -1;
   return nextMinutesAtPoll - (long)((millis() - polledAt) / 60000UL);
 }
+// counted down locally between polls, so the screen ticks every second
+long secsLeft() {
+  if (secsLeftAtPoll < 0) return -1;
+  return secsLeftAtPoll - (long)((millis() - polledAt) / 1000UL);
+}
 
 // ================================================================ display ==
 void draw() {
@@ -146,10 +167,18 @@ void draw() {
   oled.setTextSize(1);
 
   bool showMsg = millis() < msgUntil;
+  long s = secsLeft();
+  bool countdown = !showMsg && bookingState == "in_use" && s >= 0 && s <= COUNTDOWN_S;
   oled.setCursor(0, 0);
-  oled.println(showMsg ? msgLine1 : statusLine1);
+  if (countdown) {
+    char buf[22];
+    snprintf(buf, sizeof(buf), "ENDS IN %ld:%02ld", s / 60, s % 60);
+    oled.println(buf);
+  } else {
+    oled.println(showMsg ? msgLine1 : statusLine1);
+  }
   oled.setCursor(0, 11);
-  oled.println(showMsg ? msgLine2 : statusLine2);
+  oled.println(countdown ? String("A = extend +30 min") : (showMsg ? msgLine2 : statusLine2));
   oled.drawLine(0, 22, 127, 22, SSD1306_WHITE);
 
   if (unlocked) {
@@ -158,7 +187,7 @@ void draw() {
     oled.println("OPEN");
   } else {
     oled.setCursor(0, 31);
-    oled.print("Code:");
+    oled.print(extendMode ? "Ext: " : "Code:");
     oled.setTextSize(2);
     oled.setCursor(34, 28);
     for (int i = 0; i < 6; i++) oled.print(i < (int)code.length() ? '*' : '_');
@@ -246,6 +275,7 @@ void refreshStatus() {
     statusLine2 = doc["display"]["line2"].as<String>();
     bookingState = doc["state"].as<String>();
     minutesLeftAtPoll = doc["current"].isNull() ? -1 : doc["current"]["minutes_left"].as<long>();
+    secsLeftAtPoll = doc["current"].isNull() ? -1 : (doc["current"]["seconds_left"] | (minutesLeftAtPoll * 60));
     nextMinutesAtPoll = doc["next"].isNull() ? -1 : doc["next"]["minutes_until"].as<long>();
     polledAt = millis();
     String key = doc["current"].isNull() ? String("") : doc["current"]["ends_at"].as<String>();
@@ -296,6 +326,29 @@ void submitCode() {
     digitalWrite(PIN_LED_NO, HIGH); beep(2, 300); digitalWrite(PIN_LED_NO, LOW);
   } else {
     showMessage("Can't reach server", "Try again");
+    digitalWrite(PIN_LED_NO, HIGH); beep(3, 300); digitalWrite(PIN_LED_NO, LOW);
+  }
+}
+
+// A + code + #: ask the server for 30 more minutes on the booking in use.
+// The code proves it is the booking's own group asking.
+void submitExtend() {
+  extendMode = false;
+  if (code.length() != 6) { code = ""; showMessage("Enter 6 digits", "Press A to retry"); beep(1, 400); return; }
+  showMessage("Extending...", "");
+  JsonDocument doc;
+  String body = String("{\"device_id\":\"") + DEVICE_ID + "\",\"code\":\"" + code + "\"}";
+  int status = request("POST", "/api/room/extend", body, doc);
+  code = "";
+  if (status == 200 && doc["ok"].as<bool>()) {
+    showMessage(doc["display"]["line1"].as<String>(), doc["display"]["line2"].as<String>());
+    beep(2, 1400);
+    refreshStatus();            // new end time -> reminders and countdown reset
+  } else if (status > 0 && !doc["display"].isNull()) {
+    showMessage(doc["display"]["line1"].as<String>(), doc["display"]["line2"].as<String>());
+    digitalWrite(PIN_LED_NO, HIGH); beep(2, 300); digitalWrite(PIN_LED_NO, LOW);
+  } else {
+    showMessage("Can't reach server", "Use the app");
     digitalWrite(PIN_LED_NO, HIGH); beep(3, 300); digitalWrite(PIN_LED_NO, LOW);
   }
 }
@@ -396,6 +449,26 @@ void driveOutputs() {
   }
 }
 
+// The booking's time is up. Re-check first: it may have been extended from
+// the app in the last few seconds.
+void endOfBooking() {
+  endedKey = bookingKey;                 // handle each booking's end once
+  refreshStatus();
+  if (bookingState == "in_use" && secsLeft() > 0) return;   // extended - carry on
+
+  bool occupied = room != ROOM_EMPTY;
+  endedAt = occupied ? millis() : 0;     // only watch for overstay if someone is there
+  overstaySent = false;
+  showMessage("Time's up!", occupied ? "Please leave the room" : "Thank you");
+  beep(4, 1200);
+  if (occupied) {
+    for (int i = 0; i < 3; i++) { digitalWrite(PIN_LIGHTS, LOW); delay(300); digitalWrite(PIN_LIGHTS, HIGH); delay(300); }
+  }
+  report("booking_ended", String("{\"occupied\":") + (occupied ? "true" : "false") + "}");
+  // the air-con follows the booking, so driveOutputs() switches it off now
+  // unless the next booking is about to start (pre-cooling)
+}
+
 void scheduleTasks() {
   long left = minutesLeft();
 
@@ -403,15 +476,33 @@ void scheduleTasks() {
   if (bookingState == "in_use" && left >= 0) {
     if (!remind10 && left <= 10 && left > 5) {
       remind10 = true;
-      showMessage("10 minutes left", "Please wrap up soon");
+      showMessage("10 minutes left", "A = extend +30 min");
       beep(2, 900);
       report("reminder", "{\"minutes_left\":10}");
     } else if (!remind5 && left <= 5 && left > 0) {
       remind5 = remind10 = true;
-      showMessage("5 minutes left", "Booking ends soon");
+      showMessage("5 minutes left", "A = extend +30 min");
       beep(3, 900);
       for (int i = 0; i < 3; i++) { digitalWrite(PIN_LIGHTS, LOW); delay(250); digitalWrite(PIN_LIGHTS, HIGH); delay(250); }
       report("reminder", "{\"minutes_left\":5}");
+    }
+  }
+
+  // end of booking: the countdown reached zero
+  if (bookingState == "in_use" && secsLeftAtPoll >= 0 && secsLeft() <= 0 && endedKey != bookingKey) {
+    endOfBooking();
+  }
+
+  // overstay: the booking ended but the room is still occupied
+  if (endedAt) {
+    if (room == ROOM_EMPTY || bookingState == "in_use") {
+      endedAt = 0;              // they left, or the next group has checked in
+    } else if (!overstaySent && millis() - endedAt > OVERSTAY_MS) {
+      overstaySent = true;
+      unsigned long over = (millis() - endedAt) / 1000;
+      report("overstay", String("{\"seconds_over\":") + over + "}");
+      showMessage("Booking has ended", "Please leave now");
+      digitalWrite(PIN_LED_NO, HIGH); beep(3, 600); digitalWrite(PIN_LED_NO, LOW);
     }
   }
 
@@ -464,8 +555,16 @@ void loop() {
   char k = keypad.getKey();
   if (k && !unlocked) {
     if (k >= '0' && k <= '9' && code.length() < 6) code += k;
-    else if (k == '*') code = "";
-    else if (k == '#') submitCode();
+    else if (k == '*') {
+      if (code.length() == 0 && extendMode) { extendMode = false; showMessage("Cancelled", ""); }
+      code = "";
+    }
+    else if (k == 'A') {
+      code = "";
+      if (bookingState == "in_use") { extendMode = true; showMessage("Extend +30 min", "Enter code, then #"); }
+      else showMessage("Nothing to extend", "No booking in use");
+    }
+    else if (k == '#') { if (extendMode) submitExtend(); else submitCode(); }
     if (k != '#') buzz(900, 25);   // key click
     draw();
   }

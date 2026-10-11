@@ -80,4 +80,90 @@ ax.legend(fontsize=8.5, frameon=False, ncol=4, loc="upper center", bbox_to_ancho
 ax.grid(axis="y", alpha=0.25)
 fig.tight_layout()
 fig.savefig(OUT / "by-student-type.png", dpi=200)
-print("wrote", OUT / "learning-curves.png", "and", OUT / "by-student-type.png")
+
+# ---------------------------------------------------------------- sensitivity
+# (a) demand, (b) student behaviour, (c) preference change, (d) LinUCB variants
+fig, axes = plt.subplots(2, 2, figsize=(13, 8.6))
+
+ax = axes[0][0]
+busy = [100 * d["busy"] for d in summary["demand"]]
+for p in POLICIES:
+    ms = [100 * d[p]["mean"] for d in summary["demand"]]
+    lo = [100 * d[p]["lo"] for d in summary["demand"]]
+    hi = [100 * d[p]["hi"] for d in summary["demand"]]
+    ax.plot(busy, ms, STYLE[p], marker="o", color=COLOR[p], lw=2.2 if p == "linucb" else 1.5, label=LABEL[p])
+    if p in ("fixed", "linucb"):
+        ax.fill_between(busy, lo, hi, color=COLOR[p], alpha=0.12)
+ax.set_xlabel("Court-hours already booked (%)")
+ax.set_ylabel("P(student books a suggestion) (%)")
+ax.set_title("(a) Demand: the gain shrinks when little is free", fontsize=11, loc="left")
+ax.grid(alpha=0.25)
+
+ax = axes[0][1]
+beh = summary["behaviour"]
+width = 0.2
+for i, p in enumerate(POLICIES):
+    ms = [100 * b[p]["mean"] for b in beh]
+    errs = [[100 * (b[p]["mean"] - b[p]["lo"]) for b in beh], [100 * (b[p]["hi"] - b[p]["mean"]) for b in beh]]
+    ax.bar([j + (i - 1.5) * width for j in range(len(beh))], ms, width, yerr=errs, capsize=3,
+           color=COLOR[p], edgecolor="white", linewidth=0.6)
+ax.set_xticks(range(len(beh)))
+ax.set_xticklabels(["Reads all\nfour cards", "Skims\n(may stop early)", "Changes preference\nat attempt 40"])
+ax.set_ylim(0, 100)
+ax.set_ylabel("P(student books a suggestion) (%)")
+ax.set_title("(b) Student behaviour, last 20 attempts", fontsize=11, loc="left")
+ax.grid(axis="y", alpha=0.25)
+
+ax = axes[1][0]
+drift = defaultdict(lambda: ([], []))
+for r in csv.DictReader(open(OUT / "drift-curve.csv")):
+    drift[r["policy"]][0].append(int(r["attempt"]))
+    drift[r["policy"]][1].append(100 * float(r["value"]))
+for p in POLICIES:
+    xs, ys = drift[p]
+    ax.plot(xs, smooth(ys), STYLE[p], color=COLOR[p], lw=2.2 if p == "linucb" else 1.5)
+ax.axvline(40, color="#555", lw=1, ls=":")
+ax.text(41, ax.get_ylim()[0] + 1, "preference changes", fontsize=8.5, color="#555")
+ax.set_xlabel("Booking attempts by the same student")
+ax.set_ylabel("P(student books a suggestion) (%)")
+ax.set_title("(c) When a student's taste changes, LinUCB re-learns slowly", fontsize=11, loc="left")
+ax.grid(alpha=0.25)
+
+ax = axes[1][1]
+variants = [("fixed", "Fixed weights"), ("linucb", "LinUCB (deployed,\npool of 6)"),
+            ("linucb_reject", "LinUCB + learns from\n'booked nothing'"), ("linucb_wide", "LinUCB with\npool of 12")]
+ov = summary["overall"]
+vals = [ov[k]["value_last20"] for k, _ in variants]
+ax.bar(range(len(variants)), [100 * v["mean"] for v in vals],
+       yerr=[[100 * (v["mean"] - v["lo"]) for v in vals], [100 * (v["hi"] - v["mean"]) for v in vals]],
+       capsize=4, color=[COLOR["fixed"], COLOR["linucb"], "#c9706f", "#5c1416"], edgecolor="white")
+for i, v in enumerate(vals):
+    ax.text(i, 100 * v["hi"] + 1, f"{100 * v['mean']:.1f}%", ha="center", fontsize=9)
+ax.set_xticks(range(len(variants)))
+ax.set_xticklabels([l for _, l in variants], fontsize=8.5)
+ax.set_ylim(0, 100)
+ax.set_ylabel("P(student books a suggestion) (%)")
+ax.set_title("(d) Variants of LinUCB on the same requests", fontsize=11, loc="left")
+ax.grid(axis="y", alpha=0.25)
+
+handles, labels = axes[0][0].get_legend_handles_labels()
+fig.legend(handles, labels, loc="lower center", ncol=4, fontsize=9, frameon=False)
+fig.tight_layout(rect=(0, 0.04, 1, 1))
+fig.savefig(OUT / "sensitivity.png", dpi=200)
+
+# ---------------------------------------------------------------- seeds
+seeds = summary["seeds"]["runs"]
+fig, ax = plt.subplots(figsize=(8, 3.6))
+for i, p in enumerate(POLICIES):
+    ys = [100 * s[p] for s in seeds]
+    ax.scatter([i] * len(ys), ys, color=COLOR[p], s=28, alpha=0.8, zorder=3)
+    ax.hlines(sum(ys) / len(ys), i - 0.25, i + 0.25, color=COLOR[p], lw=2)
+ax.set_xticks(range(len(POLICIES)))
+ax.set_xticklabels([LABEL[p] for p in POLICIES], fontsize=9)
+ax.set_ylabel("P(books), last 20 attempts (%)")
+ax.set_title(f"Repeated with {len(seeds)} random seeds - each dot is one full run", fontsize=11, loc="left")
+ax.grid(axis="y", alpha=0.25)
+fig.tight_layout()
+fig.savefig(OUT / "seeds.png", dpi=200)
+
+print("wrote learning-curves.png, by-student-type.png, sensitivity.png and seeds.png in", OUT)

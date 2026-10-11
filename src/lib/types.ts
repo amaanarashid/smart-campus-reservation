@@ -159,6 +159,8 @@ export interface Reservation {
   /** Why it was cancelled: user | no_checkin | early_leave | admin. */
   cancel_reason?: string | null;
   released_at?: string | null;
+  /** Minutes added by extensions (upgrade-room-end.sql). */
+  extended_mins?: number;
 }
 
 export const FACILITY_TYPE_LABELS: Record<string, string> = {

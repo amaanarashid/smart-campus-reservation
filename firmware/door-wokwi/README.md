@@ -13,7 +13,8 @@ Do these in order.
 
 ### 1. Database (Supabase SQL editor)
 
-Run `supabase/upgrade-auto-release.sql`, then `supabase/upgrade-room-access.sql`.
+Run `supabase/upgrade-auto-release.sql`, then `supabase/upgrade-room-access.sql`,
+then `supabase/upgrade-room-end.sql` (reminders, extensions, overstay).
 
 Then register the door on ONE room. Use the room's exact name from the admin
 console, and a long made-up key:
@@ -156,6 +157,38 @@ bar. The two tick marks are the thresholds: right = "someone's here", left =
 7. **Forced entry.** Flip the DOOR switch while the lock is shut. The screen
    says *"Door opened without a code"* and the server logs
    `door_open {forced: true}`.
+
+## End of booking: reminder, extend, time's up, overstay
+
+Book the **shortest slot the room allows**, starting so it ends soon, and
+check in at the door. (The seed's in-progress booking also works.)
+
+1. **Phone reminder.** At 10 minutes left, the student's bell shows *"Booking
+   ending soon"* (sent by pg_cron, so it works even with Wokwi off).
+2. **Countdown.** In the last 10 minutes the OLED shows `ENDS IN 9:59`,
+   counting every second, and `A = extend +30 min`. Beeps at 10 and 5 min.
+3. **Extend from the keypad.** Press `A`, type the booking's code, press `#`.
+   Expected: *Extended +30 min / Now until ...*, two high beeps, and the
+   countdown disappears. The app's booking shows *extended +30 min*.
+   The code is required so a passer-by cannot extend someone else's booking.
+4. **Extend from the app.** The running booking has a **+30 min** button
+   (it pulses in the last 10 minutes).
+5. **Refusals.** Book the next slot as another student, then try again:
+   *Can't extend / Room booked next*. If only 15-29 minutes are free, you get
+   what is free. It also refuses past closing time or the room's maximum
+   booking length.
+6. **Time's up.** At zero: *Time's up!*, four beeps, the lights blink three
+   times if someone is inside, and the air-con switches off with the booking
+   (unless the next booking is about to start).
+7. **Overstay.** Leave PEOPLE on after the end. About **2 minutes** later
+   (demo; real value 15 min) the OLED says *Booking has ended / Please leave
+   now*, the red LED flashes, and the facility manager and the student get a
+   notification, once per booking. No penalty is applied.
+   Flip PEOPLE off before then and nothing is reported.
+
+Everything above is logged and shows in **Admin, then Smart room**: live
+lights / air-con / presence / door, the room log, and the energy chart
+(conventional room vs smart room, last 7 days).
 
 **Demo vs real timings.** For the demo, 1 minute of no movement before the
 lights go off and 2 minutes empty before early release keep it watchable.

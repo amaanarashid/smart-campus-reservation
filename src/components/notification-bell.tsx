@@ -17,6 +17,9 @@ const DOT: Record<string, string> = {
   booking_approved: "bg-green-500",
   booking_rejected: "bg-destructive",
   new_request: "bg-primary",
+  booking_ending: "bg-amber-500",
+  booking_released: "bg-destructive",
+  room_overstay: "bg-amber-500",
 };
 
 export default function NotificationBell() {

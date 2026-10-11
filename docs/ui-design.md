@@ -36,6 +36,14 @@ Dark mode mirrors the palette with a navy-black background and a brighter crimso
 
 Organised into five tabs via a sticky section nav (Overview, Facilities, Approvals, Equipment, Records) so the admin never scrolls through everything at once — only the active section renders. The nav sits just under the app header (`sticky top-16`), scrolls horizontally on mobile, highlights the active tab in crimson, and shows live count badges (facility count, pending approvals). Switching tabs replays the `animate-reveal` entrance via React `key`.
 
+Overview: four clickable stat cards (each jumps to its tab), "Campus right
+now" venue picture cards (rooms in use, an occupancy bar, today's bookings,
+pending bubble) and a recent-activity timeline. Users: role filter chips with
+counts, search, avatar initials. Facilities: each room is a picture card with
+live status (greyed when offline), capacity, rules, managers and a "Take
+offline / Reactivate" button. Approvals: request cards with spinner and locked
+buttons, same as the manager page. Loading shows a skeleton.
+
 Within tabs: stat cards carry an icon tile, an uppercase label, and a serif number that pops in (`animate-count`). The dense "Add a facility" form is collapsed behind a full-width toggle header (Plus icon + rotating chevron). Section titles use the serif display font with a leading crimson icon. All entrance animations respect `prefers-reduced-motion`.
 
 ## Student dashboard
@@ -59,6 +67,23 @@ Within tabs: stat cards carry an icon tile, an uppercase label, and a serif numb
 - **Time-dependent UI** (check-in buttons, deadlines, "Now") runs off a clock
   that ticks every 30 seconds, never `Date.now()` during render. That keeps it
   current and React-Compiler-safe.
+
+## Facility manager dashboard
+
+- **Summary strip:** waiting for approval, bookings today, rooms in use now,
+  attendance still to mark.
+- **Your facilities:** picture cards (the same isometric renders students
+  see), with a live "In use / Free now" badge, a "n waiting" bubble, and a
+  timeline of today's opening hours (approved and pending blocks plus a "now"
+  line). Clicking a card focuses the queue and schedule on that room; click
+  again or "Show all" to clear.
+- **Approval queue:** cards rather than a table: student, room thumbnail,
+  day and time, duration, party size against capacity (red if over), purpose,
+  and requested equipment. The button spins while saving, and all buttons lock
+  so nothing gets double-submitted.
+- **Today & upcoming:** grouped by day, running bookings highlighted with a
+  "Now" dot, and Attended / No-show buttons appear once a session starts.
+- The same 30-second clock as the student page; no `Date.now()` during render.
 
 ## Motion system
 

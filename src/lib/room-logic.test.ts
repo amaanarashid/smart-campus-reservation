@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  checkCode, codeWindow, doorCode, earlyReleaseDecision, isDeviceEvent, openableNow, roomStatus, safeEqual,
-  type DoorBooking,
+  checkCode, codeWindow, doorCode, earlyReleaseDecision, extendReason, isDeviceEvent, openableNow,
+  overstayBooking, roomStatus, safeEqual, type DoorBooking,
 } from "./room-logic";
 import { myAt } from "./time";
 
@@ -143,5 +143,48 @@ describe("room status for the door display", () => {
     expect(s.state).toBe("free");
     expect(s.display.line1.length).toBeLessThanOrEqual(21);
     expect(s.display.line2.length).toBeLessThanOrEqual(21);
+  });
+});
+
+describe("end of booking", () => {
+  const inUse = bk("U", "15:00", "16:00", { checked_in_at: myAt(day, "15:02").toISOString() });
+
+  it("gives seconds left for the device countdown and an extend hint in the last 10 min", () => {
+    const s = roomStatus([inUse], new Date(myAt(day, "15:52").getTime() + 30_000));
+    expect(s.current!.seconds_left).toBe(7 * 60 + 30);
+    expect(s.display.line2).toBe("8 min left A=extend");
+    expect(s.display.line2.length).toBeLessThanOrEqual(21);
+    expect(roomStatus([inUse], myAt(day, "15:30")).display.line2).toBe("until 4:00 pm");
+  });
+
+  it("overstay belongs to the checked-in booking that just ended", () => {
+    expect(overstayBooking([inUse], myAt(day, "16:05"))?.id).toBe("U");
+  });
+
+  it("no overstay while the booking is still running, or long after", () => {
+    expect(overstayBooking([inUse], myAt(day, "15:59"))).toBeNull();
+    expect(overstayBooking([inUse], myAt(day, "17:01"))).toBeNull();
+  });
+
+  it("no overstay if nobody checked in (the no-show rule covers that)", () => {
+    expect(overstayBooking([bk("N", "15:00", "16:00")], myAt(day, "16:05"))).toBeNull();
+  });
+
+  it("people inside belong to the next group once that group has checked in", () => {
+    const next = bk("V", "16:00", "17:00", { checked_in_at: myAt(day, "16:01").toISOString() });
+    expect(overstayBooking([inUse, next], myAt(day, "16:05"))).toBeNull();
+    // next group booked but not in yet: still the previous group's overstay
+    expect(overstayBooking([inUse, { ...next, checked_in_at: null }], myAt(day, "16:05"))?.id).toBe("U");
+  });
+
+  it("explains refusals in OLED-sized lines, with a fallback", () => {
+    for (const r of ["next_slot_taken", "closing_time", "max_length", "not_checked_in", "weird"]) {
+      const m = extendReason(r);
+      expect(m.line1.length).toBeLessThanOrEqual(21);
+      expect(m.line2.length).toBeLessThanOrEqual(21);
+      expect(m.app.length).toBeGreaterThan(5);
+    }
+    expect(isDeviceEvent("overstay")).toBe(true);
+    expect(isDeviceEvent("booking_ended")).toBe(true);
   });
 });

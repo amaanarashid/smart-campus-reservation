@@ -160,7 +160,10 @@ triggers.
 `upgrade-auto-release.sql` (check-in grace rule + `release_no_shows()` on
 pg_cron every minute; discussion rooms default to 10 min; also fixes UTC times
 in booking notifications), `upgrade-room-access.sql` (`room_devices`,
-`room_events`, `door_facilities` view, `register_room_device()`).
+`room_events`, `door_facilities` view, `register_room_device()`),
+`upgrade-room-end.sql` (`extend_booking()` +30 min within close time / max
+length / next booking; `remind_booking_end()` on pg_cron; new room event
+kinds `booking_ended`, `overstay`, `extended`, `extend_denied`).
 Until they are run, the app still works without those features.
 
 **Smart room (library demo)** — `src/lib/room-logic.ts` (door codes derived as
@@ -175,7 +178,15 @@ for the Wokwi VS Code extension; setup and test steps in its README). Presence
 is filtered on-device (IIR a=0.1, hysteresis 0.35/0.08, vacancy timer, warning
 blink); lights follow presence, AC follows bookings (pre-cool 5 min) and
 presence. Rooms with a door have no in-app check-in: the keypad is the
-check-in. Still to build: energy metrics, admin room panel, 3D digital twin.
+check-in. End of booking: phone reminder at 10 min (pg_cron), OLED countdown,
+extend via keypad (A + code + #, `api/room/extend`) or app
+(`api/bookings/extend`), "time's up" + AC off, overstay reported after
+vacancy+warning+1 min and managers notified once (`overstayBooking`).
+Energy: `src/lib/energy.ts` (E = P×t; lights 0.12 kW, AC 1.1 kW, CO₂
+0.585 kg/kWh — assumptions) compares a conventional room (on for every booked
+minute incl. no-shows/early leavers) with the device's real on-time; shown in
+Admin → Smart room (`components/admin-room-panel.tsx`). Still to build: 3D
+digital twin. Tests: 100 vitest cases incl. `energy.test.ts`.
 
 **Test data** — `supabase/seed-test-data.sql` (re-runnable; dates relative
 to today in Malaysia time; needs the three demo accounts to exist first) and
@@ -188,9 +199,9 @@ rule. See `docs/engineering-depth-plan.md`. Hardware occupancy sensor is
 drafted in `firmware/` + `api/sensor` + `upgrade-occupancy.sql` but parked.
 
 **Known issues** — `vitest` is in `devDependencies` but may be absent from
-`node_modules`; run `npm install` before `npm test`. `npm run lint` reports 5
-pre-existing errors in `student/page.tsx` (`Date.now()` during render, one
-`let`); not yet fixed.
+`node_modules`; run `npm install` before `npm test`. The student and
+facility-manager pages lint clean (time-dependent UI uses a 30 s `nowMs`
+clock, never `Date.now()` during render).
 
 Phase 1 report and ethics docs live in `report/`; figures are regenerable and
 the generator scripts sit in the session outputs folder.
