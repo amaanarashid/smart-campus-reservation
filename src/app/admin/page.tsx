@@ -20,8 +20,8 @@ import {
   ArrowRight, Check, X, Loader2, Search, Cpu,
 } from "lucide-react";
 import AdminAnalytics from "@/components/admin-analytics";
-import AdminRoomPanel from "@/components/admin-room-panel";
 import FacilityIso from "@/components/facility-iso";
+import FacilityDetail from "@/components/facility-detail";
 import { fmtRelativeDay, fmtTime, myAt, myDateKey } from "@/lib/time";
 
 interface FmRow { id: string; facility_id: string; manager_id: string }
@@ -88,6 +88,10 @@ export default function AdminDashboard() {
   const [todayRes, setTodayRes] = useState<Reservation[]>([]); // approved + pending, today (MYT)
   const [acting, setActing] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(0); // ticking clock; never Date.now() during render
+  const [openFac, setOpenFac] = useState<string | null>(null);   // facility detail open
+  const [facFilter, setFacFilter] = useState<string>("all");
+  const [facSearch, setFacSearch] = useState("");
+  const [smartIds, setSmartIds] = useState<Set<string>>(new Set()); // rooms with a Wokwi device
 
   const load = useCallback(async () => {
     const [{ data: f }, { data: r }, { data: m }, { data: fm }, { data: eq }, { data: cats }] = await Promise.all([
@@ -136,6 +140,10 @@ export default function AdminDashboard() {
       .gte("start_time", myAt(today, "00:00").toISOString())
       .lt("start_time", myAt(today, "23:59").toISOString());
     setTodayRes((td as Reservation[]) ?? []);
+
+    // which rooms have a smart device (view from upgrade-room-end.sql; absent = none)
+    const { data: devs } = await supabase.from("room_devices_visible").select("facility_id");
+    setSmartIds(new Set(((devs as { facility_id: string }[] | null) ?? []).map((d) => d.facility_id)));
 
     const { data: log } = await supabase
       .from("activity_log").select("*")
@@ -191,6 +199,7 @@ export default function AdminDashboard() {
     const { error } = await supabase.from("facility_categories").delete().eq("id", c.id);
     if (error) { toast.error(error.message); return; }
     toast.success(`${c.name} deleted`);
+    setOpenFac(null);
     await load();
   }
 
@@ -214,6 +223,7 @@ export default function AdminDashboard() {
     const { error } = await supabase.from("facilities").delete().eq("id", f.id);
     if (error) { toast.error(error.message); return; }
     toast.success(`${f.name} deleted`);
+    setOpenFac(null);
     await load();
   }
 
@@ -331,6 +341,15 @@ export default function AdminDashboard() {
     return inRole && (!q || u.full_name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
   });
 
+
+  // ---------- facilities: grid + detail ----------
+  const openFacility = openFac ? facilities.find((f) => f.id === openFac) ?? null : null;
+    const shownFacilities = facilities.filter((f) => {
+    const q = facSearch.trim().toLowerCase();
+    return (facFilter === "all" || f.category_id === facFilter) &&
+      (!q || f.name.toLowerCase().includes(q) || f.venue.toLowerCase().includes(q));
+  });
+
   return (
     <AppShell
       title="Administration"
@@ -355,7 +374,7 @@ export default function AdminDashboard() {
               ["equipment", "Equipment", Package, 0],
               ["records", "Records", ScrollText, 0],
             ] as const).map(([key, label, Icon, count]) => (
-              <button key={key} onClick={() => setTab(key)}
+              <button key={key} onClick={() => { setTab(key); if (key === "rooms") setOpenFac(null); }}
                 className={`flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors ${
                   tab === key ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted"
                 }`}>
@@ -498,8 +517,100 @@ export default function AdminDashboard() {
             <div key="an" className="animate-reveal"><AdminAnalytics /></div>
           )}
 
-          {tab === "rooms" && (
-            <div key="rooms" className="animate-reveal"><AdminRoomPanel /></div>
+          {tab === "rooms" && openFacility && (
+            <FacilityDetail key={openFacility.id} facility={openFacility} rule={rules[openFacility.id]}
+              onBack={() => setOpenFac(null)} />
+          )}
+
+          {tab === "rooms" && !openFacility && (
+            <div key="rooms" className="space-y-6">
+              <div className="animate-reveal">
+                <h2 className="font-display flex items-center gap-2 text-xl font-semibold">
+                  <Cpu className="h-5 w-5 text-primary" /> Smart rooms
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Open a room for its live 3D twin, readings and energy. Rooms marked Live 3D have a Wokwi device;
+                  the rest are shown from their bookings.
+                </p>
+              </div>
+              {facilities.length === 0 && (
+                <p className="rounded-xl border border-dashed py-12 text-center text-sm text-muted-foreground">
+                  No facilities yet - add them in the Facilities tab.
+                </p>
+              )}
+          {/* ---------- one panel per room; click opens its detail ---------- */}
+          {facilities.length > 0 && (
+            <div className="animate-reveal flex flex-wrap items-center gap-2">
+              {[{ id: "all", name: "All", n: facilities.length },
+                ...categories.map((c) => ({ id: c.id, name: c.name, n: facilities.filter((f) => f.category_id === c.id).length }))]
+                .map((c) => (
+                  <button key={c.id} onClick={() => setFacFilter(c.id)}
+                    className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                      facFilter === c.id ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
+                    {c.name}
+                    <span className={`rounded-full px-1.5 ${facFilter === c.id ? "bg-primary-foreground/20" : "bg-muted"}`}>{c.n}</span>
+                  </button>
+                ))}
+              <div className="relative ml-auto w-full sm:w-64">
+                <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input placeholder="Search rooms or venues..." value={facSearch}
+                  onChange={(e) => setFacSearch(e.target.value)} className="pl-8" />
+              </div>
+            </div>
+          )}
+
+          {facilities.length > 0 && (
+            shownFacilities.length === 0 ? (
+              <div className="flex flex-col items-center gap-1.5 rounded-xl border border-dashed py-12 text-center">
+                <Building2 className="h-7 w-7 text-muted-foreground/50" />
+                <p className="text-sm font-medium">Nothing matches</p>
+                <p className="text-xs text-muted-foreground">
+                  Try another type or search.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                {shownFacilities.map((f, fi) => {
+                  const busy = inUse.has(f.id);
+                  const off = f.status !== "active";
+                  const smart = smartIds.has(f.id);
+                  const today = todayRes.filter((r) => r.facility_id === f.id).length;
+                  const mgrs = fmRows.filter((x) => x.facility_id === f.id).length;
+                  return (
+                    <button key={f.id} onClick={() => { setOpenFac(f.id); window.scrollTo({ top: 0, behavior: "smooth" }); }} style={stagger(fi)}
+                      className={`animate-reveal stagger group overflow-hidden rounded-xl border bg-card text-left shadow-sm transition-all hover:-translate-y-1 hover:border-primary hover:shadow-lg ${off ? "opacity-75" : ""}`}>
+                      <div className="relative h-32 bg-muted/40">
+                        <div className={off ? "h-full grayscale" : "h-full"}><FacilityIso type={f.type} busy={busy} /></div>
+                        <span className="absolute left-2 top-2 rounded-full bg-card/90 px-2 py-0.5 text-[11px] font-medium shadow">
+                          {off ? f.status : busy ? "In use" : "Free now"}
+                        </span>
+                        {smart && (
+                          <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground shadow">
+                            <Cpu className="h-3 w-3" /> Live 3D
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-1.5 p-4">
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="font-display font-semibold leading-tight">{f.name}</h3>
+                          <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+                        </div>
+                        <p className="text-xs text-muted-foreground">{f.venue} · {typeLabel(f.type)}</p>
+                        <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 pt-1 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1"><Users2 className="h-3.5 w-3.5" /> {f.capacity}</span>
+                          <span className="flex items-center gap-1"><CalendarRange className="h-3.5 w-3.5" /> {today} today</span>
+                          <span className="flex items-center gap-1"><UserCog className="h-3.5 w-3.5" /> {mgrs ? `${mgrs} manager${mgrs > 1 ? "s" : ""}` : "admin"}</span>
+                          {rules[f.id]?.has_override && <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">custom rules</Badge>}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )
+          )}
+
+            </div>
           )}
 
           {tab === "users" && (

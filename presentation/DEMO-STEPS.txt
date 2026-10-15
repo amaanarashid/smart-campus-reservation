@@ -1,0 +1,139 @@
+==========================================================================
+ CAMPUS RESERVE - DEMO STEPS FOR THE PROGRESS MEETING
+==========================================================================
+
+Two parts: (A) get ready tonight, (B) the live demo tomorrow (about 10 min).
+Only show what is marked [WORKS]. Things marked [TESTING] may not work yet -
+try them tonight; if they fail, skip them and say "built, being tested".
+Do NOT demo remote control - it is not built yet (it is "in progress").
+
+Demo accounts (login page buttons, password demo1234):
+  student@demo.campus   facility_manager@demo.campus   admin@demo.campus
+
+
+--------------------------------------------------------------------------
+ A. GET READY TONIGHT  (about 30-45 min)
+--------------------------------------------------------------------------
+
+[ ] A1  In the project folder (PowerShell):
+          npm install
+        Needed once: it installs "three" for the 3D twin.
+
+[ ] A2  npm test
+        Expected: "Tests 106 passed". Take a screenshot - evidence slide 5.
+        If vitest is missing, npm install again.
+
+[ ] A3  Supabase -> SQL editor. Make sure these have been run, in order
+        (each is safe to run again):
+          setup-all.sql, upgrade-recommender.sql, fix-role-escalation.sql,
+          upgrade-auto-release.sql, upgrade-room-access.sql,
+          upgrade-room-end.sql
+        Then, for a full-looking demo:
+          seed-test-data.sql      (bookings, students, history)
+          seed-room-energy.sql    (a week of smart-room readings)
+        If anything errors, copy the red message and send it to me.
+
+[ ] A4  Start the app:
+          npm run dev      ->  http://localhost:3000
+        (Or use the Vercel site - but push the latest code first and wait
+        for the deploy to finish.)
+        If you get a Turbopack error or a 404:
+          Remove-Item -Recurse -Force .next
+          npm run dev
+
+[ ] A5  Wokwi (VS Code): File -> Open Folder -> firmware/door-wokwi
+        Click the checkmark (Build), wait for SUCCESS, then open
+        diagram.json -> F1 -> "Wokwi: Start Simulator".
+        Expected: the OLED shows FREE or "BOOKED - enter code".
+        The latest firmware (countdown / extend / overstay) has not been
+        compiled before. If the build FAILS, send me the first red
+        "error:" line. Fallback: the door and lights demo still works with
+        the previous version.
+        Wokwi talks to the deployed Vercel site (API_BASE in sketch.ino),
+        not localhost - so the code must be pushed and deployed.
+
+[ ] A6  Dry run: go through part B once tonight, end to end.
+
+
+--------------------------------------------------------------------------
+ B. LIVE DEMO  (in this order)
+--------------------------------------------------------------------------
+
+B1  STUDENT BOOKING                                              [WORKS]
+    Login: Student button.
+    - Pick a venue -> a room. Point out the "Free now / In use" badges.
+    - Book a time that is free -> it appears under My bookings.
+    - Now book a time that is already TAKEN.
+      Expected: ranked suggestions with reasons, the top one marked "Best".
+      Say: "the AI offers alternatives instead of a dead end; LinUCB
+      learns which ones this student accepts."
+    - Book one of the suggestions.
+    - Show that the date picker and duration list follow the room's rules.
+
+B2  CHATBOT                                                      [WORKS]
+    Open the chat button (bottom right). Ask:
+      "Is badminton court 1 free tomorrow?"
+      "What about the evening?"
+      "What are my bookings?"
+    Say: "answers come only from database rows - it cannot invent slots,
+    and it only shows my own bookings."
+    (No AI key set? It still answers, in offline mode.)
+
+B3  FACILITY MANAGER                                             [WORKS]
+    Sign out -> Facility Manager button.
+    - Room picture cards with "n waiting" and today's timeline.
+    - Click a room to filter. Approve one request (from B1 if pending).
+    - Mark attendance on a booking that has started.
+
+B4  ADMIN                                                        [WORKS]
+    Sign out -> Admin button.
+    - Overview: campus-right-now cards and activity timeline.
+    - Facilities tab: a type's rules; a room inherits them.
+    - Records tab: every action logged automatically by the database.
+
+B5  SMART ROOM WITH WOKWI                         [WORKS: door + lights]
+    Have Wokwi running beside the browser.
+    - As the student, book the LIBRARY discussion room starting NOW.
+    - My bookings -> "Door code" -> a 6-digit code appears.
+    - In Wokwi type the code, press #.
+      Expected: "Welcome! Checked in", servo turns, green LED, beep.
+      Refresh the app: the booking shows "checked in".
+    - Type a wrong code: "Wrong code, 4 tries left", red LED.
+    - Flip the PEOPLE switch on: the yellow LIGHTS LED comes on.
+      Flip it off: after ~1 min the lights blink, then switch off.
+    - Move the NOISE slider halfway: lights do not flicker (the filter).
+    Say: "the code is derived from the booking with HMAC and never stored;
+    the presence filter is a first-order low-pass with hysteresis."
+
+B6  3D TWIN AND ENERGY                                         [TESTING]
+    Admin -> Smart room tab -> open the library room.
+    - Rotate the 3D model by dragging.
+    - With Wokwi running, flip PEOPLE / open the DOOR switch; within
+      about 5 s the twin should show people / the open door.
+    - Scroll down: room log and the 7-day energy chart.
+    If the twin does not update live, still show the model and the room
+    log, and say "live sync is in testing".
+
+B7  END OF BOOKING                                              [TESTING]
+    Only if it worked in the dry run (needs a booking that ends soon):
+    countdown on the OLED, press A + code + # to extend +30 min.
+
+B8  EVIDENCE                                                     [WORKS]
+    Show the "106 passed" screenshot and docs/simulation/learning-curves.png
+    (LinUCB 79.6% vs fixed 71.1%).
+
+
+--------------------------------------------------------------------------
+ IF THEY ASK
+--------------------------------------------------------------------------
+"Is the 79.6% real?"   It is from a simulation of four student types. Real
+                       acceptance is measured in the Phase 2 user study.
+"Can two people book the same slot at once?"   No - PostgreSQL's exclusion
+                       constraint rejects the second. The formal concurrent
+                       test is in the evaluation plan.
+"Are all rules in the database?"   Not yet. No-overlap is; opening hours,
+                       length etc. are checked by the app today and move
+                       into the database in the hardening step.
+"Why Wokwi, not real hardware?"   Same ESP32 code would run on a real board;
+                       simulation was approved by the supervisor and lets
+                       anyone reproduce the demo.

@@ -15,6 +15,13 @@
 --  Safe to run more than once.
 -- =========================================================================
 
+-- seed-room-energy.sql: tagged room events (the table may not exist yet)
+do $$ begin
+  if to_regclass('public.room_events') is not null then
+    delete from public.room_events where detail ->> 'seed' = 'true';
+  end if;
+end $$;
+
 delete from public.reservations      where purpose like '[seed]%';
 delete from public.lost_and_found    where notes   like '[seed]%';
 delete from public.evaluation_events where note    like '[seed]%';

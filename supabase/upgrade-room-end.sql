@@ -31,6 +31,20 @@ alter table public.room_events add constraint room_events_kind_check check (kind
   'ac_on', 'ac_off', 'reminder', 'released_early', 'heartbeat',
   'booking_ended', 'overstay', 'extended', 'extend_denied'));
 
+-- ------------------------------------- devices visible to their managers --
+-- room_devices is admin-only (it holds the key hash). Managers need to see
+-- that their room has a device and when it was last heard from, for the room
+-- readings on their dashboard. A plain view runs with its owner's rights, so
+-- it filters by caller here and never exposes key_hash.
+create or replace view public.room_devices_visible as
+  select d.id, d.facility_id, d.label, d.active, d.last_seen_at
+    from public.room_devices d
+   where public.is_admin()
+      or exists (select 1 from public.facility_managers fm
+                  where fm.facility_id = d.facility_id and fm.manager_id = auth.uid());
+revoke all on public.room_devices_visible from anon;
+grant select on public.room_devices_visible to authenticated;
+
 -- ------------------------------------------------------------ extension --
 -- Returns {"ok":true,"added_mins":30,"new_end":"..."} or
 --         {"ok":false,"reason":"next_slot_taken" | "closing_time" | "max_length" | ...}

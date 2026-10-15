@@ -11,21 +11,25 @@
  * Pure inline SVG - no assets, instant load, theme-aware.
  */
 
-type Scene = "room" | "court" | "net_court" | "hall" | "pool" | "gym" | "generic";
+import { resolveScene } from "@/lib/scene";
+export { resolveScene };
 
-const KEYWORDS: [RegExp, Scene][] = [
-  [/pool|swim|aquat/, "pool"],
-  [/gym|fitness|weight|workout|exercis/, "gym"],
-  [/badminton|tennis|squash|volley|net|table.?tennis|ping/, "net_court"],
-  [/futsal|foot|soccer|basket|netball|hockey|court|pitch|field|turf|track/, "court"],
-  [/hall|auditor|theat|stage|event|ballroom|arena/, "hall"],
-  [/room|lab|studio|meeting|discussion|seminar|class|office|library|booth|suite/, "room"],
-];
-
-export function resolveScene(type: string): Scene {
-  const t = (type || "").toLowerCase().replace(/[_-]+/g, " ");
-  for (const [re, scene] of KEYWORDS) if (re.test(t)) return scene;
-  return "generic";
+/** Floor slab and status dot shared by every scene. */
+function Base({ busy, children }: { busy: boolean; children: React.ReactNode }) {
+  const floor = busy ? "#fee2e2" : "#dcfce7";
+  const floorSide = busy ? "#fecaca" : "#bbf7d0";
+  const accent = busy ? "#dc2626" : "#16a34a";
+  return (
+    <svg viewBox="0 0 200 140" className="h-full w-full" aria-hidden>
+      <polygon points="100,30 190,75 100,120 10,75" fill={floor} />
+      <polygon points="10,75 100,120 100,132 10,87" fill={floorSide} />
+      <polygon points="190,75 100,120 100,132 190,87" fill={floorSide} opacity="0.7" />
+      {children}
+      <circle cx="182" cy="20" r="6" fill={accent}>
+        {!busy && <animate attributeName="opacity" values="1;0.4;1" dur="2s" repeatCount="indefinite" />}
+      </circle>
+    </svg>
+  );
 }
 
 export default function FacilityIso({
@@ -37,28 +41,14 @@ export default function FacilityIso({
 }) {
   const scene = resolveScene(type);
 
-  const floor = busy ? "#fee2e2" : "#dcfce7";
-  const floorSide = busy ? "#fecaca" : "#bbf7d0";
   const accent = busy ? "#dc2626" : "#16a34a";
   const wall = "#e7e5e4";
   const wallDark = "#d6d3d1";
 
-  const Base = ({ children }: { children: React.ReactNode }) => (
-    <svg viewBox="0 0 200 140" className="h-full w-full" aria-hidden>
-      <polygon points="100,30 190,75 100,120 10,75" fill={floor} />
-      <polygon points="10,75 100,120 100,132 10,87" fill={floorSide} />
-      <polygon points="190,75 100,120 100,132 190,87" fill={floorSide} opacity="0.7" />
-      {children}
-      <circle cx="182" cy="20" r="6" fill={accent}>
-        {!busy && <animate attributeName="opacity" values="1;0.4;1" dur="2s" repeatCount="indefinite" />}
-      </circle>
-    </svg>
-  );
-
   switch (scene) {
     case "room":
       return (
-        <Base>
+        <Base busy={busy}>
           <polygon points="100,30 10,75 10,45 100,0" fill={wall} />
           <polygon points="100,30 190,75 190,45 100,0" fill={wallDark} />
           <polygon points="100,55 140,75 100,95 60,75" fill="#a16207" />
@@ -74,7 +64,7 @@ export default function FacilityIso({
 
     case "court":
       return (
-        <Base>
+        <Base busy={busy}>
           <polygon points="100,38 175,75 100,112 25,75" fill="none" stroke="#ffffff" strokeWidth="2.5" />
           <ellipse cx="100" cy="75" rx="22" ry="11" fill="none" stroke="#ffffff" strokeWidth="2.5" />
           <line x1="100" y1="38" x2="100" y2="112" stroke="#ffffff" strokeWidth="2" opacity="0.7" />
@@ -86,7 +76,7 @@ export default function FacilityIso({
 
     case "net_court":
       return (
-        <Base>
+        <Base busy={busy}>
           <polygon points="100,42 168,75 100,108 32,75" fill="none" stroke="#ffffff" strokeWidth="2.5" />
           <line x1="66" y1="58" x2="134" y2="92" stroke="#44403c" strokeWidth="1.5" />
           <line x1="66" y1="50" x2="134" y2="84" stroke="#44403c" strokeWidth="1.5" />
@@ -102,7 +92,7 @@ export default function FacilityIso({
 
     case "hall":
       return (
-        <Base>
+        <Base busy={busy}>
           <polygon points="100,30 10,75 10,40 100,-5" fill={wall} />
           <polygon points="100,30 190,75 190,40 100,-5" fill={wallDark} />
           <polygon points="100,18 145,40 100,62 55,40" fill="#7c2d12" />
@@ -121,7 +111,7 @@ export default function FacilityIso({
 
     case "pool":
       return (
-        <Base>
+        <Base busy={busy}>
           {/* water */}
           <polygon points="100,40 172,76 100,112 28,76" fill="#7dd3fc" />
           <polygon points="100,46 162,76 100,106 38,76" fill="#38bdf8" />
@@ -139,7 +129,7 @@ export default function FacilityIso({
 
     case "gym":
       return (
-        <Base>
+        <Base busy={busy}>
           <polygon points="100,30 10,75 10,48 100,3" fill={wall} />
           <polygon points="100,30 190,75 190,48 100,3" fill={wallDark} />
           {/* bench */}
@@ -162,7 +152,7 @@ export default function FacilityIso({
     default:
       // neutral space: walls, a door and a window - reads as "a facility"
       return (
-        <Base>
+        <Base busy={busy}>
           <polygon points="100,30 10,75 10,45 100,0" fill={wall} />
           <polygon points="100,30 190,75 190,45 100,0" fill={wallDark} />
           {/* door */}

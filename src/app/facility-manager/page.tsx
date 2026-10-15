@@ -18,6 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast, Toaster } from "sonner";
 import AppShell from "@/components/app-shell";
 import FacilityIso from "@/components/facility-iso";
+import RoomPanel from "@/components/room-panel";
 import { ensureProfile } from "@/lib/profile";
 import {
   Boxes, CalendarDays, Check, CheckCircle2, Clock, Inbox, Loader2, MapPin,
@@ -592,6 +593,9 @@ export default function ManagerDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* smart room readings: only shown if one of my rooms has a device */}
+        <RoomPanel hideWhenEmpty heading="Smart room" />
 
         <div className="grid items-start gap-6 2xl:grid-cols-2">
         <Card className="animate-reveal" style={{ animationDelay: "340ms" }}>

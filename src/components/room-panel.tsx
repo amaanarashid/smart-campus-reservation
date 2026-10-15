@@ -88,7 +88,13 @@ function Tile({ label, on, onText, offText, Icon, i }: {
   );
 }
 
-export default function AdminRoomPanel() {
+/**
+ * Live readings and energy for smart rooms. Admins see every room; a facility
+ * manager sees only the rooms they manage (room_devices_visible and the
+ * room_events policy both filter by facility_managers). `hideWhenEmpty` lets
+ * the manager dashboard drop the section when none of their rooms has a device.
+ */
+export default function RoomPanel({ hideWhenEmpty = false, heading }: { hideWhenEmpty?: boolean; heading?: string }) {
   const [devices, setDevices] = useState<DeviceRow[]>([]);
   const [names, setNames] = useState<Record<string, { name: string; type: string }>>({});
   const [events, setEvents] = useState<RoomEvent[]>([]);
@@ -102,8 +108,14 @@ export default function AdminRoomPanel() {
     const now = new Date();
     const { fromDay } = lastWeek(now);
     const since = new Date(myAt(fromDay, "00:00").getTime() - 86_400_000).toISOString();
-    const { data: devs, error } = await supabase.from("room_devices")
+    // the view exposes devices to their managers without the key hash
+    let { data: devs, error } = await supabase.from("room_devices_visible")
       .select("id, facility_id, label, active, last_seen_at").order("label");
+    if (error) {
+      // before upgrade-room-end.sql: admins can still read the table itself
+      ({ data: devs, error } = await supabase.from("room_devices")
+        .select("id, facility_id, label, active, last_seen_at").order("label"));
+    }
     if (error) { setState("missing"); return; }
     const list = (devs as DeviceRow[]) ?? [];
     setDevices(list);
@@ -151,6 +163,7 @@ export default function AdminRoomPanel() {
   }
 
   if (state === "missing" || devices.length === 0) {
+    if (hideWhenEmpty) return null;
     return (
       <Card className="animate-reveal">
         <CardContent className="flex flex-col items-center gap-2 py-16 text-center">
@@ -190,10 +203,19 @@ export default function AdminRoomPanel() {
     "Conventional room": d.baselineKwh,
     "Smart room": d.actualKwh,
   }));
+  const powerKw = (lights ? LIGHT_KW : 0) + (ac ? AC_KW : 0);
+  const today = report.days[report.days.length - 1];
   const usedPct = report.totals.bookedMins ? Math.round((report.totals.usedMins / report.totals.bookedMins) * 100) : 0;
 
   return (
     <div className="space-y-6">
+      {heading && (
+        <div className="flex items-center gap-2 pt-2">
+          <Cpu className="h-5 w-5 text-primary" />
+          <h2 className="font-display text-xl font-semibold">{heading}</h2>
+          <span className="text-sm text-muted-foreground">live readings and energy, refreshed every 30 s</span>
+        </div>
+      )}
       {/* device picker, when there is more than one smart room */}
       {devices.length > 1 && (
         <div className="flex flex-wrap gap-2">
@@ -232,6 +254,22 @@ export default function AdminRoomPanel() {
               <Button size="sm" variant="outline" className="gap-1.5" onClick={refresh} disabled={refreshing}>
                 <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} /> Refresh
               </Button>
+            </div>
+            {/* live power reading: what the room is drawing now, from the switched loads */}
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border bg-muted/30 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Zap className={`h-5 w-5 ${powerKw > 0 ? "text-primary" : "text-muted-foreground"}`} />
+                <span className="font-display text-2xl font-semibold tabular-nums">{powerKw.toFixed(2)}</span>
+                <span className="text-sm text-muted-foreground">kW now</span>
+              </div>
+              <div className="h-2 min-w-[8rem] flex-1 overflow-hidden rounded-full bg-muted">
+                <div className="h-full rounded-full bg-primary transition-all duration-700"
+                  style={{ width: `${Math.round((powerKw / (LIGHT_KW + AC_KW)) * 100)}%` }} />
+              </div>
+              <div className="text-sm">
+                <span className="font-semibold tabular-nums">{today?.actualKwh ?? 0} kWh</span>
+                <span className="text-muted-foreground"> today · {today?.lightsMins ?? 0} min lights · {today?.acMins ?? 0} min air-con</span>
+              </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
               <Tile i={0} label="Presence" on={people} onText="People inside" offText="Empty" Icon={PersonStanding} />

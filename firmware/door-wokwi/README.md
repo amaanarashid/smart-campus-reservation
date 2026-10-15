@@ -188,7 +188,13 @@ check in at the door. (The seed's in-progress booking also works.)
 
 Everything above is logged and shows in **Admin, then Smart room**: live
 lights / air-con / presence / door, the room log, and the energy chart
-(conventional room vs smart room, last 7 days).
+(conventional room vs smart room, last 7 days). The facility manager of the
+room sees the same panel on their dashboard, under **Smart room**.
+
+**No history yet?** Run `supabase/seed-room-energy.sql` to fill the last 7
+days with realistic bookings and readings for this room (no-shows, early
+leavers, breaks, an extension, an overstay). Today stays live from Wokwi.
+`seed-test-data-remove.sql` removes it.
 
 **Demo vs real timings.** For the demo, 1 minute of no movement before the
 lights go off and 2 minutes empty before early release keep it watchable.

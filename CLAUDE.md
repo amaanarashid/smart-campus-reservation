@@ -185,8 +185,17 @@ vacancy+warning+1 min and managers notified once (`overstayBooking`).
 Energy: `src/lib/energy.ts` (E = P×t; lights 0.12 kW, AC 1.1 kW, CO₂
 0.585 kg/kWh — assumptions) compares a conventional room (on for every booked
 minute incl. no-shows/early leavers) with the device's real on-time; shown in
-Admin → Smart room (`components/admin-room-panel.tsx`). Still to build: 3D
-digital twin. Tests: 100 vitest cases incl. `energy.test.ts`.
+Admin → Smart room and on the facility manager dashboard for managers of that room (`components/room-panel.tsx`; managers read devices through the `room_devices_visible` view). `supabase/seed-room-energy.sql` seeds a week of realistic readings for the door's room (tagged, removed by the seed remove script). **3D digital twin** — Admin → Smart room is a grid of one panel per room
+(Facilities tab stays the management page); clicking opens `components/facility-detail.tsx`: a three.js twin
+(`lib/twin-scene.ts`, framework-free; `components/room-twin.tsx` wraps it,
+loaded with `next/dynamic` ssr:false) plus live readings, countdown, today's
+bookings, room log and the 7-day energy chart. Twin state
+comes from `lib/twin-state.ts` (`twinReading`: last on/off event per output,
+unlock shown 10 s, offline after 2 min; rooms without a device are inferred
+from bookings and labelled so). Polls events every 5 s, energy every 60 s.
+Scenes by type via `lib/scene.ts` (room, net_court, court, hall, pool, gym,
+generic). Needs `three` (run `npm install`). Tests: 106 vitest cases incl.
+`energy.test.ts`, `twin-state.test.ts`.
 
 **Test data** — `supabase/seed-test-data.sql` (re-runnable; dates relative
 to today in Malaysia time; needs the three demo accounts to exist first) and

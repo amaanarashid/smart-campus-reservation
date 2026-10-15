@@ -68,6 +68,29 @@ Within tabs: stat cards carry an icon tile, an uppercase label, and a serif numb
   that ticks every 30 seconds, never `Date.now()` during render. That keeps it
   current and React-Compiler-safe.
 
+## Admin smart rooms and the 3D twin
+
+The Smart room tab is a grid with one picture panel per room (filter by type,
+search). Panels show live status, a "Live 3D" badge when the room has a Wokwi
+device, capacity, today's bookings and managers. Clicking a panel opens the
+room on its own page (with "All rooms" to go back). Managing rooms (rules,
+capacity, managers) stays in the Facilities tab.
+
+- **3D twin** (three.js): the room built for its type, lit and animated from
+  the device's latest events: lights fade up, the air-con flap opens and
+  airflow drifts out, the door swings, the lock LED turns green after a good
+  code, people appear when presence is detected, and a coloured base shows
+  free (green), booked waiting for check-in (amber, pulsing) or in use
+  (crimson). Drag to rotate, scroll to zoom, reset button. Without WebGL it
+  falls back to the 2.5D picture.
+- **Live panel:** booking now with a seconds countdown, presence / lights /
+  air-con / door / lock tiles, power in kW and kWh today, and 7-day savings.
+- **Today, room log, energy:** today's bookings, what the device reported, and
+  the 7-day energy chart (conventional room vs smart room).
+
+Rooms without a device still get the twin, inferred from bookings and labelled
+"No smart device - shown from bookings".
+
 ## Facility manager dashboard
 
 - **Summary strip:** waiting for approval, bookings today, rooms in use now,
