@@ -102,15 +102,6 @@
       "attrs": {}
     },
     {
-      "type": "wokwi-slide-potentiometer",
-      "id": "noise",
-      "top": 340,
-      "left": -190,
-      "attrs": {
-        "travelLength": "30"
-      }
-    },
-    {
       "type": "wokwi-led",
       "id": "lights",
       "top": 100,
@@ -146,6 +137,15 @@
       "left": 265,
       "attrs": {
         "value": "220"
+      }
+    },
+    {
+      "type": "wokwi-led-ring",
+      "id": "ring",
+      "top": 300,
+      "left": -215,
+      "attrs": {
+        "pixels": "16"
       }
     }
   ],
@@ -343,24 +343,6 @@
       []
     ],
     [
-      "noise:VCC",
-      "esp:3V3",
-      "red",
-      []
-    ],
-    [
-      "noise:GND",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "noise:SIG",
-      "esp:35",
-      "white",
-      []
-    ],
-    [
       "esp:17",
       "rL:1",
       "yellow",
@@ -394,6 +376,24 @@
       "ac:C",
       "esp:GND.1",
       "black",
+      []
+    ],
+    [
+      "ring:GND",
+      "esp:GND.1",
+      "black",
+      []
+    ],
+    [
+      "ring:VCC",
+      "esp:5V",
+      "red",
+      []
+    ],
+    [
+      "ring:DIN",
+      "esp:12",
+      "violet",
       []
     ]
   ],

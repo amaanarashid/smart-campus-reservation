@@ -4,3 +4,4 @@ Adafruit SSD1306
 Adafruit GFX Library
 ESP32Servo
 ArduinoJson
+Adafruit NeoPixel

@@ -27,7 +27,7 @@ Demo accounts (login page buttons, password demo1234):
         (each is safe to run again):
           setup-all.sql, upgrade-recommender.sql, fix-role-escalation.sql,
           upgrade-auto-release.sql, upgrade-room-access.sql,
-          upgrade-room-end.sql
+          upgrade-room-end.sql, upgrade-room-reports.sql
         Then, for a full-looking demo:
           seed-test-data.sql      (bookings, students, history)
           seed-room-energy.sql    (a week of smart-room readings)
@@ -117,6 +117,15 @@ B6  3D TWIN AND ENERGY                                         [TESTING]
 B7  END OF BOOKING                                              [TESTING]
     Only if it worked in the dry run (needs a booking that ends soon):
     countdown on the OLED, press A + code + # to extend +30 min.
+
+B7b ROOM FEEDBACK                                      [needs migration]
+    Run upgrade-room-reports.sql first, and try it in the dry run.
+    - As the student, on a current booking: "Report a problem" -> Air-con,
+      Urgent, "blowing warm air" -> Send.
+    - Room card now shows "Known issue: air-con".
+    - As the manager: bell notification, "1 problem" on the room card, the
+      report in "Room problems reported". Add a note, Start, then Resolve.
+    - As the student: bell says it was resolved, with the note.
 
 B8  EVIDENCE                                                     [WORKS]
     Show the "106 passed" screenshot and docs/simulation/learning-curves.png

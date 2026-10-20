@@ -440,6 +440,53 @@ Signed in as student. Press F12 -> Console. Paste each line, press Enter.
 
 
 --------------------------------------------------------------------------
+ PART 11 - ROOM FEEDBACK (STUDENT REPORTS A PROBLEM)
+--------------------------------------------------------------------------
+ Needs supabase/upgrade-room-reports.sql run once in the SQL editor.
+
+[ ] 11.1  As the student, make a booking that starts now (or within 15 min).
+          In My bookings it shows "Report a problem".
+          Expected: the button appears from 15 min before the start until a
+          day after the end, and not on pending or cancelled bookings.
+
+[ ] 11.2  Press it. Pick "Air-con", urgency "Urgent", type
+          "Air-con blowing warm air". Send.
+          Expected: "Thanks - the facility team has been told". Under the
+          booking: "You reported: air-con  Open".
+
+[ ] 11.3  Try to send with fewer than 5 characters.
+          Expected: "Describe the problem in a few words." Nothing is sent.
+
+[ ] 11.4  Go back to the venue list and open that venue.
+          Expected: the room card shows "Known issue: air-con" in red
+          (urgent). Sign in as another student: they see the same badge,
+          but nobody's name or text.
+
+[ ] 11.5  Sign in as the facility manager of that room.
+          Expected: the bell has "Room problem reported ... (URGENT)"; the
+          room card shows "1 problem"; the "Room problems reported" card
+          lists it, highlighted red.
+
+[ ] 11.6  Type a note "Technician coming at 3pm", press Start.
+          Expected: status In progress. As the student: the bell says "Your
+          report is being handled", with the note.
+
+[ ] 11.7  Press Resolve with an empty note.
+          Expected: "Add a short note for the student first". Add a note,
+          press Resolve. Expected: the student is told it was resolved, and
+          the "Known issue" badge disappears from the room card.
+
+[ ] 11.8  As admin: the Feedback tab shows every room's reports with a
+          count badge; Records -> "Room problems" shows each step.
+
+[ ] 11.9  Report on a room that has NO manager.
+          Expected: the admins get the notification instead.
+
+[ ] 11.10 Send 6 reports within an hour as one student.
+          Expected: the 6th is refused ("at most 5 reports an hour").
+
+
+--------------------------------------------------------------------------
  BEFORE REAL TESTING WITH STUDENTS  (important)
 --------------------------------------------------------------------------
 
@@ -456,7 +503,7 @@ Signed in as student. Press F12 -> Console. Paste each line, press Enter.
  Date tested: ______________      Tested by: ______________
 
  Parts passed:  0 [ ]  1 [ ]  2 [ ]  3 [ ]  4 [ ]  5 [ ]
-                6 [ ]  7 [ ]  8 [ ]  9 [ ]  10 [ ]
+                6 [ ]  7 [ ]  8 [ ]  9 [ ]  10 [ ]  11 [ ]
 
  Failures (step number and what happened):
  ____________________________________________________________________

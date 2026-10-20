@@ -119,7 +119,7 @@ The same ESP32 also runs the room. New parts and what they stand for:
 |---|---|
 | **PEOPLE** slide switch | people in the room. On means occupants who move now and then, not constantly. |
 | **PIR** motion sensor | the real sensor. Click it to simulate one movement. |
-| **NOISE** slider | how unreliable the sensor is: left = clean, right = 40% of readings wrong |
+| **LED ring** (16 colour LEDs) | the ambient end-of-booking light: blue = you can extend, red = you can't; empties like a clock over the last 10 minutes |
 | yellow **LIGHTS** LED | the room lights |
 | blue **AIR-CON** LED | the air-conditioner |
 
@@ -136,10 +136,9 @@ bar. The two tick marks are the thresholds: right = "someone's here", left =
    left tick. After **1 minute** with nobody moving, the screen says *"No
    movement..."* and the lights **blink for 10 seconds**, then turn off.
    Flip PEOPLE back on during the blinking and the lights stay on.
-3. **Noise.** Move NOISE about halfway and flip PEOPLE off. The raw readings
-   now jump about, but the bar stays low and the lights don't come on. That's
-   the filter doing its job. Push NOISE all the way right: occasional false
-   switch-ons start to appear. That trade-off is what the report analyses.
+3. **Filter.** With PEOPLE on, people only show motion in about 6 of every 10
+   samples, yet the P bar stays above the threshold and the lights don't
+   flicker. That's the filter smoothing an intermittent signal.
 4. **Air-con follows bookings.**
    - It comes on **5 minutes before** a booking starts (pre-cooling), even if
      nobody's there yet.
@@ -157,6 +156,24 @@ bar. The two tick marks are the thresholds: right = "someone's here", left =
 7. **Forced entry.** Flip the DOOR switch while the lock is shut. The screen
    says *"Door opened without a code"* and the server logs
    `door_open {forced: true}`.
+
+## Ambient light (LED ring)
+
+For the last 10 minutes of a checked-in booking, the ring on the wall lights up:
+
+| Colour | Meaning |
+|---|---|
+| **Blue** | The room is free next. Press **A**, the code, **#** for +30 min. |
+| **Red** | No extension: someone booked straight after, the room is closing, or the booking is already at the maximum length. |
+
+The lit LEDs count down: 16 at 10 minutes left, one fewer about every 37 s.
+In the last minute the ring pulses. It is off at all other times. The server
+works out "can extend" on every status poll (every 30 s) with the same rules
+as the real extension, so the colour changes if someone books the next slot.
+
+**Try it:** with a checked-in booking ending in under 10 minutes, the ring is
+blue. Book the slot straight after it as another student: within 30 s it
+turns red. Extend instead: the ring goes off (more than 10 minutes left).
 
 ## End of booking: reminder, extend, time's up, overstay
 
@@ -211,12 +228,12 @@ sig,ms,occupied,x,y,state
 | Column | Meaning |
 |---|---|
 | `occupied` | the truth: PEOPLE switch or PIR |
-| `x` | the noisy reading |
+| `x` | the raw motion reading (intermittent) |
 | `y` | the filtered signal |
 | `state` | 0 empty, 1 occupied, 2 warning |
 
-Copy a few minutes of it, at different NOISE settings, to plot how well the
-filter separates real presence from noise.
+Copy a few minutes of it to plot how the filter turns intermittent motion
+into a steady occupied / empty decision.
 
 **Changing the firmware:** after editing `sketch.ino`, rebuild with the
 checkmark before starting the simulator again.
@@ -253,7 +270,7 @@ the app wasn't redeployed after adding it.
   switched by the ESP32 itself from its own sensor, so the room keeps working
   if Wi-Fi drops. The server is told afterwards, and only the server changes
   bookings, such as an early release.
-- **Signal chain:** samples every 200 ms, deliberate noise injection, a
+- **Signal chain:** samples every 200 ms (motion is intermittent), a
   first-order low-pass filter (y[n] = 0.1 x[n] + 0.9 y[n-1], time constant
   1.9 s), two thresholds with a gap between them (0.35 on / 0.08 off) so
   the state can't flicker, a vacancy timer, and a blinking warning before

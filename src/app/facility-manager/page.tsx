@@ -19,10 +19,12 @@ import { toast, Toaster } from "sonner";
 import AppShell from "@/components/app-shell";
 import FacilityIso from "@/components/facility-iso";
 import RoomPanel from "@/components/room-panel";
+import RoomReports from "@/components/room-reports";
+import { issuesByFacility, type ReportCategory, type ReportUrgency } from "@/lib/reports";
 import { ensureProfile } from "@/lib/profile";
 import {
   Boxes, CalendarDays, Check, CheckCircle2, Clock, Inbox, Loader2, MapPin,
-  PackageSearch, UserX, Users2, X,
+  PackageSearch, UserX, Users2, X, TriangleAlert,
 } from "lucide-react";
 
 interface Row extends Reservation {
@@ -110,6 +112,7 @@ export default function ManagerDashboard() {
 
   // UI state
   const [selected, setSelected] = useState<string | null>(null); // facility filter
+  const [openIssues, setOpenIssues] = useState<{ facility_id: string; category: ReportCategory; urgency: ReportUrgency }[]>([]);
   const [acting, setActing] = useState<string | null>(null);     // reservation being updated
   const [nowMs, setNowMs] = useState(0);                          // ticking clock (never Date.now() in render)
 
@@ -179,6 +182,10 @@ export default function ManagerDashboard() {
       .from("lost_and_found").select("*").in("facility_id", ids)
       .order("created_at", { ascending: false });
     setLostItems((lf as LostFoundItem[]) ?? []);
+
+    // open room problems, for the badges on the room cards (absent before upgrade-room-reports.sql)
+    const { data: iss } = await supabase.from("facility_open_issues").select("facility_id, category, urgency").in("facility_id", ids);
+    setOpenIssues((iss as { facility_id: string; category: ReportCategory; urgency: ReportUrgency }[]) ?? []);
   }, []);
 
   const [loading, setLoading] = useState(true);
@@ -306,6 +313,7 @@ export default function ManagerDashboard() {
     const g = days.find(([d]) => d === k);
     if (g) g[1].push(r); else days.push([k, [r]]);
   });
+  const issues = issuesByFacility(openIssues);
   const selectedFacility = selected ? fById(selected) : null;
 
   return (
@@ -397,6 +405,12 @@ export default function ManagerDashboard() {
                       {f.status !== "active" && (
                         <span className="absolute left-2 top-2 rounded-full bg-card/90 px-2 py-0.5 text-[11px] font-medium capitalize shadow">
                           {f.status}
+                        </span>
+                      )}
+                      {issues[f.id] && (
+                        <span className={`absolute bottom-2 left-2 flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold shadow ${
+                          issues[f.id].urgent ? "bg-destructive text-primary-foreground" : "bg-card text-primary"}`}>
+                          <TriangleAlert className="h-3 w-3" /> {issues[f.id].count} problem{issues[f.id].count > 1 ? "s" : ""}
                         </span>
                       )}
                     </div>
@@ -593,6 +607,12 @@ export default function ManagerDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* problems students reported in my rooms (follows the room filter above) */}
+        <RoomReports facilityId={selected} compact onActiveCount={async () => {
+          const { data: iss } = await supabase.from("facility_open_issues").select("facility_id, category, urgency").in("facility_id", assignedIds);
+          setOpenIssues((iss as { facility_id: string; category: ReportCategory; urgency: ReportUrgency }[]) ?? []);
+        }} />
 
         {/* smart room readings: only shown if one of my rooms has a device */}
         <RoomPanel hideWhenEmpty heading="Smart room" />

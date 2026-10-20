@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   checkCode, codeWindow, doorCode, earlyReleaseDecision, extendReason, isDeviceEvent, openableNow,
-  overstayBooking, roomStatus, safeEqual, type DoorBooking,
+  overstayBooking, roomStatus, safeEqual, extensionAvailability, type DoorBooking,
 } from "./room-logic";
 import { myAt } from "./time";
 
@@ -186,5 +186,24 @@ describe("end of booking", () => {
     }
     expect(isDeviceEvent("overstay")).toBe(true);
     expect(isDeviceEvent("booking_ended")).toBe(true);
+  });
+});
+
+describe("extension availability (ambient light)", () => {
+  const cur = { start_time: myAt(day, "15:00").toISOString(), end_time: myAt(day, "16:00").toISOString() };
+  const rule = { close_time: "22:00:00", max_duration_mins: 120 };
+
+  it("full 30 min when the room is free next", () => {
+    expect(extensionAvailability(cur, null, rule)).toEqual({ ok: true, mins: 30, reason: "ok" });
+  });
+  it("partial when the next booking is 20 min away; refused when it is 10 min away", () => {
+    expect(extensionAvailability(cur, myAt(day, "16:20").toISOString(), rule)).toEqual({ ok: true, mins: 20, reason: "ok" });
+    expect(extensionAvailability(cur, myAt(day, "16:10").toISOString(), rule)).toMatchObject({ ok: false, reason: "next_slot_taken" });
+    expect(extensionAvailability(cur, myAt(day, "16:00").toISOString(), rule)).toMatchObject({ ok: false, reason: "next_slot_taken" });
+  });
+  it("respects closing time and the room's maximum length", () => {
+    expect(extensionAvailability(cur, null, { close_time: "16:10:00", max_duration_mins: 120 })).toMatchObject({ ok: false, reason: "closing_time" });
+    expect(extensionAvailability(cur, null, { close_time: "22:00:00", max_duration_mins: 70 })).toMatchObject({ ok: false, reason: "max_length" });
+    expect(extensionAvailability(cur, null, { close_time: "22:00:00", max_duration_mins: 80 })).toEqual({ ok: true, mins: 20, reason: "ok" });
   });
 });

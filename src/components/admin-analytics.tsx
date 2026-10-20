@@ -39,11 +39,14 @@ function Kpi({ label, value }: { label: string; value: string }) {
   );
 }
 
+const nameOf = (facilities: Facility[], id: string) => facilities.find((f) => f.id === id)?.name ?? "-";
+
 export default function AdminAnalytics() {
   const [res, setRes] = useState<Res[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [evalEvents, setEvalEvents] = useState<{ kind: string; bool_value: boolean | null }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [nowMs, setNowMs] = useState(0); // set after loading; never Date.now() during render
 
   useEffect(() => {
     (async () => {
@@ -55,6 +58,7 @@ export default function AdminAnalytics() {
       setRes((r as Res[]) ?? []);
       setFacilities((f as Facility[]) ?? []);
       setEvalEvents((ev as { kind: string; bool_value: boolean | null }[]) ?? []);
+      setNowMs(Date.now());
       setLoading(false);
     })();
   }, []);
@@ -69,7 +73,6 @@ export default function AdminAnalytics() {
     return { acceptRate, helpfulRate, feedbackCount: feedback.length };
   }, [evalEvents]);
 
-  const fname = (id: string) => facilities.find((f) => f.id === id)?.name ?? "-";
 
   const kpis = useMemo(() => {
     const total = res.length;
@@ -81,11 +84,11 @@ export default function AdminAnalytics() {
     res.forEach((r) => { byFac[r.facility_id] = (byFac[r.facility_id] ?? 0) + 1; });
     const busiest = Object.entries(byFac).sort((a, b) => b[1] - a[1])[0];
     // no-show rate: of approved bookings that have already started
-    const elapsed = res.filter((r) => r.status === "approved" && new Date(r.start_time).getTime() <= Date.now());
+    const elapsed = res.filter((r) => r.status === "approved" && new Date(r.start_time).getTime() <= nowMs);
     const noShows = elapsed.filter((r) => r.no_show).length;
     const noShowRate = elapsed.length ? Math.round((noShows / elapsed.length) * 100) : 0;
-    return { total, rate, avgPax, busiest: busiest ? fname(busiest[0]) : "-", noShowRate };
-  }, [res, facilities]);
+    return { total, rate, avgPax, busiest: busiest ? nameOf(facilities, busiest[0]) : "-", noShowRate };
+  }, [res, facilities, nowMs]);
 
   const daily = useMemo(() => {
     const days: { date: string; count: number }[] = [];
@@ -103,7 +106,7 @@ export default function AdminAnalytics() {
     const m: Record<string, number> = {};
     res.forEach((r) => { m[r.facility_id] = (m[r.facility_id] ?? 0) + 1; });
     return Object.entries(m)
-      .map(([id, count]) => ({ name: fname(id), count }))
+      .map(([id, count]) => ({ name: nameOf(facilities, id), count }))
       .sort((a, b) => b.count - a.count).slice(0, 8);
   }, [res, facilities]);
 

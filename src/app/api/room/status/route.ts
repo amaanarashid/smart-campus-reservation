@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authDevice, config, roomBookings } from "@/lib/room-server";
-import { roomStatus } from "@/lib/room-logic";
+import { extensionAvailability, roomStatus } from "@/lib/room-logic";
 
 /**
  * The door device polls this every ~30 s.
@@ -25,6 +25,31 @@ export async function GET(req: NextRequest) {
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
 
   const now = new Date();
-  const status = roomStatus(await roomBookings(cfg.db, auth.device.facility_id, now), now);
-  return NextResponse.json({ ok: true, room: auth.device.label, now: now.toISOString(), ...status });
+  const bookings = await roomBookings(cfg.db, auth.device.facility_id, now);
+  const status = roomStatus(bookings, now);
+
+  // For the room's ambient light in the last 10 minutes: can the group extend?
+  let extension: ReturnType<typeof extensionAvailability> | null = null;
+  if (status.current) {
+    const [{ data: next }, { data: rule }] = await Promise.all([
+      cfg.db.from("reservations").select("start_time")
+        .eq("facility_id", auth.device.facility_id).in("status", ["pending", "approved"])
+        .gte("start_time", status.current.ends_at).order("start_time").limit(1).maybeSingle(),
+      cfg.db.from("effective_facility_rules").select("close_time, max_duration_mins")
+        .eq("facility_id", auth.device.facility_id).maybeSingle(),
+    ]);
+    // the running booking's own start is needed for the max-length limit
+    const running = bookings.find((b) => b.end_time === status.current!.ends_at);
+    if (running) extension = extensionAvailability(running, next?.start_time ?? null, rule ?? null);
+  }
+
+  return NextResponse.json({
+    ok: true, room: auth.device.label, now: now.toISOString(), ...status,
+    current: status.current && {
+      ...status.current,
+      can_extend: extension?.ok ?? false,
+      extend_mins: extension?.mins ?? 0,
+      extend_reason: extension?.reason ?? null,
+    },
+  });
 }

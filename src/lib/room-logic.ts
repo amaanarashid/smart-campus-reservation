@@ -1,5 +1,5 @@
 import { createHmac, createHash } from "node:crypto";
-import { fmtTime } from "./time";
+import { fmtTime, myAt, myDateKey } from "./time";
 
 /**
  * Smart-room access logic. Server-only (uses node:crypto) and free of I/O, so
@@ -135,6 +135,39 @@ export const EXTEND_REASONS: Record<string, { line1: string; line2: string; app:
 };
 export const extendReason = (r: string | undefined) =>
   EXTEND_REASONS[r ?? ""] ?? { line1: "Can't extend", line2: "Try the app", app: "The booking could not be extended." };
+
+/** Same numbers as extend_booking() in upgrade-room-end.sql. */
+export const EXTEND_STEP_MINS = 30;
+export const EXTEND_MIN_MINS = 15;
+
+/**
+ * Could the running booking be extended right now? Mirrors extend_booking():
+ * +30 min, cut short by closing time, the room's maximum booking length and
+ * the next booking (pending ones hold the slot too); at least 15 min or no.
+ * Used for the room's ambient light - blue "you can extend", red "you can't" -
+ * so it is advice; the database still decides when A + code is pressed.
+ */
+export function extensionAvailability(
+  current: Pick<DoorBooking, "start_time" | "end_time">,
+  nextStart: string | null,
+  rule: { close_time: string; max_duration_mins: number } | null,
+): { ok: boolean; mins: number; reason: "ok" | "next_slot_taken" | "closing_time" | "max_length" } {
+  const start = new Date(current.start_time).getTime();
+  const end = new Date(current.end_time).getTime();
+  const limits: [number, "next_slot_taken" | "closing_time" | "max_length"][] = [];
+  if (nextStart) limits.push([new Date(nextStart).getTime(), "next_slot_taken"]);
+  if (rule) {
+    limits.push([myAt(myDateKey(new Date(start)), rule.close_time.slice(0, 5)).getTime(), "closing_time"]);
+    limits.push([start + rule.max_duration_mins * 60_000, "max_length"]);
+  }
+  let newEnd = end + EXTEND_STEP_MINS * 60_000;
+  let reason: "ok" | "next_slot_taken" | "closing_time" | "max_length" = "ok";
+  for (const [limit, why] of limits) {
+    if (limit < newEnd) { newEnd = limit; reason = why; }
+  }
+  const mins = Math.max(0, Math.round((newEnd - end) / 60_000));
+  return mins >= EXTEND_MIN_MINS ? { ok: true, mins, reason: "ok" } : { ok: false, mins: 0, reason: reason === "ok" ? "max_length" : reason };
+}
 
 // ------------------------------------------------------------- overstay --
 

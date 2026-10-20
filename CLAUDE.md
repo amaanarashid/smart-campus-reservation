@@ -161,6 +161,7 @@ triggers.
 pg_cron every minute; discussion rooms default to 10 min; also fixes UTC times
 in booking notifications), `upgrade-room-access.sql` (`room_devices`,
 `room_events`, `door_facilities` view, `register_room_device()`),
+`upgrade-room-reports.sql` (room feedback),
 `upgrade-room-end.sql` (`extend_booking()` +30 min within close time / max
 length / next booking; `remind_booking_end()` on pg_cron; new room event
 kinds `booking_ended`, `overstay`, `extended`, `extend_denied`).
@@ -176,12 +177,16 @@ booking early via `earlyReleaseDecision`), `api/bookings/code`. Vercel needs
 `firmware/door-wokwi/` (one sketch: door + room automation; PlatformIO build
 for the Wokwi VS Code extension; setup and test steps in its README). Presence
 is filtered on-device (IIR a=0.1, hysteresis 0.35/0.08, vacancy timer, warning
-blink); lights follow presence, AC follows bookings (pre-cool 5 min) and
+blink; noise slider removed); lights follow presence, AC follows bookings (pre-cool 5 min) and
 presence. Rooms with a door have no in-app check-in: the keypad is the
 check-in. End of booking: phone reminder at 10 min (pg_cron), OLED countdown,
 extend via keypad (A + code + #, `api/room/extend`) or app
 (`api/bookings/extend`), "time's up" + AC off, overstay reported after
 vacancy+warning+1 min and managers notified once (`overstayBooking`).
+Ambient light: 16-LED NeoPixel ring on GPIO 12, last 10 min of a checked-in
+booking, blue = extension possible / red = not (from `can_extend` in
+`api/room/status`, computed by `extensionAvailability` with the same rules as
+`extend_booking()`), LEDs count down, pulses in the final minute.
 Energy: `src/lib/energy.ts` (E = P×t; lights 0.12 kW, AC 1.1 kW, CO₂
 0.585 kg/kWh — assumptions) compares a conventional room (on for every booked
 minute incl. no-shows/early leavers) with the device's real on-time; shown in
@@ -196,6 +201,20 @@ from bookings and labelled so). Polls events every 5 s, energy every 60 s.
 Scenes by type via `lib/scene.ts` (room, net_court, court, hall, pool, gym,
 generic). Needs `three` (run `npm install`). Tests: 106 vitest cases incl.
 `energy.test.ts`, `twin-state.test.ts`.
+
+**Room feedback** — `supabase/upgrade-room-reports.sql`: `room_reports`
+(category, urgency, description, status open → in_progress → resolved /
+dismissed, staff note). RLS: students insert their own (optionally tied to
+their own booking) and see only their own; a room's managers and admins see
+and update; a guard trigger lets staff change only status/note, stamps
+`handled_by`, and limits 5 reports/hour. Triggers notify the room's managers
+(admins if none) on a new report and the student on each status change, and
+write the activity log. `facility_open_issues` view shows open issues per room
+(category only, no names/text) for the "Known issue" badge. UI:
+`components/report-problem-dialog.tsx` (student, from a booking within 15 min
+before start to 24 h after end), `components/room-reports.tsx` (inbox on the
+manager dashboard, follows the room filter; admin "Feedback" tab). Pure rules
+in `lib/reports.ts` (tested). 23 database checks passed on Postgres 17.
 
 **Test data** — `supabase/seed-test-data.sql` (re-runnable; dates relative
 to today in Malaysia time; needs the three demo accounts to exist first) and

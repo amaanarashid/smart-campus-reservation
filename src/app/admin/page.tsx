@@ -17,11 +17,12 @@ import {
   Users, CalendarRange, Clock, Building2, ClipboardCheck, Package,
   Plus, ChevronDown, ScrollText, LayoutDashboard, BarChart3,
   Trash2, MapPin, Users2, ShieldCheck, GraduationCap, UserCog, Activity,
-  ArrowRight, Check, X, Loader2, Search, Cpu,
+  ArrowRight, Check, X, Loader2, Search, Cpu, MessageSquareWarning,
 } from "lucide-react";
 import AdminAnalytics from "@/components/admin-analytics";
 import FacilityIso from "@/components/facility-iso";
 import FacilityDetail from "@/components/facility-detail";
+import RoomReports from "@/components/room-reports";
 import { fmtRelativeDay, fmtTime, myAt, myDateKey } from "@/lib/time";
 
 interface FmRow { id: string; facility_id: string; manager_id: string }
@@ -81,13 +82,14 @@ export default function AdminDashboard() {
   const [activity, setActivity] = useState<ActivityLog[]>([]);
   const [logFilter, setLogFilter] = useState<string>("all");
   const [logSearch, setLogSearch] = useState("");
-  const [tab, setTab] = useState<"overview" | "analytics" | "rooms" | "facilities" | "users" | "approvals" | "equipment" | "records">("overview");
+  const [tab, setTab] = useState<"overview" | "analytics" | "rooms" | "facilities" | "users" | "approvals" | "feedback" | "equipment" | "records">("overview");
   const [allUsers, setAllUsers] = useState<Profile[]>([]);
   const [userSearch, setUserSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | keyof typeof ROLE_META>("all");
   const [todayRes, setTodayRes] = useState<Reservation[]>([]); // approved + pending, today (MYT)
   const [acting, setActing] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(0); // ticking clock; never Date.now() during render
+  const [feedbackCount, setFeedbackCount] = useState(0);         // open room problems
   const [openFac, setOpenFac] = useState<string | null>(null);   // facility detail open
   const [facFilter, setFacFilter] = useState<string>("all");
   const [facSearch, setFacSearch] = useState("");
@@ -144,6 +146,11 @@ export default function AdminDashboard() {
     // which rooms have a smart device (view from upgrade-room-end.sql; absent = none)
     const { data: devs } = await supabase.from("room_devices_visible").select("facility_id");
     setSmartIds(new Set(((devs as { facility_id: string }[] | null) ?? []).map((d) => d.facility_id)));
+
+    // open room problems reported by students (table from upgrade-room-reports.sql)
+    const { count: fb } = await supabase.from("room_reports")
+      .select("id", { count: "exact", head: true }).in("status", ["open", "in_progress"]);
+    setFeedbackCount(fb ?? 0);
 
     const { data: log } = await supabase
       .from("activity_log").select("*")
@@ -310,6 +317,7 @@ export default function AdminDashboard() {
     { key: "reservation", label: "Bookings", entities: ["reservation"] },
     { key: "facility", label: "Facilities", entities: ["facility", "facility_rule"] },
     { key: "lost_and_found", label: "Lost & found", entities: ["lost_and_found"] },
+    { key: "room_report", label: "Room problems", entities: ["room_report"] },
     { key: "facility_manager", label: "Managers", entities: ["facility_manager"] },
     { key: "equipment", label: "Equipment", entities: ["equipment"] },
     { key: "profile", label: "Users", entities: ["profile"] },
@@ -371,6 +379,7 @@ export default function AdminDashboard() {
               ["users", "Users", Users, allUsers.length],
               ["facilities", "Facilities", Building2, facilities.length],
               ["approvals", "Approvals", ClipboardCheck, unassignedPending.length],
+              ["feedback", "Feedback", MessageSquareWarning, feedbackCount],
               ["equipment", "Equipment", Package, 0],
               ["records", "Records", ScrollText, 0],
             ] as const).map(([key, label, Icon, count]) => (
@@ -1100,6 +1109,10 @@ export default function AdminDashboard() {
             </Card>
           )}
           </div>)}
+
+          {tab === "feedback" && (
+            <div key="fb" className="animate-reveal"><RoomReports onActiveCount={setFeedbackCount} /></div>
+          )}
 
           {tab === "approvals" && (
           <Card key="appr" className="animate-reveal" style={{ animationDelay: "50ms" }}>

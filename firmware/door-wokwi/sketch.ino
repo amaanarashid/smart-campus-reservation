@@ -23,10 +23,15 @@
  *             - if a checked-in group leaves early and the room stays empty,
  *               the rest of the booking is released for others
  *
+ * AMBIENT LIGHT  a 16-LED ring on the wall, for the last 10 minutes only:
+ *             BLUE = the room is free next, press A + code + # to extend
+ *             RED  = no extension (next booking, closing time or max length)
+ *             LEDs go out one by one as a countdown; it pulses in the final
+ *             minute. The server says whether an extension is possible.
+ *
  * Presence signal chain (every T = 200 ms):
  *   x[n]  motion this sample: PIR, or the simulated occupants switch
- *   noise flip x[n] with probability eta (0..0.4, set by the NOISE slider) -
- *         false triggers when empty, dropouts when occupied, like a real sensor
+ *         (occupants only move in ~60% of samples, so x[n] is intermittent)
  *   y[n] = a*x[n] + (1-a)*y[n-1], a = 0.10     first-order IIR low-pass,
  *         time constant tau = -T/ln(1-a) = 1.9 s
  *   hysteresis: ROOM_EMPTY -> ROOM_OCCUPIED when y > 0.35;
@@ -39,7 +44,7 @@
  *   PEOPLE switch simulated occupants in the room (they fidget, so motion is
  *                 intermittent - the filter has to cope with that)
  *   PIR sensor    click it to simulate a single movement
- *   NOISE slider  how unreliable the sensor is
+ *   LED ring      ambient end-of-booking light (output)
  *
  * LOG_SIGNAL prints a CSV line every sample:  sig,ms,occupied,x,y,state
  * Copy it from the serial monitor to plot the filter for the report.
@@ -54,6 +59,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <ESP32Servo.h>
+#include <Adafruit_NeoPixel.h>
 
 // ------------------------------------------------------------------ CONFIG --
 const char *API_BASE   = "https://smart-campus-reservation.vercel.app";  // no trailing slash
@@ -72,10 +78,13 @@ const int PIN_LED_NO = 19;
 const int PIN_BUZZER = 5;
 // Room
 const int PIN_PIR    = 34;   // input-only pin, PIR drives it
-const int PIN_NOISE  = 35;   // ADC1 (ADC2 is unavailable while Wi-Fi is on)
 const int PIN_PEOPLE = 2;    // slide switch, INPUT_PULLUP: LOW = people in the room
 const int PIN_LIGHTS = 17;
 const int PIN_AC     = 15;
+// Ambient light. GPIO 12 is a boot-strapping pin, but the ring's data input
+// does not pull it high, so it is safe to use as an output here.
+const int PIN_RING   = 12;
+const int RING_PIXELS = 16;
 
 const byte ROWS = 4, COLS = 4;
 char KEYS[ROWS][COLS] = {
@@ -94,7 +103,6 @@ const float ALPHA     = 0.10f;           // tau = -T/ln(1-a) = 1.9 s
 const float TH_ON     = 0.35f;           // EMPTY -> OCCUPIED
 const float TH_OFF    = 0.08f;           // below this counts as "no one moving"
 const float P_MOVE    = 0.60f;           // simulated occupant shows motion in a sample
-const float NOISE_MAX = 0.40f;           // NOISE slider at full = 40% flipped samples
 const bool  LOG_SIGNAL = true;
 
 // --------------------------------------------- timings (demo vs real values) --
@@ -114,6 +122,7 @@ const int LOCKED_DEG = 0, OPEN_DEG = 90;
 Keypad keypad = Keypad(makeKeymap(KEYS), ROW_PINS, COL_PINS, ROWS, COLS);
 Adafruit_SSD1306 oled(128, 64, &Wire, -1);
 Servo lockServo;
+Adafruit_NeoPixel ring(RING_PIXELS, PIN_RING, NEO_GRB + NEO_KHZ800);
 
 // -------------------------------------------------------------------- state --
 // door + screen
@@ -142,6 +151,10 @@ bool extendMode = false;                 // A pressed: the next code extends ins
 String endedKey = "";                    // booking whose end has been handled
 unsigned long endedAt = 0;               // when the last booking ended (0 = not watching)
 bool overstaySent = false;
+// ambient light
+bool canExtend = false;                  // from the server: is an extension possible now?
+unsigned long lastRing = 0;
+uint32_t ringShown = 0xFFFFFFFF;         // last frame drawn, to skip redundant updates
 
 // =============================================================== helpers ==
 float frand() { return (float)(esp_random() % 10000) / 10000.0f; }
@@ -276,6 +289,7 @@ void refreshStatus() {
     bookingState = doc["state"].as<String>();
     minutesLeftAtPoll = doc["current"].isNull() ? -1 : doc["current"]["minutes_left"].as<long>();
     secsLeftAtPoll = doc["current"].isNull() ? -1 : (doc["current"]["seconds_left"] | (minutesLeftAtPoll * 60));
+    canExtend = !doc["current"].isNull() && (doc["current"]["can_extend"] | false);
     nextMinutesAtPoll = doc["next"].isNull() ? -1 : doc["next"]["minutes_until"].as<long>();
     polledAt = millis();
     String key = doc["current"].isNull() ? String("") : doc["current"]["ends_at"].as<String>();
@@ -399,10 +413,7 @@ void samplePresence() {
 
   bool people = digitalRead(PIN_PEOPLE) == LOW;
   bool pir = digitalRead(PIN_PIR) == HIGH;
-  float eta = NOISE_MAX * analogRead(PIN_NOISE) / 4095.0f;
-
-  int motion = (pir || (people && frand() < P_MOVE)) ? 1 : 0;
-  int x = (frand() < eta) ? 1 - motion : motion;          // sensor noise
+  int x = (pir || (people && frand() < P_MOVE)) ? 1 : 0;  // motion this sample
   presence = ALPHA * x + (1.0f - ALPHA) * presence;        // IIR low-pass
 
   switch (room) {
@@ -469,6 +480,34 @@ void endOfBooking() {
   // unless the next booking is about to start (pre-cooling)
 }
 
+// Ambient light for the last 10 minutes of a booking in use. Blue = can
+// extend, red = cannot. Lit LEDs = share of the 10 minutes left, so the ring
+// empties like a clock; in the final minute it pulses. Off at all other times.
+void updateRing() {
+  unsigned long now = millis();
+  if (now - lastRing < 50) return;       // 20 frames a second is plenty
+  lastRing = now;
+
+  long s = secsLeft();
+  bool show = bookingState == "in_use" && s >= 0 && s <= COUNTDOWN_S;
+  uint8_t r = 0, g = 0, b = 0;
+  int lit = 0;
+  if (show) {
+    lit = (int)((s * RING_PIXELS + COUNTDOWN_S - 1) / COUNTDOWN_S);   // ceil
+    if (lit < 1) lit = 1;
+    float level = 1.0f;
+    if (s <= 60) level = 0.35f + 0.65f * (0.5f + 0.5f * sinf(now / 180.0f));   // pulse
+    if (canExtend) { r = 0;   g = (uint8_t)(70 * level); b = (uint8_t)(255 * level); }
+    else           { r = (uint8_t)(255 * level); g = 0;  b = 0; }
+  }
+  uint32_t frame = ((uint32_t)lit << 24) | ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
+  if (frame == ringShown) return;
+  ringShown = frame;
+  for (int i = 0; i < RING_PIXELS; i++)
+    ring.setPixelColor(i, i < lit ? ring.Color(r, g, b) : 0);
+  ring.show();
+}
+
 void scheduleTasks() {
   long left = minutesLeft();
 
@@ -530,10 +569,13 @@ void setup() {
   pinMode(PIN_BUZZER, OUTPUT);
   pinMode(PIN_LIGHTS, OUTPUT);
   pinMode(PIN_AC, OUTPUT);
-  analogReadResolution(12);
 
   lockServo.setPeriodHertz(50);
   lockServo.attach(PIN_SERVO, 500, 2400);
+  ring.begin();
+  ring.setBrightness(80);
+  ring.clear();
+  ring.show();
   lockServo.write(LOCKED_DEG);
 
   if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) Serial.println("OLED not found");
@@ -573,6 +615,7 @@ void loop() {
   samplePresence();
   driveOutputs();
   scheduleTasks();
+  updateRing();
 
   if (millis() - lastStatus > STATUS_EVERY_MS) refreshStatus();
   if (msgUntil && millis() > msgUntil) { msgUntil = 0; draw(); }

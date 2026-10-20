@@ -25,10 +25,15 @@ import Chatbot from "@/components/chatbot";
 import AppShell from "@/components/app-shell";
 import FacilityIso from "@/components/facility-iso";
 import PopularTimes from "@/components/popular-times";
+import ReportProblemDialog, { CATEGORY_ICON } from "@/components/report-problem-dialog";
+import {
+  canReport, issuesByFacility, REPORT_CATEGORIES, REPORT_STATUS,
+  type ReportCategory, type ReportUrgency, type RoomReport,
+} from "@/lib/reports";
 import { logEvent } from "@/lib/evaluation";
 import {
   CalendarDays, Clock, CheckCircle2, ChevronRight, ChevronDown, ArrowLeft,
-  Sparkles, MapPin, Users2, CalendarX, Copy, KeyRound, Loader2,
+  Sparkles, MapPin, Users2, CalendarX, Copy, KeyRound, Loader2, TriangleAlert, MessageSquareWarning,
 } from "lucide-react";
 
 const STATUS_COLOR: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -113,6 +118,10 @@ export default function StudentDashboard() {
   const [bookingKey, setBookingKey] = useState<string | null>(null);
   const [showPast, setShowPast] = useState(false);
   const [extendingId, setExtendingId] = useState<string | null>(null);
+  // room feedback
+  const [myReports, setMyReports] = useState<RoomReport[]>([]);
+  const [openIssues, setOpenIssues] = useState<{ facility_id: string; category: ReportCategory; urgency: ReportUrgency }[]>([]);
+  const [reportFor, setReportFor] = useState<Reservation | null>(null);
   // A clock the UI re-renders from. Reading Date.now() during render is impure
   // (React Compiler can memoise it, leaving check-in buttons and deadlines
   // stale); this ticks every 30 s so time-dependent UI stays current.
@@ -127,6 +136,13 @@ export default function StudentDashboard() {
       .from("reservations").select("*").eq("user_id", uid)
       .order("start_time", { ascending: false }).limit(20);
     setMyBookings((data as Reservation[]) ?? []);
+    // own reports + known open issues (upgrade-room-reports.sql; absent = none)
+    const [{ data: rep }, { data: iss }] = await Promise.all([
+      supabase.from("room_reports").select("*").eq("reporter_id", uid).order("created_at", { ascending: false }).limit(50),
+      supabase.from("facility_open_issues").select("facility_id, category, urgency"),
+    ]);
+    setMyReports((rep as RoomReport[]) ?? []);
+    setOpenIssues((iss as { facility_id: string; category: ReportCategory; urgency: ReportUrgency }[]) ?? []);
   }, []);
 
   useEffect(() => {
@@ -467,6 +483,7 @@ export default function StudentDashboard() {
   const pastBookings = myBookings.filter((b) => !isActive(b));
 
   const todayKey = myDateKey(new Date(now || 0));
+  const issues = issuesByFacility(openIssues);
   const stepKey = !venue ? "venues" : !facility ? `venue:${venue}` : `facility:${facility.id}`;
 
   function renderBooking(b: Reservation, i: number) {
@@ -490,6 +507,8 @@ export default function StudentDashboard() {
     const endingSoon = canExtend && end.getTime() - now <= 10 * 60000;
     const released = b.status === "cancelled" && b.cancel_reason === "no_checkin";
     const faded = b.status === "cancelled" || b.status === "rejected" || end.getTime() <= now;
+    const reportable = canReport(b, now);
+    const reports = myReports.filter((r) => r.reservation_id === b.id);
 
     return (
       <div key={b.id} style={stagger(i)}
@@ -540,6 +559,20 @@ export default function StudentDashboard() {
               <span className="hidden max-w-[16rem] text-[11px] leading-snug text-muted-foreground sm:block">{code.hint}</span>
             </div>
           )}
+          {reports.map((r) => {
+            const Icon = CATEGORY_ICON[r.category];
+            const done = r.status === "resolved" || r.status === "dismissed";
+            return (
+              <p key={r.id} className={`mt-1.5 flex flex-wrap items-center gap-1.5 text-xs ${done ? "text-muted-foreground" : "text-foreground"}`}>
+                <Icon className="h-3.5 w-3.5 shrink-0 text-primary" />
+                You reported: {REPORT_CATEGORIES[r.category].toLowerCase()}
+                <Badge variant={r.status === "resolved" ? "default" : r.status === "dismissed" ? "outline" : "secondary"} className="h-5 px-1.5 text-[10px]">
+                  {REPORT_STATUS[r.status]}
+                </Badge>
+                {r.staff_note && <span className="text-muted-foreground">- {r.staff_note}</span>}
+              </p>
+            );
+          })}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           {released
@@ -574,6 +607,12 @@ export default function StudentDashboard() {
           )}
           {canCancel && (
             <Button size="sm" variant="outline" onClick={() => cancel(b)}>Cancel</Button>
+          )}
+          {reportable && (
+            <Button size="sm" variant="ghost" className="gap-1.5" onClick={() => setReportFor(b)}
+              title="Something wrong in the room? Tell the facility team">
+              <MessageSquareWarning className="h-3.5 w-3.5" /> Report a problem
+            </Button>
           )}
         </div>
       </div>
@@ -748,6 +787,12 @@ export default function StudentDashboard() {
                           <p className="flex items-center gap-1.5 pt-1 text-sm text-muted-foreground">
                             <Users2 className="h-3.5 w-3.5" /> up to {f.capacity} people
                           </p>
+                          {issues[f.id] && (
+                            <p className={`flex items-center gap-1.5 pt-1 text-xs font-medium ${issues[f.id].urgent ? "text-destructive" : "text-primary"}`}>
+                              <TriangleAlert className="h-3.5 w-3.5" />
+                              Known issue: {issues[f.id].categories.map((c) => REPORT_CATEGORIES[c].toLowerCase()).join(", ")}
+                            </p>
+                          )}
                           {r && (
                             <p className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
                               <Clock className="h-3.5 w-3.5" />
@@ -963,6 +1008,13 @@ export default function StudentDashboard() {
           </Card>
           </div>
         </>
+      )}
+      {reportFor && (
+        <ReportProblemDialog open={!!reportFor} onOpenChange={(v) => { if (!v) setReportFor(null); }}
+          facilityId={reportFor.facility_id}
+          facilityName={facilities.find((x) => x.id === reportFor.facility_id)?.name ?? "the room"}
+          reservationId={reportFor.id}
+          onSent={() => { if (profile) loadBookings(profile.id); }} />
       )}
       <Chatbot />
     </AppShell>

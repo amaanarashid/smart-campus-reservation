@@ -20,6 +20,8 @@ const DOT: Record<string, string> = {
   booking_ending: "bg-amber-500",
   booking_released: "bg-destructive",
   room_overstay: "bg-amber-500",
+  room_report: "bg-destructive",
+  room_report_update: "bg-green-500",
 };
 
 export default function NotificationBell() {
