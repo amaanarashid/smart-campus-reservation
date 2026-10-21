@@ -5,7 +5,8 @@
 Two parts: (A) get ready tonight, (B) the live demo tomorrow (about 10 min).
 Only show what is marked [WORKS]. Things marked [TESTING] may not work yet -
 try them tonight; if they fail, skip them and say "built, being tested".
-Do NOT demo remote control - it is not built yet (it is "in progress").
+Remote control (MQTT) is built: demo it only after the HiveMQ setup in
+firmware/door-wokwi/README.md and a dry run.
 
 Demo accounts (login page buttons, password demo1234):
   student@demo.campus   facility_manager@demo.campus   admin@demo.campus
@@ -126,6 +127,16 @@ B7b ROOM FEEDBACK                                      [needs migration]
     - As the manager: bell notification, "1 problem" on the room card, the
       report in "Room problems reported". Add a note, Start, then Resolve.
     - As the student: bell says it was resolved, with the note.
+
+B7c REMOTE CONTROL (MQTT)                          [needs HiveMQ setup]
+    Admin -> Smart room -> library room -> Remote control, Wokwi beside it.
+    - OLED shows "M" (MQTT connected).
+    - PEOPLE on, press Lights: off -> lights blink 10 s then off, panel
+      "done - people warned first", twin goes dark. Press auto.
+    - Door message "Closed for cleaning" -> appears on the OLED.
+    - Lock down keypad -> typing shows "Keypad disabled". Lift it.
+    Say: "commands are signed with HMAC, expire after 60 s and cannot be
+    replayed; if the broker is down they come over HTTP instead."
 
 B8  EVIDENCE                                                     [WORKS]
     Show the "106 passed" screenshot and docs/simulation/learning-curves.png

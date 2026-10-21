@@ -15,6 +15,7 @@ import {
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from "recharts";
+import RoomControls from "@/components/room-controls";
 import { twinReading, type TwinBooking, type TwinEvent } from "@/lib/twin-state";
 import { AC_KW, LIGHT_KW, energyReport, lastWeek, type EnergyBooking, type EnergyEvent } from "@/lib/energy";
 import { fmtDay, fmtRelativeDay, fmtTime, myAt, myDateKey } from "@/lib/time";
@@ -304,6 +305,9 @@ export default function FacilityDetail({ facility, rule, onBack }: {
           </CardContent>
         </Card>
       </div>
+
+      {/* remote control over MQTT: only for rooms with a device */}
+      {device && <RoomControls facilityId={facility.id} />}
 
       {/* energy chart */}
       {energy && (

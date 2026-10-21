@@ -161,7 +161,7 @@ triggers.
 pg_cron every minute; discussion rooms default to 10 min; also fixes UTC times
 in booking notifications), `upgrade-room-access.sql` (`room_devices`,
 `room_events`, `door_facilities` view, `register_room_device()`),
-`upgrade-room-reports.sql` (room feedback),
+`upgrade-room-reports.sql` (room feedback), `upgrade-room-commands.sql` (remote control),
 `upgrade-room-end.sql` (`extend_booking()` +30 min within close time / max
 length / next booking; `remind_booking_end()` on pg_cron; new room event
 kinds `booking_ended`, `overstay`, `extended`, `extend_denied`).
@@ -187,6 +187,19 @@ Ambient light: 16-LED NeoPixel ring on GPIO 12, last 10 min of a checked-in
 booking, blue = extension possible / red = not (from `can_extend` in
 `api/room/status`, computed by `extensionAvailability` with the same rules as
 `extend_booking()`), LEDs count down, pulses in the final minute.
+Remote control over MQTT: `supabase/upgrade-room-commands.sql` (`room_commands`,
+staff read-only, only the API writes, activity log trigger); `POST
+api/room/command` (admin or the room's manager; validates, saves, signs with
+HMAC-SHA256 keyed by the device's `key_hash`, publishes to
+`campus/rooms/<device>/cmd` over TLS via `lib/mqtt-publish.ts`, env
+`MQTT_URL`/`MQTT_USERNAME`/`MQTT_PASSWORD`, HiveMQ Cloud); `POST api/room/ack`
+(device confirms → done/failed); `api/room/status` also returns pending signed
+commands (HTTP fallback) and the lockdown state. Commands: unlock, lights/ac
+on/off/auto for N min, door message, lockdown. Pure logic
+`lib/room-commands.ts` (+ client-safe `room-commands-shared.ts`), tested.
+Firmware: PubSubClient TLS, verifies HMAC (mbedtls), expiry (NTP), dedupe,
+acts, acks. UI `components/room-controls.tsx` (facility detail + manager room
+panel). Verified end to end with a local broker and a separate verifier.
 Energy: `src/lib/energy.ts` (E = P×t; lights 0.12 kW, AC 1.1 kW, CO₂
 0.585 kg/kWh — assumptions) compares a conventional room (on for every booked
 minute incl. no-shows/early leavers) with the device's real on-time; shown in

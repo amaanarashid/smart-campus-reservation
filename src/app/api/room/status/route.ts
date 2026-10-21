@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { authDevice, config, roomBookings } from "@/lib/room-server";
 import { extensionAvailability, roomStatus } from "@/lib/room-logic";
+import { signCommand, type CommandArgs } from "@/lib/room-commands";
 
 /**
  * The door device polls this every ~30 s.
@@ -43,8 +45,13 @@ export async function GET(req: NextRequest) {
     if (running) extension = extensionAvailability(running, next?.start_time ?? null, rule ?? null);
   }
 
+  // Remote commands: anything still waiting (the HTTP fallback for MQTT), and
+  // the lockdown state, so a device that restarts comes back locked down.
+  const remote = await pendingCommands(cfg.db, auth.device.id, now);
+
   return NextResponse.json({
     ok: true, room: auth.device.label, now: now.toISOString(), ...status,
+    commands: remote.commands, lockdown: remote.lockdown,
     current: status.current && {
       ...status.current,
       can_extend: extension?.ok ?? false,
@@ -52,4 +59,27 @@ export async function GET(req: NextRequest) {
       extend_reason: extension?.reason ?? null,
     },
   });
+}
+
+/** Signed pending commands for the device, and whether it is locked down. Tolerates the table not existing yet. */
+async function pendingCommands(db: SupabaseClient, deviceId: string, now: Date) {
+  const nowIso = now.toISOString();
+  // housekeeping: anything past its expiry and never confirmed
+  await db.from("room_commands").update({ status: "expired" })
+    .eq("device_id", deviceId).eq("status", "sent").lt("expires_at", nowIso);
+  const [{ data: pend, error }, { data: dev }, { data: lock }] = await Promise.all([
+    db.from("room_commands").select("id, kind, args, expires_at")
+      .eq("device_id", deviceId).eq("status", "sent").gte("expires_at", nowIso).order("issued_at").limit(10),
+    db.from("room_devices").select("key_hash").eq("id", deviceId).maybeSingle(),
+    db.from("room_commands").select("args").eq("device_id", deviceId).eq("kind", "lockdown")
+      .in("status", ["sent", "done"]).order("issued_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  if (error || !dev) return { commands: [], lockdown: false };
+  const nowS = Math.floor(now.getTime() / 1000);
+  const commands = (pend ?? []).map((c) => {
+    const s = signCommand(c.id, { kind: c.kind, args: c.args } as CommandArgs, dev.key_hash, nowS,
+      Math.floor(new Date(c.expires_at).getTime() / 1000));
+    return { cmd: s.cmd, sig: s.sig };
+  });
+  return { commands, lockdown: !!(lock?.args as { on?: boolean } | null)?.on };
 }

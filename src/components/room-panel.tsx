@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import FacilityIso from "@/components/facility-iso";
+import RoomControls from "@/components/room-controls";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from "recharts";
@@ -280,6 +281,9 @@ export default function RoomPanel({ hideWhenEmpty = false, heading }: { hideWhen
           </div>
         </div>
       </Card>
+
+      {/* remote control (the API lets only admins and this room's managers use it) */}
+      <RoomControls facilityId={device.facility_id} />
 
       {/* energy */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

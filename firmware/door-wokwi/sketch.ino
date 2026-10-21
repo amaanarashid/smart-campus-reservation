@@ -29,6 +29,18 @@
  *             LEDs go out one by one as a countdown; it pulses in the final
  *             minute. The server says whether an extension is possible.
  *
+ * REMOTE     Admins / the room's managers control the room from the web app
+ *           (next to its 3D twin). Commands arrive over MQTT (TLS, HiveMQ
+ *           Cloud), signed with HMAC-SHA256 using SHA-256(DEVICE_KEY) as the
+ *           key; the device rejects bad signatures, expired and repeated
+ *           commands, acts, and confirms over HTTP. If MQTT is down, the same
+ *           commands come with the 30 s status poll instead.
+ *             unlock      open the door for a few seconds
+ *             lights / ac force on or off for N minutes, or back to auto
+ *                         (lights are never cut on people without a 10 s blink)
+ *             message     text on the door screen
+ *             lockdown    keypad disabled until lifted
+ *
  * Presence signal chain (every T = 200 ms):
  *   x[n]  motion this sample: PIR, or the simulated occupants switch
  *         (occupants only move in ~60% of samples, so x[n] is intermittent)
@@ -60,11 +72,21 @@
 #include <Adafruit_SSD1306.h>
 #include <ESP32Servo.h>
 #include <Adafruit_NeoPixel.h>
+#include <PubSubClient.h>
+#include <time.h>
+#include "mbedtls/md.h"
 
 // ------------------------------------------------------------------ CONFIG --
 const char *API_BASE   = "https://smart-campus-reservation.vercel.app";  // no trailing slash
 const char *DEVICE_ID  = "f5ea6baa-1b10-46da-b125-cec0f9135f20";        // from register_room_device()
 const char *DEVICE_KEY = "library-door-demo-7Qx92kLm4Tz8";
+
+// MQTT broker for remote control (HiveMQ Cloud -> your cluster -> Overview /
+// Access Management). Leave MQTT_HOST empty to use only the HTTP fallback.
+const char *MQTT_HOST = "f16c11e6.ala.asia-southeast1.emqxsl.com";   // EMQX Cloud Serverless
+const int   MQTT_PORT = 8883;            // TLS
+const char *MQTT_USER = "campus-room";
+const char *MQTT_PASS = "campus-room123";
 
 const char *WIFI_SSID = "Wokwi-GUEST";   // Wokwi's simulated internet access
 const char *WIFI_PASS = "";
@@ -123,6 +145,8 @@ Keypad keypad = Keypad(makeKeymap(KEYS), ROW_PINS, COL_PINS, ROWS, COLS);
 Adafruit_SSD1306 oled(128, 64, &Wire, -1);
 Servo lockServo;
 Adafruit_NeoPixel ring(RING_PIXELS, PIN_RING, NEO_GRB + NEO_KHZ800);
+WiFiClientSecure mqttNet;
+PubSubClient mqtt(mqttNet);
 
 // -------------------------------------------------------------------- state --
 // door + screen
@@ -155,6 +179,18 @@ bool overstaySent = false;
 bool canExtend = false;                  // from the server: is an extension possible now?
 unsigned long lastRing = 0;
 uint32_t ringShown = 0xFFFFFFFF;         // last frame drawn, to skip redundant updates
+// remote control
+String keyHash = "";                     // SHA-256(DEVICE_KEY), hex = the command signing key
+String cmdTopic = "";
+String seenIds[8];                       // last commands run (MQTT and HTTP may both deliver one)
+int seenNext = 0;
+unsigned long lastMqttTry = 0;
+String pendingCmd = "", pendingSig = "";  // received in the MQTT callback, run in loop()
+int lightsOverride = -1, acOverride = -1; // -1 automatic, 0 forced off, 1 forced on
+unsigned long lightsOverrideUntil = 0, acOverrideUntil = 0, lightsOffWarnUntil = 0;
+bool lockdown = false;
+String remoteLine1 = "", remoteLine2 = "";
+unsigned long remoteMsgUntil = 0;
 
 // =============================================================== helpers ==
 float frand() { return (float)(esp_random() % 10000) / 10000.0f; }
@@ -182,16 +218,27 @@ void draw() {
   bool showMsg = millis() < msgUntil;
   long s = secsLeft();
   bool countdown = !showMsg && bookingState == "in_use" && s >= 0 && s <= COUNTDOWN_S;
+  bool remoteMsg = !showMsg && !countdown && millis() < remoteMsgUntil;
   oled.setCursor(0, 0);
-  if (countdown) {
+  if (lockdown && !showMsg) {
+    oled.println("LOCKED DOWN");
+    oled.setCursor(0, 11);
+    oled.println("Contact staff");
+  } else if (remoteMsg) {
+    oled.println(remoteLine1);
+    oled.setCursor(0, 11);
+    oled.println(remoteLine2);
+  } else if (countdown) {
     char buf[22];
     snprintf(buf, sizeof(buf), "ENDS IN %ld:%02ld", s / 60, s % 60);
     oled.println(buf);
   } else {
     oled.println(showMsg ? msgLine1 : statusLine1);
   }
-  oled.setCursor(0, 11);
-  oled.println(countdown ? String("A = extend +30 min") : (showMsg ? msgLine2 : statusLine2));
+  if (!(lockdown && !showMsg) && !remoteMsg) {
+    oled.setCursor(0, 11);
+    oled.println(countdown ? String("A = extend +30 min") : (showMsg ? msgLine2 : statusLine2));
+  }
   oled.drawLine(0, 22, 127, 22, SSD1306_WHITE);
 
   if (unlocked) {
@@ -220,7 +267,9 @@ void draw() {
   if (lightsOn) oled.fillRect(85, 55, 8, 8, SSD1306_WHITE); else oled.drawRect(85, 55, 8, 8, SSD1306_WHITE);
   oled.setCursor(98, 55); oled.print("A");
   if (acOn) oled.fillRect(105, 55, 8, 8, SSD1306_WHITE); else oled.drawRect(105, 55, 8, 8, SSD1306_WHITE);
-  if (WiFi.status() != WL_CONNECTED) { oled.setCursor(116, 55); oled.print("!"); }
+  oled.setCursor(118, 55);
+  if (WiFi.status() != WL_CONNECTED) oled.print("!");
+  else if (mqtt.connected()) oled.print("M");   // remote control link up
   oled.display();
 }
 
@@ -294,6 +343,11 @@ void refreshStatus() {
     polledAt = millis();
     String key = doc["current"].isNull() ? String("") : doc["current"]["ends_at"].as<String>();
     if (key != bookingKey) { bookingKey = key; remind10 = remind5 = releaseSent = false; }
+    // remote control, HTTP fallback: lockdown state and any commands still waiting
+    bool ld = doc["lockdown"] | false;
+    if (ld != lockdown) { lockdown = ld; code = ""; extendMode = false; }
+    for (JsonVariant c : doc["commands"].as<JsonArray>())
+      handleCommand(c["cmd"].as<String>(), c["sig"].as<String>(), "http");
   } else if (status == 401) {
     statusLine1 = "Device not registered"; statusLine2 = "check ID / key";
   } else {
@@ -449,7 +503,15 @@ void driveOutputs() {
   bool lightsWanted = room != ROOM_EMPTY;
   bool acWanted = preCool || (running && (room != ROOM_EMPTY || bookingState == "booked"));
 
-  bool blinkOff = (room == ROOM_WARNING) && ((millis() / 400) % 2 == 0);
+  // remote overrides win until they expire, then the room goes back to automatic
+  unsigned long nowMs = millis();
+  if (lightsOverride >= 0 && nowMs >= lightsOverrideUntil) { lightsOverride = -1; showMessage("Lights back to", "automatic"); }
+  if (acOverride >= 0 && nowMs >= acOverrideUntil) { acOverride = -1; showMessage("Air-con back to", "automatic"); }
+  bool offWarning = lightsOverride == 0 && nowMs < lightsOffWarnUntil;   // forced off, people inside: blink first
+  if (lightsOverride >= 0) lightsWanted = offWarning || lightsOverride == 1;
+  if (acOverride >= 0) acWanted = acOverride == 1;
+
+  bool blinkOff = (room == ROOM_WARNING && (nowMs / 400) % 2 == 0) || (offWarning && (nowMs / 250) % 2 == 0);
   digitalWrite(PIN_LIGHTS, (lightsWanted && !blinkOff) ? HIGH : LOW);
   digitalWrite(PIN_AC, acWanted ? HIGH : LOW);
 
@@ -558,6 +620,119 @@ void scheduleTasks() {
   }
 }
 
+// ================================================================ remote ==
+String toHex(const uint8_t *b, size_t n) {
+  static const char *h = "0123456789abcdef";
+  String out; out.reserve(n * 2);
+  for (size_t i = 0; i < n; i++) { out += h[b[i] >> 4]; out += h[b[i] & 15]; }
+  return out;
+}
+
+String sha256Hex(const String &s) {
+  uint8_t out[32];
+  mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), (const uint8_t *)s.c_str(), s.length(), out);
+  return toHex(out, 32);
+}
+
+String hmacHex(const String &key, const String &msg) {
+  uint8_t out[32];
+  mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256),
+                  (const uint8_t *)key.c_str(), key.length(), (const uint8_t *)msg.c_str(), msg.length(), out);
+  return toHex(out, 32);
+}
+
+bool sameHex(const String &a, const String &b) {     // constant-time compare
+  if (a.length() != b.length()) return false;
+  uint8_t d = 0;
+  for (size_t i = 0; i < a.length(); i++) d |= (uint8_t)(a[i] ^ tolower(b[i]));
+  return d == 0;
+}
+
+void ack(const String &id, bool ok, const char *via, const String &detailJson) {
+  JsonDocument ignored;
+  String body = String("{\"device_id\":\"") + DEVICE_ID + "\",\"command_id\":\"" + id +
+                "\",\"ok\":" + (ok ? "true" : "false") + ",\"via\":\"" + via + "\",\"detail\":" + detailJson + "}";
+  int st = request("POST", "/api/room/ack", body, ignored);
+  Serial.printf("ack %s -> %d\n", id.c_str(), st);
+}
+
+// Verify, then run one command. `cmd` is the exact signed string.
+void handleCommand(const String &cmd, const String &sig, const char *via) {
+  if (cmd.length() == 0) return;
+  if (!sameHex(hmacHex(keyHash, cmd), sig)) { Serial.println("command: bad signature - ignored"); return; }
+  JsonDocument c;
+  if (deserializeJson(c, cmd)) { Serial.println("command: bad JSON - ignored"); return; }
+  String id = c["id"].as<String>();
+  String kind = c["kind"].as<String>();
+  long exp = c["exp"] | 0L;
+  time_t now = time(nullptr);
+  if (now > 1700000000 && now > exp) { Serial.println("command: expired - ignored"); return; }
+  for (int i = 0; i < 8; i++) if (seenIds[i] == id) return;   // already run (came by both routes)
+  seenIds[seenNext] = id; seenNext = (seenNext + 1) % 8;
+
+  JsonObject a = c["args"].as<JsonObject>();
+  bool ok = true;
+  String detail = "null";
+  if (kind == "unlock") {
+    openLock((unsigned long)(a["secs"] | 8) * 1000UL);
+    showMessage("Opened remotely", "by staff");
+    beep(1, 1200);
+  } else if (kind == "lights" || kind == "ac") {
+    String st = a["state"] | "auto";
+    unsigned long until = millis() + (unsigned long)(a["mins"] | 30) * 60000UL;
+    int v = st == "on" ? 1 : st == "off" ? 0 : -1;
+    if (kind == "lights") {
+      lightsOverride = v; lightsOverrideUntil = until;
+      if (v == 0 && room != ROOM_EMPTY) {          // people inside: warn before the dark
+        lightsOffWarnUntil = millis() + WARNING_MS;
+        detail = "{\"warned_occupants\":true}";
+      }
+    } else {
+      acOverride = v; acOverrideUntil = until;
+    }
+    showMessage(String(kind == "ac" ? "Air-con " : "Lights ") + (v < 0 ? "automatic" : v ? "forced ON" : "forced OFF"),
+                v < 0 ? "" : String("for ") + (int)(a["mins"] | 30) + " min (staff)");
+  } else if (kind == "message") {
+    String t = a["text"] | "";
+    remoteLine1 = t.substring(0, 21);
+    remoteLine2 = t.length() > 21 ? t.substring(21, 42) : "";
+    remoteMsgUntil = millis() + (unsigned long)(a["secs"] | 300) * 1000UL;
+    beep(1, 900);
+  } else if (kind == "lockdown") {
+    lockdown = a["on"] | false;
+    code = ""; extendMode = false;
+    if (lockdown && unlocked) closeLock();
+    showMessage(lockdown ? "LOCKDOWN ON" : "Lockdown lifted", lockdown ? "Keypad disabled" : "Keypad active");
+    beep(lockdown ? 3 : 1, lockdown ? 400 : 1200);
+  } else {
+    ok = false;
+    detail = "{\"error\":\"unknown command\"}";
+  }
+  draw();
+  ack(id, ok, via, detail);
+}
+
+void onMqtt(char *topic, byte *payload, unsigned int len) {
+  JsonDocument m;
+  if (deserializeJson(m, payload, len)) return;
+  pendingCmd = m["cmd"].as<String>();
+  pendingSig = m["sig"].as<String>();
+}
+
+// Keep the MQTT link up without blocking the room: one attempt every 5 s.
+void ensureMqtt() {
+  if (strlen(MQTT_HOST) == 0 || WiFi.status() != WL_CONNECTED || mqtt.connected()) return;
+  if (millis() - lastMqttTry < 5000) return;
+  lastMqttTry = millis();
+  String clientId = String("room-") + String(DEVICE_ID).substring(0, 8) + "-" + String(esp_random() & 0xffff, HEX);
+  if (mqtt.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)) {
+    mqtt.subscribe(cmdTopic.c_str(), 1);
+    Serial.println("MQTT connected, listening on " + cmdTopic);
+  } else {
+    Serial.printf("MQTT connect failed, state %d\n", mqtt.state());
+  }
+}
+
 // ================================================================= setup ==
 void setup() {
   Serial.begin(115200);
@@ -586,6 +761,14 @@ void setup() {
   while (WiFi.status() != WL_CONNECTED) { delay(250); Serial.print("."); }
   Serial.println(" connected");
 
+  configTime(0, 0, "pool.ntp.org", "time.google.com");   // real time, to reject expired commands
+  keyHash = sha256Hex(DEVICE_KEY);
+  cmdTopic = String("campus/rooms/") + DEVICE_ID + "/cmd";
+  mqttNet.setInsecure();                 // demo shortcut, as for HTTPS (see README)
+  mqtt.setServer(MQTT_HOST, MQTT_PORT);
+  mqtt.setBufferSize(1024);
+  mqtt.setCallback(onMqtt);
+
   doorOpenLast = doorIsOpen();
   emptySince = millis();
   if (LOG_SIGNAL) Serial.println("sig,ms,occupied,x,y,state");
@@ -595,6 +778,7 @@ void setup() {
 // ================================================================== loop ==
 void loop() {
   char k = keypad.getKey();
+  if (k && lockdown) { showMessage("Keypad disabled", "Contact staff"); beep(1, 300); k = 0; }
   if (k && !unlocked) {
     if (k >= '0' && k <= '9' && code.length() < 6) code += k;
     else if (k == '*') {
@@ -609,6 +793,14 @@ void loop() {
     else if (k == '#') { if (extendMode) submitExtend(); else submitCode(); }
     if (k != '#') buzz(900, 25);   // key click
     draw();
+  }
+
+  ensureMqtt();
+  mqtt.loop();
+  if (pendingCmd.length()) {             // received over MQTT; run it outside the callback
+    String c = pendingCmd, sg = pendingSig;
+    pendingCmd = ""; pendingSig = "";
+    handleCommand(c, sg, "mqtt");
   }
 
   watchDoor();

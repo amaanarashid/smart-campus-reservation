@@ -5,3 +5,4 @@ Adafruit GFX Library
 ESP32Servo
 ArduinoJson
 Adafruit NeoPixel
+PubSubClient

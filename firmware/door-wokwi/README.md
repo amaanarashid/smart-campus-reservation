@@ -175,6 +175,59 @@ as the real extension, so the colour changes if someone books the next slot.
 blue. Book the slot straight after it as another student: within 30 s it
 turns red. Extend instead: the ring goes off (more than 10 minutes left).
 
+## Remote control over MQTT
+
+Admins, and the managers of this room, can control it from the web app:
+**Admin -> Smart room -> open the room** (or the manager's Smart room
+section) -> **Remote control**.
+
+| Control | What the room does |
+|---|---|
+| Unlock door (8 s) | Servo opens; screen says "Opened remotely". Does not check anyone in. |
+| Lights / Air-con on, off, auto | Forced for 15-120 min, then back to automatic. Lights forced off with people inside blink for 10 s first. |
+| Door message | Text on the OLED for 5 minutes, e.g. "Closed for cleaning". |
+| Lock down keypad | Keypad ignored, screen shows LOCKED DOWN, until lifted. Survives a restart. |
+
+**How it works.** The web app asks `POST /api/room/command`. The server
+checks you are an admin or this room's manager, saves the command
+(`room_commands`), signs it with HMAC-SHA256 (key = SHA-256 of the device key)
+and publishes it over MQTT with TLS to `campus/rooms/<device id>/cmd`. The
+ESP32 is subscribed, checks the signature, the expiry (60 s) and that it has
+not run this command before, acts, and confirms with `POST /api/room/ack`.
+The panel shows "waiting for room" until then, then "done". If MQTT is not
+set up or is down, the same command arrives with the next status poll
+(up to 30 s) - so it always gets there.
+
+### One-time setup (HiveMQ Cloud, free)
+
+1. console.hivemq.cloud -> sign up -> create a **Serverless (free)** cluster.
+2. **Access Management** -> add a credential, e.g. username `campus-room`,
+   a long password. Permission: publish and subscribe.
+3. Copy the cluster URL from **Overview**, e.g. `abc123.s1.eu.hivemq.cloud`.
+4. **Supabase SQL editor:** run `supabase/upgrade-room-commands.sql`.
+5. **Vercel -> Settings -> Environment Variables** (then redeploy):
+
+   | Name | Value |
+   |---|---|
+   | `MQTT_URL` | `mqtts://abc123.s1.eu.hivemq.cloud:8883` |
+   | `MQTT_USERNAME` | the username from step 2 |
+   | `MQTT_PASSWORD` | the password from step 2 |
+
+6. **sketch.ino:** fill `MQTT_HOST` (`abc123.s1.eu.hivemq.cloud`, no
+   `mqtts://`), `MQTT_USER`, `MQTT_PASS`. Rebuild. When connected, the bottom
+   right of the OLED shows **M**.
+7. In the project folder run `npm install` (adds the `mqtt` package) and commit
+   `package-lock.json`.
+
+Keep the sketch private: it contains the broker password. Use a credential
+that only this demo uses.
+
+**Try it:** open the room in Admin -> Smart room, press **Lights: off** with
+PEOPLE on. Within a second: the lights blink for 10 s and go off, the panel
+shows "done - people warned first", and the 3D twin goes dark. Press **auto**
+and they come back. Try a door message and lockdown, then type on the
+keypad: "Keypad disabled".
+
 ## End of booking: reminder, extend, time's up, overstay
 
 Book the **shortest slot the room allows**, starting so it ends soon, and
