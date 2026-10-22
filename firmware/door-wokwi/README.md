@@ -168,12 +168,12 @@ For the last 10 minutes of a checked-in booking, the ring on the wall lights up:
 
 The lit LEDs count down: 16 at 10 minutes left, one fewer about every 37 s.
 In the last minute the ring pulses. It is off at all other times. The server
-works out "can extend" on every status poll (every 30 s) with the same rules
+works out "can extend" on every status poll (every 5 s) with the same rules
 as the real extension, so the colour changes if someone books the next slot.
 
 **Try it:** with a checked-in booking ending in under 10 minutes, the ring is
-blue. Book the slot straight after it as another student: within 30 s it
-turns red. Extend instead: the ring goes off (more than 10 minutes left).
+blue. Book the slot straight after it as another student: within a few seconds
+it turns red. Extend instead: the ring goes off (more than 10 minutes left).
 
 ## Remote control over MQTT
 
@@ -196,7 +196,7 @@ ESP32 is subscribed, checks the signature, the expiry (60 s) and that it has
 not run this command before, acts, and confirms with `POST /api/room/ack`.
 The panel shows "waiting for room" until then, then "done". If MQTT is not
 set up or is down, the same command arrives with the next status poll
-(up to 30 s) - so it always gets there.
+(about 5 s) - so it always gets there.
 
 ### One-time setup (HiveMQ Cloud, free)
 

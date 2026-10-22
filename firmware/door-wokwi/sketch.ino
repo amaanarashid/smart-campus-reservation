@@ -136,7 +136,7 @@ const unsigned long EARLY_RELEASE_MS = 120000UL;  // demo 2 min   | real 15 min
 const unsigned long OVERSTAY_MS      = VACANCY_MS + WARNING_MS + 60000UL;  // demo ~2 min | real 15 min
 const long COUNTDOWN_S = 600;                     // live countdown for the last 10 min
 const long PRECOOL_MIN = 5;                       // AC on this long before a booking
-const unsigned long STATUS_EVERY_MS = 30000;
+const unsigned long STATUS_EVERY_MS = 5000;   // how often to ask the server (keep-alive makes this cheap)
 const unsigned long MESSAGE_MS      = 3500;
 const int LOCKED_DEG = 0, OPEN_DEG = 90;
 
@@ -296,13 +296,22 @@ void beep(int times, int freq) {
 // ================================================================== http ==
 // Returns the HTTP status (or a negative number on a network error) and
 // fills `out` with the parsed JSON body.
+// One HTTPS connection, kept open and reused (HTTP keep-alive): the slow part
+// of each request is the TLS handshake, so doing it once instead of on every
+// poll and every event makes the room far more responsive.
+WiFiClientSecure apiNet;
+HTTPClient http;
+bool apiReady = false;
+
 int request(const char *method, const String &path, const String &body, JsonDocument &out) {
   if (WiFi.status() != WL_CONNECTED) return -1;
-  WiFiClientSecure client;
-  client.setInsecure();  // demo shortcut: skips certificate checking (see README)
-  HTTPClient http;
-  http.setTimeout(10000);
-  if (!http.begin(client, String(API_BASE) + path)) return -2;
+  if (!apiReady) {
+    apiNet.setInsecure();  // demo shortcut: skips certificate checking (see README)
+    http.setReuse(true);
+    http.setTimeout(10000);
+    apiReady = true;
+  }
+  if (!http.begin(apiNet, String(API_BASE) + path)) return -2;
   http.addHeader("x-device-key", DEVICE_KEY);
   http.addHeader("Content-Type", "application/json");
   int status = strcmp(method, "POST") == 0 ? http.POST(body) : http.GET();
@@ -311,8 +320,9 @@ int request(const char *method, const String &path, const String &body, JsonDocu
     if (err) Serial.printf("JSON error: %s\n", err.c_str());
   } else {
     Serial.printf("HTTP error: %s\n", http.errorToString(status).c_str());
+    apiNet.stop();         // drop a broken connection; the next request opens a fresh one
   }
-  http.end();
+  http.end();              // with setReuse(true) this keeps the connection open
   return status;
 }
 

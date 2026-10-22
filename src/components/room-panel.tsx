@@ -326,7 +326,7 @@ export default function RoomPanel({ hideWhenEmpty = false, heading }: { hideWhen
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="day" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} unit=" kWh" width={60} />
-                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v) => `${v} kWh`} />
+                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, background: "var(--popover)", color: "var(--popover-foreground)", border: "1px solid var(--border)" }} formatter={(v) => `${v} kWh`} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar dataKey="Conventional room" fill="var(--chart-5)" radius={[3, 3, 0, 0]} />
                 <Bar dataKey="Smart room" fill="var(--chart-1)" radius={[3, 3, 0, 0]} />

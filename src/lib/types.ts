@@ -144,6 +144,9 @@ export interface FacilityRule {
   checkin_grace_mins?: number | null;
 }
 
+/** A taken slot from the reservation_busy view: when, not who (upgrade-private-bookings.sql). */
+export type BusySlot = Pick<Reservation, "id" | "facility_id" | "start_time" | "end_time" | "status">;
+
 export interface Reservation {
   id: string;
   facility_id: string;

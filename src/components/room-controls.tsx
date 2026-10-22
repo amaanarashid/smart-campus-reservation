@@ -53,9 +53,13 @@ export default function RoomControls({ facilityId }: { facilityId: string }) {
 
   useEffect(() => {
     const first = setTimeout(load, 0);
-    const t = setInterval(load, 4000);       // fast enough to see "waiting" turn into "done"
-    return () => { clearTimeout(first); clearInterval(t); };
-  }, [load]);
+    const t = setInterval(load, 8000);       // backup; Realtime below is the fast path
+    // "waiting for room" turns into "done" the moment the device confirms
+    const channel = supabase.channel(`room-commands-${facilityId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "room_commands", filter: `facility_id=eq.${facilityId}` }, () => { load(); })
+      .subscribe();
+    return () => { clearTimeout(first); clearInterval(t); supabase.removeChannel(channel); };
+  }, [load, facilityId]);
 
   async function send(kind: CommandKind, args: Record<string, unknown>, key: string) {
     if (busy) return;
@@ -104,7 +108,7 @@ export default function RoomControls({ facilityId }: { facilityId: string }) {
           </div>
           {lastDelivery && (
             <Badge variant={lastDelivery === "mqtt" ? "default" : "secondary"}>
-              {lastDelivery === "mqtt" ? "via MQTT - instant" : "via HTTP fallback - up to 30 s"}
+              {lastDelivery === "mqtt" ? "via MQTT - instant" : "via HTTP fallback - up to 5 s"}
             </Badge>
           )}
         </div>

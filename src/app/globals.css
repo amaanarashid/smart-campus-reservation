@@ -93,7 +93,7 @@
   --card-foreground: oklch(0.96 0.005 80);
   --popover: oklch(0.22 0.015 260);
   --popover-foreground: oklch(0.96 0.005 80);
-  --primary: oklch(0.62 0.17 25);
+  --primary: oklch(0.54 0.18 25);
   --primary-foreground: oklch(0.985 0.005 80);
   --secondary: oklch(0.28 0.015 260);
   --secondary-foreground: oklch(0.96 0.005 80);
@@ -104,8 +104,8 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.62 0.17 25);
-  --chart-1: oklch(0.62 0.17 25);
+  --ring: oklch(0.6 0.17 25);
+  --chart-1: oklch(0.6 0.17 25);
   --chart-2: oklch(0.6 0.1 260);
   --chart-3: oklch(0.72 0.12 70);
   --chart-4: oklch(0.62 0.1 180);
@@ -224,6 +224,12 @@
     var(--muted) 0%, color-mix(in oklch, var(--muted), white 45%) 50%, var(--muted) 100%);
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.dark .skeleton {
+  background: linear-gradient(90deg,
+    var(--muted) 0%, color-mix(in oklch, var(--muted), white 10%) 50%, var(--muted) 100%);
+  background-size: 200% 100%;
 }
 
 @media (prefers-reduced-motion: reduce) {

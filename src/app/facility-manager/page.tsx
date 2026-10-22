@@ -22,6 +22,7 @@ import RoomPanel from "@/components/room-panel";
 import RoomReports from "@/components/room-reports";
 import { issuesByFacility, type ReportCategory, type ReportUrgency } from "@/lib/reports";
 import { ensureProfile } from "@/lib/profile";
+import { useAutoRefresh } from "@/lib/use-auto-refresh";
 import {
   Boxes, CalendarDays, Check, CheckCircle2, Clock, Inbox, Loader2, MapPin,
   PackageSearch, UserX, Users2, X, TriangleAlert,
@@ -193,8 +194,8 @@ export default function ManagerDashboard() {
   useEffect(() => {
     (async () => {
       const prof = await ensureProfile();
-      if (!prof) { router.push("/login"); return; }
-      if (prof.role !== "facility_manager" && prof.role !== "admin") { router.push("/login"); return; }
+      if (!prof) { router.replace("/login"); return; }
+      if (prof.role !== "facility_manager" && prof.role !== "admin") { router.replace("/login"); return; }
       setProfile(prof);
       await load(prof);
       setNowMs(Date.now());
@@ -203,6 +204,9 @@ export default function ManagerDashboard() {
     const t = setInterval(() => setNowMs(Date.now()), 30_000);
     return () => clearInterval(t);
   }, [router, load]);
+
+  // new requests, check-ins and lost-and-found appear without reloading
+  useAutoRefresh(() => profile && load(profile), 20_000, !loading && !!profile);
 
   async function decide(r: Reservation, status: "approved" | "rejected") {
     if (acting) return;

@@ -51,7 +51,7 @@ function categoryWords(f: FacLike): string[] {
  */
 export function matchFacilities<F extends FacLike>(text: string | null, facilities: F[]): F[] {
   if (!text) return [];
-  const t = text.toLowerCase();
+  const t = englishFacilityWords(text);
 
   const byName = facilities
     .filter((f) => has(t, f.name.toLowerCase()))
@@ -74,9 +74,29 @@ export function matchFacilities<F extends FacLike>(text: string | null, faciliti
   return [];
 }
 
+/**
+ * Facility names are stored in English, so Malay facility words are turned
+ * into the English ones before matching: "gelanggang badminton 1" ->
+ * "badminton court 1", "bilik perbincangan A" -> "discussion room A".
+ */
+export function englishFacilityWords(q: string): string {
+  return q.toLowerCase()
+    .replace(/\bbilik\s+perbincangan\b/g, "discussion room")
+    .replace(/\bbilik\s+mesyuarat\b/g, "meeting room")
+    .replace(/\bbilik\s+seminar\b/g, "seminar room")
+    .replace(/\bbilik\s+belajar\b/g, "study room")
+    .replace(/\bgelanggang\s+([a-z]+)/g, "$1 court")
+    .replace(/\bdewan\s+([a-z]+)/g, "$1 hall")
+    .replace(/\bkolam\s+renang\b/g, "swimming pool")
+    .replace(/\bgelanggang\b/g, "court")
+    .replace(/\bdewan\b/g, "hall")
+    .replace(/\bbilik\b/g, "room")
+    .replace(/\bkemudahan\b/g, "facilities");
+}
+
 /** The facility and category words present in `q`, as one searchable term. */
 function facilityTerm(q: string, facilities: FacLike[]): string | null {
-  const t = q.toLowerCase();
+  const t = englishFacilityWords(q);
   const found = new Set<string>();
   for (const f of facilities) {
     if (has(t, f.name.toLowerCase())) found.add(f.name.toLowerCase());
@@ -86,22 +106,30 @@ function facilityTerm(q: string, facilities: FacLike[]): string | null {
 }
 
 const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const WEEKDAYS_MS = ["ahad", "isnin", "selasa", "rabu", "khamis", "jumaat", "sabtu"];
+// English and Malay month prefixes -> month index (Malay: mac, mei, ogos, oktober, disember)
+const MONTH_PREFIX: [string, number][] = [
+  ["jan", 0], ["feb", 1], ["mar", 2], ["mac", 2], ["apr", 3], ["may", 4], ["mei", 4], ["jun", 5],
+  ["jul", 6], ["aug", 7], ["ogo", 7], ["sep", 8], ["oct", 9], ["okt", 9], ["nov", 10], ["dec", 11], ["dis", 11],
+];
+const MONTH_RE = "(jan|feb|mar|mac|apr|may|mei|jun|jul|aug|ogo|sep|oct|okt|nov|dec|dis)[a-z]*";
+const monthIndex = (w: string) => MONTH_PREFIX.find(([p]) => w.startsWith(p))?.[1] ?? -1;
 
 export function parseDate(q: string, now: Date = new Date()): string | null {
   const t = q.toLowerCase();
   const today = myDateKey(now);
-  if (/day after tomorrow/.test(t)) return addDays(today, 2);
+  if (/day after tomorrow|\blusa\b/.test(t)) return addDays(today, 2);
   if (/\btomorrow\b|\btmr\b|\besok\b/.test(t)) return addDays(today, 1);
-  if (/\btoday\b|\btonight\b|\bnow\b|\bhari ini\b/.test(t)) return today;
+  if (/\btoday\b|\btonight\b|\bnow\b|\bhari ini\b|\bsekarang\b|\bmalam ini\b|\bpetang ini\b|\bpagi ini\b/.test(t)) return today;
 
   const iso = t.match(/\b(20\d\d)-(\d{2})-(\d{2})\b/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
 
   // "2 oct", "2nd october", "oct 2"
-  const m1 = t.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/);
-  const m2 = t.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2})(?:st|nd|rd|th)?\b/);
-  const dm = m1 ? { d: +m1[1], m: MONTHS.indexOf(m1[2]) } : m2 ? { d: +m2[2], m: MONTHS.indexOf(m2[1]) } : null;
+  // "2 oct", "2nd october", "oct 2", "2 oktober", "15 ogos"
+  const m1 = t.match(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH_RE}\\b`));
+  const m2 = t.match(new RegExp(`\\b${MONTH_RE}\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`));
+  const dm = m1 ? { d: +m1[1], m: monthIndex(m1[2]) } : m2 ? { d: +m2[2], m: monthIndex(m2[1]) } : null;
   if (dm && dm.d >= 1 && dm.d <= 31) {
     let year = Number(today.slice(0, 4));
     const key = (y: number) => `${y}-${String(dm.m + 1).padStart(2, "0")}-${String(dm.d).padStart(2, "0")}`;
@@ -109,10 +137,11 @@ export function parseDate(q: string, now: Date = new Date()): string | null {
     return key(year);
   }
 
-  const wd = WEEKDAYS.findIndex((d) => has(t, d) || has(t, d.slice(0, 3)));
+  let wd = WEEKDAYS.findIndex((d) => has(t, d) || has(t, d.slice(0, 3)));
+  if (wd < 0) wd = WEEKDAYS_MS.findIndex((d) => has(t, d));
   if (wd >= 0) {
     const delta = (wd - myWeekday(now) + 7) % 7;
-    const nextWeek = /\bnext\s+(week|mon|tue|wed|thu|fri|sat|sun)/.test(t) ? 7 : 0;
+    const nextWeek = /\bnext\s+(week|mon|tue|wed|thu|fri|sat|sun)|\bminggu\s+depan\b/.test(t) ? 7 : 0;
     return addDays(today, delta + (delta === 0 ? nextWeek : 0));
   }
   return null;
@@ -127,24 +156,34 @@ export function parseHour(q: string): number | null {
     if (ampm[3] === "pm") h += 12;
     return h >= 0 && h <= 23 ? h : null;
   }
+  // Malay: "3 petang", "pukul 10 pagi", "8 malam", "jam 2"
+  const ms = t.match(/\b(\d{1,2})(?:[:.](\d{2}))?\s*(pagi|tengah\s*hari|petang|ptg|malam)\b/);
+  if (ms) {
+    const n = Number(ms[1]) % 12;
+    const part = ms[3].replace(/\s+/g, " ");
+    const h = part === "pagi" ? n : part === "tengah hari" ? (n === 0 ? 12 : n + 12) : n + 12;
+    return h >= 0 && h <= 23 ? h : null;
+  }
   const hhmm = t.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
   if (hhmm) return Number(hhmm[1]);
-  const at = t.match(/\bat\s+(\d{1,2})\b(?!\s*(?:hours?|hrs?|mins?|minutes?|people|pax|persons?))/);
+  const at = t.match(/\b(?:at|pukul|jam)\s+(\d{1,2})\b(?!\s*(?:hours?|hrs?|mins?|minutes?|minit|people|pax|persons?|orang))/);
   if (at) {
     const n = Number(at[1]);
     if (n >= 1 && n <= 7) return n + 12;
     if (n >= 8 && n <= 23) return n;
   }
-  if (/\bnoon\b/.test(t)) return 12;
+  if (/\bnoon\b|\btengah\s*hari\b/.test(t) && !/\d\s*tengah/.test(t)) return 12;
   return null;
 }
 
 /** Requested duration in minutes. */
 export function parseDuration(q: string): number | null {
   const t = q.toLowerCase();
-  const hrs = t.match(/\b(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b/);
+  if (/\bsetengah\s+jam\b/.test(t)) return 30;
+  if (/\bsejam\b|\bsatu\s+jam\b/.test(t)) return 60;
+  const hrs = t.match(/\b(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h|jam)\b/);
   if (hrs) return Math.round(Number(hrs[1]) * 60);
-  const mins = t.match(/\b(\d+)\s*(?:minutes?|mins?|m)\b/);
+  const mins = t.match(/\b(\d+)\s*(?:minutes?|mins?|minit|m)\b/);
   if (mins) return Number(mins[1]);
   if (/\bhalf an hour\b/.test(t)) return 30;
   if (/\ban hour\b|\bone hour\b/.test(t)) return 60;
@@ -154,7 +193,7 @@ export function parseDuration(q: string): number | null {
 export function parsePart(q: string): PartOfDay | null {
   const t = q.toLowerCase();
   if (/\bmorning\b|\bpagi\b/.test(t)) return "morning";
-  if (/\bafternoon\b|\bpetang\b|\blunch\b/.test(t)) return "afternoon";
+  if (/\bafternoon\b|\bpetang\b|\blunch\b|\btengah\s*hari\b/.test(t)) return "afternoon";
   if (/\bevening\b|\bnight\b|\btonight\b|\bmalam\b/.test(t)) return "evening";
   return null;
 }
@@ -171,24 +210,32 @@ export function parseIntent(q: string, facilities: FacLike[], now: Date = new Da
     /\b(my|mine)\b.*\b(booking|bookings|reservation|reservations|slot|slots)\b/.test(t) ||
     /\b(did|have)\s+i\s+(book|booked|reserve|reserved)\b/.test(t) ||
     /\bi\s+(have|booked|reserved)\b.*\b(booking|reservation|slot|court|room)/.test(t) ||
-    /\bwhen('?s| is)\s+my\b/.test(t)
+    /\bwhen('?s| is)\s+my\b/.test(t) ||
+    /\b(tempahan|booking|bookings|slot)\s+(saya|aku)\b/.test(t) ||
+    /\b(saya|aku)\s+(ada|sudah|dah|telah)\s+(tempah|book|buat tempahan)/.test(t)
   ) intent = "mine";
   else if (
-    /\b(rule|rules|policy|policies|cancel|cancellation|advance|approval|approve|maximum|minimum|max|min)\b/.test(t)
+    /\b(rule|rules|policy|policies|cancel|cancellation|advance|approval|approve|maximum|minimum|max|min)\b/.test(t) ||
+    /\b(peraturan|polisi|syarat|batal|pembatalan|maksimum|minimum|kelulusan|lulus)\b/.test(t)
   ) intent = "rules";
   else if (
     /\b(list|show)\b.*\b(facilities|rooms|courts|halls|venues)\b/.test(t) ||
     /\bwhat can i book\b/.test(t) ||
     (/\b(what|which)\s+(facilities|rooms|courts|halls|venues)\b/.test(t) &&
-      !/\b(free|available|vacant|empty|open)\b/.test(t))
+      !/\b(free|available|vacant|empty|open)\b/.test(t)) ||
+    /\b(senarai|tunjuk|senaraikan)\b.*\b(kemudahan|bilik|gelanggang|dewan)\b/.test(t) ||
+    /\bapa\s+yang\s+boleh\s+(saya|aku)\s+tempah\b/.test(t) ||
+    (/\b(kemudahan|bilik|gelanggang|dewan)\s+apa\b/.test(t) && !/\b(kosong|tersedia|free)\b/.test(t))
   ) intent = "list";
   else if (
     /\bhow long\b/.test(t) ||
     /\b(opens|opening|close|closes|closing|operating)\b/.test(t) ||
-    /\bwhat time\b.*\bopen\b/.test(t)
+    /\bwhat time\b.*\bopen\b/.test(t) ||
+    /\b(buka|tutup|waktu operasi|berapa lama)\b/.test(t)
   ) intent = "rules";
   else if (
-    /\b(free|available|availability|book|booking|slot|slots|vacant|empty|taken|busy|when|any|open|kosong)\b/.test(t)
+    /\b(free|available|availability|book|booking|slot|slots|vacant|empty|taken|busy|when|any|open|kosong)\b/.test(t) ||
+    /\b(tersedia|tempah|penuh|sibuk|bila)\b/.test(t) || /\bada\s+(tak|ke|kah)\b/.test(t) || /\bboleh\b.*\btempah\b/.test(t)
   ) intent = "availability";
 
   return {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Role } from "@/lib/types";
 import { ensureProfile } from "@/lib/profile";
 import { CampusIcon } from "@/components/campus-icon";
+import ThemeToggle from "@/components/theme-toggle";
 import {
   CalendarCheck, Sparkles, Trophy, Volleyball, GraduationCap, Building2,
 } from "lucide-react";
@@ -36,6 +37,19 @@ export default function LoginPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Already signed in (e.g. came back with the browser's Back button)?
+  // Go straight to the dashboard instead of showing the sign-in form.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session || cancelled) return;
+      const profile = await ensureProfile();
+      if (profile && !cancelled) router.replace(ROLE_ROUTES[profile.role] ?? "/student");
+    })();
+    return () => { cancelled = true; };
+  }, [router]);
+
   function switchMode(m: "signin" | "signup") {
     setMode(m); setError(null); setNotice(null);
   }
@@ -45,7 +59,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) { setError(error.message); setBusy(false); return; }
     const profile = await ensureProfile();
-    router.push(ROLE_ROUTES[profile?.role ?? "student"] ?? "/student");
+    router.replace(ROLE_ROUTES[profile?.role ?? "student"] ?? "/student");
   }
 
   // TEMPORARY: one-tap demo login. Creates the demo account on first use,
@@ -71,7 +85,7 @@ export default function LoginPage() {
     await ensureProfile();
     // elevate the demo account to its role (no-op for student)
     await supabase.rpc("claim_demo_role", { demo_role: demoRole });
-    router.push(ROLE_ROUTES[demoRole]);
+    router.replace(ROLE_ROUTES[demoRole]);
   }
 
   async function signUp() {
@@ -87,7 +101,7 @@ export default function LoginPage() {
       return;
     }
     await ensureProfile();
-    router.push("/student");
+    router.replace("/student");
   }
 
   const isSignup = mode === "signup";
@@ -140,6 +154,7 @@ export default function LoginPage() {
 
       {/* ---------- form panel ---------- */}
       <div className="relative flex items-center justify-center bg-background p-6">
+        <div className="absolute right-4 top-4"><ThemeToggle /></div>
         {/* mobile brand */}
         <div className="absolute left-0 right-0 top-0 h-1 bg-gradient-to-r from-primary via-primary/70 to-primary" />
 

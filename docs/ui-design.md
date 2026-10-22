@@ -15,7 +15,7 @@ Defined as CSS variables in `src/app/globals.css` (light and dark), oklch color 
 - **Support — slate navy** for body text, plus a soft crimson accent tint for step markers and highlights.
 - **Charts**: crimson, navy, amber, teal, slate — distinct in both themes, ready for the analytics dashboard.
 
-Dark mode mirrors the palette with a navy-black background and a brighter crimson for contrast.
+Dark mode mirrors the palette with a navy-black background and a deeper crimson (`oklch(0.54 0.18 25)`) so white text on crimson bands stays readable. The header switch (`components/theme-toggle.tsx`) cycles Light → Dark → Auto (follows the device); the choice is saved per browser (`localStorage` key `campus-theme`) and applied by a tiny script in `layout.tsx` before the first paint, so there is no white flash. Chart tooltips use the popover tokens so they follow the theme.
 
 ## Layout
 
@@ -39,10 +39,31 @@ Organised into five tabs via a sticky section nav (Overview, Facilities, Approva
 Overview: four clickable stat cards (each jumps to its tab), "Campus right
 now" venue picture cards (rooms in use, an occupancy bar, today's bookings,
 pending bubble) and a recent-activity timeline. Users: role filter chips with
-counts, search, avatar initials. Facilities: each room is a picture card with
-live status (greyed when offline), capacity, rules, managers and a "Take
-offline / Reactivate" button. Approvals: request cards with spinner and locked
+counts, search, avatar initials. Approvals: request cards with spinner and locked
 buttons, same as the manager page. Loading shows a skeleton.
+
+Facilities (`components/admin-facilities.tsx`): an overview grouped by
+location - one card per venue with a flat 2D drawing of the building
+(`components/venue-art.tsx`: sports hall, library, teaching block with its
+letter, or a generic building, picked from the venue name and the facility
+types inside; windows light up crimson when a room is in use), the venue's
+rooms / in use / offline, and its facility types as rows (thumbnail, approval
+mode, active rooms, hours, booking length) each with a "+" (add rooms) and a
+**View details** button. Adding is done by step-by-step wizards
+(`components/facility-wizards.tsx`): **New facility** = location (existing
+venues as drawn tiles, or a new one with a live drawing preview) -> facility
+(name or one of 8 presets with sensible rules) -> rules + optional first rooms
+(how many, name prefix, capacity, live name preview). **Add rooms** = location
+-> facility -> how many / names / capacity, suggesting the next free names
+("Court 5") and the capacity sibling rooms use; it can jump to New facility if
+the facility isn't listed. Both can start part-way from a venue card, a
+facility row or the detail page. Naming, unique slugs and presets live in
+`lib/facility-setup.ts` (tested), plus search, "Add room"
+and "New facility type" (both open dialogs). The detail page has a header
+(picture, counts, Add room, a menu with Delete type), the booking rules as a
+normal form with Discard / Save, and the rooms in a table: status dot,
+capacity (saves on leaving the box), managers (remove with x, "+ Add"), and a
+row menu for custom rules, taking the room offline, or deleting it.
 
 Within tabs: stat cards carry an icon tile, an uppercase label, and a serif number that pops in (`animate-count`). The dense "Add a facility" form is collapsed behind a full-width toggle header (Plus icon + rotating chevron). Section titles use the serif display font with a leading crimson icon. All entrance animations respect `prefers-reduced-motion`.
 
@@ -50,7 +71,7 @@ Within tabs: stat cards carry an icon tile, an uppercase label, and a serif numb
 
 - **Loading:** a skeleton in the shape of the real page (stat cards and venue
   grid) with a shimmer, so nothing jumps when the data arrives.
-- **Steps:** venue, then room, then booking form. Each step slides in
+- **Steps:** venue (cards use the same 2D venue drawing as the admin page), then room, then booking form. Each step slides in
   (`animate-step-in`, keyed by step), and venue and room cards cascade in.
 - **AI suggestions:** cards cascade in (`.stagger`). The best option has a
   ring and a "Best" badge that pops in. While a booking is being made, every

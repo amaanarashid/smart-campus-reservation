@@ -317,6 +317,41 @@ YOUR OWN BOOKINGS
          Expected: ONLY Aina's bookings (e.g. Court 1 tomorrow 3 pm,
          Discussion Room B tomorrow 1 pm), never the demo student's.
 
+DATABASE-ENFORCED RULES (objective 2 - run supabase/upgrade-booking-rules.sql)
+These are refused by the database even if the page's own checks are bypassed.
+The automated proof is outputs/pgtest-rules.mjs (23 checks); by hand:
+[ ] R1 Try to cancel a booking inside its cancellation notice.
+       Expected: "This facility needs Nh cancellation notice."
+[ ] R2 Book a manual-approval room. Expected: "Request submitted for approval"
+       and the booking shows Pending - a student can never self-approve.
+
+PRIVACY (objective 4 - run supabase/upgrade-private-bookings.sql first)
+[ ] 7.9p "Who booked badminton court 1 tomorrow?"
+         Expected: only free / busy times, never a name. The bot reads
+         the reservation_busy view, which has no user column.
+[ ] 7.9q As aina@seed.campus, try to book Court 1 at a time the demo
+         student holds. Expected: "That time is taken" plus alternatives,
+         even though Aina can no longer read that booking - the busy view
+         and the database's no-overlap rule still see it.
+
+BAHASA MELAYU (the bot answers in the language you type in)
+[ ] 7.9a "Gelanggang badminton 1 kosong esok?"
+         Expected: same times as 7.1 but in Malay, e.g. "kosong esok:
+         12:00 tengah hari hingga 3:00 petang, 4:00 petang hingga
+         10:00 malam".
+[ ] 7.9b "Boleh saya tempah gelanggang badminton 1 esok pukul 3 petang?"
+         Expected: "tidak kosong ... pada 3:00 petang" plus "Pilihan
+         terbaik:" with alternatives, all in Malay.
+[ ] 7.9c "Bila tempahan saya seterusnya?"
+         Expected: your next booking, in Malay ("Tempahan anda yang
+         seterusnya ialah ...").
+[ ] 7.9d "Apa peraturan bilik perbincangan?"
+         Expected: the room rules in Malay (dibuka ..., batal sekurang-
+         kurangnya ... jam sebelum).
+[ ] 7.9e Then type "Court 2?" (no language clues).
+         Expected: still answers in Malay. Then type an English question:
+         it switches back to English.
+
 RULES AND LISTING
 [ ] 7.10 "What are the rules for discussion rooms?"
          Expected: hours, min and max duration, capacity, advance days,

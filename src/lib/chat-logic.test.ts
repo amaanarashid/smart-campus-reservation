@@ -175,3 +175,35 @@ describe("chatbot - LLM output is validated", () => {
     expect(sanitiseIntent("not an object")).toEqual({});
   });
 });
+
+describe("chatbot - Bahasa Melayu questions", () => {
+  it("understands Malay availability questions", () => {
+    const a = parseIntent("Gelanggang badminton 1 kosong esok petang?", FAC, NOW);
+    expect(a.intent).toBe("availability");
+    expect(a.date).toBe("2026-10-03");
+    expect(a.part_of_day).toBe("afternoon");
+    expect(matchFacilities(a.facility, FAC).map((x) => x.id)).toEqual(["b1"]);
+
+    const b = parseIntent("Boleh saya tempah bilik perbincangan A pukul 3 petang?", FAC, NOW);
+    expect(b.intent).toBe("availability");
+    expect(b.hour).toBe(15);
+    expect(matchFacilities(b.facility, FAC).map((x) => x.id)).toContain("d1");
+  });
+
+  it("understands Malay own-booking, rules and listing questions", () => {
+    expect(parseIntent("Bila tempahan saya seterusnya?", FAC, NOW).intent).toBe("mine");
+    expect(parseIntent("Apa peraturan pembatalan bilik perbincangan?", FAC, NOW).intent).toBe("rules");
+    expect(parseIntent("Senaraikan kemudahan yang ada", FAC, NOW).intent).toBe("list");
+  });
+
+  it("reads Malay dates, times and durations", () => {
+    expect(parseDate("lusa", NOW)).toBe("2026-10-04");
+    expect(parseDate("hari isnin", NOW)).toBe("2026-10-05");
+    expect(parseDate("5 okt", NOW)).toBe("2026-10-05");
+    expect(parseHour("pukul 10 pagi")).toBe(10);
+    expect(parseHour("8 malam")).toBe(20);
+    expect(parseHour("tengah hari")).toBe(12);
+    expect(parseDuration("2 jam")).toBe(120);
+    expect(parseDuration("setengah jam")).toBe(30);
+  });
+});

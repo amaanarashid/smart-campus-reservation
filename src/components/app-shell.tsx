@@ -6,6 +6,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import ThemeToggle from "@/components/theme-toggle";
 import NotificationBell from "@/components/notification-bell";
 import { CampusIcon } from "@/components/campus-icon";
 
@@ -55,6 +56,7 @@ export default function AppShell({
         <div className="mx-auto flex h-16 w-full max-w-[1680px] items-center justify-between px-4 sm:px-6 lg:px-10">
           <BrandMark />
           <div className="flex items-center gap-3">
+            <ThemeToggle />
             <NotificationBell />
             {role && (
               <Badge variant="secondary" className="hidden sm:inline-flex">
@@ -68,8 +70,8 @@ export default function AppShell({
               variant="outline"
               size="sm"
               onClick={async () => {
-                await supabase.auth.signOut();
-                router.push("/login");
+                await supabase.auth.signOut({ scope: "local" });   // this tab only
+                router.replace("/login");
               }}
             >
               Sign out

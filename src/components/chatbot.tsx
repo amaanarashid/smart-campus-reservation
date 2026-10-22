@@ -13,7 +13,7 @@ interface Msg { role: "user" | "assistant"; content: string; rated?: boolean }
 export default function Chatbot() {
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([
-    { role: "assistant", content: "Hi! Ask me about availability, booking rules, or your own bookings, e.g. \"Is the futsal court free tomorrow evening?\", \"Can I book Court 1 at 3pm?\" or \"When is my next booking?\"" },
+    { role: "assistant", content: "Hi! Ask me about availability, booking rules, or your own bookings, e.g. \"Is the futsal court free tomorrow evening?\", \"Can I book Court 1 at 3pm?\" or \"When is my next booking?\" Boleh juga tanya dalam Bahasa Melayu, contohnya \"Gelanggang badminton kosong esok petang?\"" },
   ]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -120,7 +120,7 @@ export default function Chatbot() {
         <div className="flex gap-2 border-t pt-3">
           <Input value={input} onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && send()}
-            placeholder="Ask about availability or rules..." />
+            placeholder="Ask in English or Bahasa Melayu..." />
           <Button onClick={send} disabled={busy}>Send</Button>
         </div>
       </CardContent>

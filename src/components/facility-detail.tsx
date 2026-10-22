@@ -30,7 +30,18 @@ interface DeviceRow { id: string; label: string; last_seen_at: string | null }
 interface Ev extends TwinEvent, EnergyEvent { id: number; detail?: unknown; reservation_id: string | null }
 interface Bk extends TwinBooking, EnergyBooking { id: string; participants: number; profiles: { full_name: string } | null }
 
-const LIVE_MS = 5_000;      // fast poll: latest events, so Wokwi changes show within seconds
+/**
+ * The room's device. The view (upgrade-room-end.sql) lets managers see their
+ * rooms' devices; if it is not there yet, admins can still read the table.
+ */
+async function findDevice(facilityId: string): Promise<{ data: DeviceRow | null }> {
+  const v = await supabase.from("room_devices_visible").select("id, label, last_seen_at").eq("facility_id", facilityId).maybeSingle();
+  if (!v.error) return { data: v.data as DeviceRow | null };
+  const t = await supabase.from("room_devices").select("id, label, last_seen_at").eq("facility_id", facilityId).maybeSingle();
+  return { data: t.error ? null : (t.data as DeviceRow | null) };
+}
+
+const LIVE_MS = 10_000;     // backup poll; Realtime normally delivers changes within ~0.5 s
 const ENERGY_MS = 60_000;   // slow poll: a week of events for the energy figures
 
 const EVENT_LABEL: Record<string, string> = {
@@ -81,7 +92,7 @@ export default function FacilityDetail({ facility, rule, onBack }: {
   const loadLive = useCallback(async () => {
     const today = myDateKey();
     const [{ data: dev }, { data: ev }, { data: bk }] = await Promise.all([
-      supabase.from("room_devices_visible").select("id, label, last_seen_at").eq("facility_id", facility.id).maybeSingle(),
+      findDevice(facility.id),
       supabase.from("room_events").select("id, at, kind, detail, reservation_id")
         .eq("facility_id", facility.id).order("at", { ascending: false }).limit(60),
       supabase.from("reservations")
@@ -118,8 +129,25 @@ export default function FacilityDetail({ facility, rule, onBack }: {
     const live = setInterval(loadLive, LIVE_MS);
     const week = setInterval(loadWeek, ENERGY_MS);
     const clock = setInterval(() => setNowMs(Date.now()), 1000);   // countdown + "updated 3 s ago"
-    return () => { clearTimeout(first); clearInterval(live); clearInterval(week); clearInterval(clock); };
-  }, [loadLive, loadWeek]);
+
+    // Realtime: reload the moment the room reports something or a booking changes
+    // (needs upgrade-realtime.sql; without it the polling above still works).
+    let pending: ReturnType<typeof setTimeout> | null = null;
+    const soon = () => {                      // a burst of events -> one reload
+      if (pending) return;
+      pending = setTimeout(() => { pending = null; loadLive(); }, 250);
+    };
+    const channel = supabase.channel(`room-live-${facility.id}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "room_events", filter: `facility_id=eq.${facility.id}` }, soon)
+      .on("postgres_changes", { event: "*", schema: "public", table: "reservations", filter: `facility_id=eq.${facility.id}` }, soon)
+      .subscribe();
+
+    return () => {
+      clearTimeout(first); clearInterval(live); clearInterval(week); clearInterval(clock);
+      if (pending) clearTimeout(pending);
+      supabase.removeChannel(channel);
+    };
+  }, [loadLive, loadWeek, facility.id]);
 
   const now = new Date(nowMs || 0);
   const reading = twinReading({
@@ -328,7 +356,7 @@ export default function FacilityDetail({ facility, rule, onBack }: {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="day" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} unit=" kWh" width={60} />
-                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v) => `${v} kWh`} />
+                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, background: "var(--popover)", color: "var(--popover-foreground)", border: "1px solid var(--border)" }} formatter={(v) => `${v} kWh`} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar dataKey="Conventional room" fill="var(--chart-5)" radius={[3, 3, 0, 0]} />
                 <Bar dataKey="Smart room" fill="var(--chart-1)" radius={[3, 3, 0, 0]} />

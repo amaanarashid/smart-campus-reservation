@@ -1,4 +1,4 @@
-import { Facility, FacilityRule, Reservation, RecWeights } from "./types";
+import { BusySlot, Facility, FacilityRule, Reservation, RecWeights } from "./types";
 import { addDays, daysBetween, myAt, myDateKey, myHour, myWholeHour } from "./time";
 
 /**
@@ -107,7 +107,7 @@ export interface SlotRequest {
   facility: Facility;
   rule: FacilityRule;
   /** Bookings for this facility; anything not pending/approved is ignored. */
-  reservations: Reservation[];
+  reservations: BusySlot[];
   /** Day to search. A Date is read as its Malaysia calendar date. */
   date: Date | string;
   durationMins: number;
@@ -225,7 +225,7 @@ export interface AcrossRequest {
   facilities: Facility[];
   rules: Record<string, FacilityRule>;
   /** Bookings covering every candidate over the whole search window. */
-  reservations: Reservation[];
+  reservations: BusySlot[];
   /** Requested day, Malaysia date key. */
   date: string;
   durationMins: number;
@@ -269,7 +269,7 @@ export function recommendAcross(opts: AcrossRequest): AcrossResult {
     ),
   ].filter((f) => f.status === "active" && opts.rules[f.id]);
 
-  const byFacility = new Map<string, Reservation[]>();
+  const byFacility = new Map<string, BusySlot[]>();
   for (const r of opts.reservations) {
     const list = byFacility.get(r.facility_id) ?? [];
     list.push(r);

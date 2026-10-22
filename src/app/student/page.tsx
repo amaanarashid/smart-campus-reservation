@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { busyQuery } from "@/lib/busy";
 import {
-  Facility, FacilityRule, Profile, Reservation, Equipment, typeLabel,
+  BusySlot, Facility, FacilityRule, Profile, Reservation, Equipment, typeLabel,
 } from "@/lib/types";
 import {
   recommendAcross, learnPeakHours, updateWeights, ScoredSlot, PeakModel,
@@ -15,6 +16,7 @@ import {
 } from "@/lib/bandit";
 import { addDays, fmtDay, fmtRelativeDay, fmtTime, myAt, myDateKey } from "@/lib/time";
 import { ensureProfile } from "@/lib/profile";
+import { useAutoRefresh } from "@/lib/use-auto-refresh";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +26,7 @@ import { toast, Toaster } from "sonner";
 import Chatbot from "@/components/chatbot";
 import AppShell from "@/components/app-shell";
 import FacilityIso from "@/components/facility-iso";
+import VenueArt from "@/components/venue-art";
 import PopularTimes from "@/components/popular-times";
 import ReportProblemDialog, { CATEGORY_ICON } from "@/components/report-problem-dialog";
 import {
@@ -148,7 +151,7 @@ export default function StudentDashboard() {
   useEffect(() => {
     (async () => {
       const p = await ensureProfile();
-      if (!p) { router.push("/login"); return; }
+      if (!p) { router.replace("/login"); return; }
       setProfile(p);
       const [{ data: f, error: fErr }, { data: r, error: rErr }, { data: e }] = await Promise.all([
         supabase.from("facilities_full").select("*").eq("status", "active").order("name"),
@@ -166,10 +169,10 @@ export default function StudentDashboard() {
       setEquipment((e as Equipment[]) ?? []);
       // which facilities are in use right now?
       const nowIso = new Date().toISOString();
-      const { data: cur } = await supabase
-        .from("reservations").select("facility_id")
+      const { data: cur } = await busyQuery((t) => supabase
+        .from(t).select("facility_id")
         .in("status", ["pending", "approved"])
-        .lte("start_time", nowIso).gte("end_time", nowIso);
+        .lte("start_time", nowIso).gte("end_time", nowIso));
       setBusyNow(new Set((cur ?? []).map((x) => x.facility_id)));
       // view added by upgrade-room-access.sql; if it is not there yet, no doors
       const { data: doors } = await supabase.from("door_facilities").select("facility_id");
@@ -179,6 +182,19 @@ export default function StudentDashboard() {
       setLoading(false);
     })();
   }, [router, loadBookings]);
+
+  // keep "My bookings", in-use badges and known issues current without reloading
+  useAutoRefresh(async () => {
+    if (!profile) return;
+    const nowIso = new Date().toISOString();
+    const [{ data: cur }] = await Promise.all([
+      busyQuery((t) => supabase.from(t).select("facility_id")
+        .in("status", ["pending", "approved"]).lte("start_time", nowIso).gte("end_time", nowIso)),
+      loadBookings(profile.id),
+    ]);
+    setBusyNow(new Set((cur ?? []).map((x) => x.facility_id)));
+    setNowMs(Date.now());
+  }, 20_000, !loading && !!profile);
 
   // ---------- booking ----------
   function buildWindow(): { start: Date; end: Date } {
@@ -212,10 +228,10 @@ export default function StudentDashboard() {
     if (wanted.length === 0) return null;
     // reservations overlapping the window anywhere on campus (equipment pools
     // are shared across facilities of the same type)
-    const { data: overlapping } = await supabase
-      .from("reservations").select("id")
+    const { data: overlapping } = await busyQuery((t) => supabase
+      .from(t).select("id")
       .in("status", ["pending", "approved"])
-      .lt("start_time", end.toISOString()).gt("end_time", start.toISOString());
+      .lt("start_time", end.toISOString()).gt("end_time", start.toISOString()));
     const ids = (overlapping ?? []).map((x) => x.id);
     const used: Record<string, number> = {};
     if (ids.length > 0) {
@@ -319,20 +335,20 @@ export default function StudentDashboard() {
 
     const [{ data: res }, { data: hist }] = await Promise.all([
       // bookings over the whole search window, for conflict checks
-      supabase.from("reservations").select("*")
+      busyQuery((t) => supabase.from(t).select("id,facility_id,start_time,end_time,status")
         .in("facility_id", ids).in("status", ["pending", "approved"])
-        .lt("start_time", to).gt("end_time", from),
+        .lt("start_time", to).gt("end_time", from)),
       // recent demand for this category, for learning peak hours
-      supabase.from("reservations").select("start_time,end_time,status")
+      busyQuery((t) => supabase.from(t).select("start_time,end_time,status")
         .in("facility_id", ids).in("status", ["pending", "approved"])
-        .gte("start_time", since),
+        .gte("start_time", since)),
     ]);
 
     const peaks = learnPeakHours(hist ?? []);
     const preferredHour = Number(startTime.split(":")[0]);
     const out = recommendAcross({
       requested: facility, facilities, rules,
-      reservations: (res as Reservation[]) ?? [],
+      reservations: (res as BusySlot[] | null) ?? [],
       date, durationMins: duration, participants, preferredHour,
       weights: profile?.rec_weights ?? DEFAULT_WEIGHTS,
       peaks, lookAheadDays: LOOK_AHEAD,
@@ -362,12 +378,12 @@ export default function StudentDashboard() {
       const { start, end } = buildWindow();
       const ruleError = validateRules(start, end);
       if (ruleError) { toast.error(ruleError); return; }
-      const { data: clash } = await supabase
-        .from("reservations").select("id")
+      const { data: clash } = await busyQuery((t) => supabase
+        .from(t).select("id")
         .eq("facility_id", facility!.id)
         .in("status", ["pending", "approved"])
         .lt("start_time", end.toISOString()).gt("end_time", start.toISOString())
-        .limit(1);
+        .limit(1));
       if (clash && clash.length > 0) {
         toast.error("That time is taken. Here are the best alternatives:");
         await suggestAlternatives();
@@ -382,6 +398,14 @@ export default function StudentDashboard() {
   // ---------- derived ----------
   const venues = Array.from(new Set(facilities.map((f) => f.venue)));
   const venueFacilities = facilities.filter((f) => f.venue === venue);
+  // chart range for the venue: earliest opening to latest closing of its rooms
+  const venueRules = venueFacilities.map((f) => rules[f.id]).filter(Boolean);
+  const venueHours = venueRules.length
+    ? {
+        open: Math.min(...venueRules.map((r) => Number(r.open_time.slice(0, 2)))),
+        close: Math.min(24, Math.max(...venueRules.map((r) => Number(r.close_time.slice(0, 2)) + (r.close_time.slice(3, 5) !== "00" ? 1 : 0)))),
+      }
+    : { open: 8, close: 22 };
   const facilityEquipment = facility
     ? equipment.filter((e) => e.facility_type === facility.type)
     : [];
@@ -736,7 +760,7 @@ export default function StudentDashboard() {
                       <button key={v} onClick={() => setVenue(v)}
                         className="animate-reveal group overflow-hidden rounded-xl border bg-card text-left shadow-sm transition-all hover:-translate-y-1 hover:border-primary hover:shadow-lg"
                         style={{ animationDelay: `${i * 60}ms` }}>
-                        <div className="h-28 bg-muted/40"><FacilityIso type={inVenue[0].type} busy={freeCount === 0} /></div>
+                        <div className="h-28 bg-muted/40"><VenueArt name={v} types={inVenue.map((f) => f.type)} busy={freeCount === 0} /></div>
                         <div className="p-4">
                           <div className="flex items-center gap-1.5">
                             <MapPin className="h-4 w-4 text-primary" />
@@ -762,6 +786,7 @@ export default function StudentDashboard() {
 
               {/* step 2: facilities in venue */}
               {venue && !facility && (
+                <div className="space-y-6">
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                   {venueFacilities.map((f, i) => {
                     const busy = busyNow.has(f.id);
@@ -804,6 +829,17 @@ export default function StudentDashboard() {
                       </button>
                     );
                   })}
+                </div>
+
+                {/* popular times for the whole venue, or one room */}
+                <div className="rounded-xl border bg-card p-4">
+                  <PopularTimes
+                    key={venue}
+                    rooms={venueFacilities.map((f) => ({ id: f.id, name: f.name }))}
+                    openHour={venueHours.open}
+                    closeHour={venueHours.close}
+                  />
+                </div>
                 </div>
               )}
 
@@ -946,16 +982,6 @@ export default function StudentDashboard() {
                     </div>
                   </div>
 
-                  {/* popular times */}
-                  <div className="lg:col-span-5">
-                    <div className="rounded-xl border bg-card p-4">
-                      <PopularTimes
-                        facilityId={facility.id}
-                        openHour={rule ? Number(rule.open_time.slice(0, 2)) : 8}
-                        closeHour={rule ? Number(rule.close_time.slice(0, 2)) : 22}
-                      />
-                    </div>
-                  </div>
                 </div>
               )}
               </div>

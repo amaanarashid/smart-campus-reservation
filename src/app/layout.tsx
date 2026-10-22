@@ -21,6 +21,8 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem('campus-theme')||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);var e=document.documentElement;if(d)e.classList.add('dark');e.style.colorScheme=d?'dark':'light';}catch(_){}})();`;
+
 export const metadata: Metadata = {
   title: "Campus Reserve - Smart Facility Reservation",
   description:
@@ -35,8 +37,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={cn("h-full", "antialiased", geistSans.variable, geistMono.variable, "font-sans", inter.variable, fraunces.variable)}
     >
+      <head>
+        {/* apply the saved light/dark choice before the first paint (no white flash) */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

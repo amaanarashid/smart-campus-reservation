@@ -9,20 +9,26 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast, Toaster } from "sonner";
 import AppShell from "@/components/app-shell";
 import { ensureProfile } from "@/lib/profile";
+import { useAutoRefresh } from "@/lib/use-auto-refresh";
 import {
   Users, CalendarRange, Clock, Building2, ClipboardCheck, Package,
-  Plus, ChevronDown, ScrollText, LayoutDashboard, BarChart3,
-  Trash2, MapPin, Users2, ShieldCheck, GraduationCap, UserCog, Activity,
-  ArrowRight, Check, X, Loader2, Search, Cpu, MessageSquareWarning,
+  Plus, ScrollText, LayoutDashboard, BarChart3,
+  MapPin, Users2, ShieldCheck, GraduationCap, UserCog, Activity,
+  ArrowRight, Check, X, Loader2, Search, Cpu, MessageSquareWarning, CircuitBoard, Laptop, KeyRound, Unplug, MoreHorizontal,
 } from "lucide-react";
 import AdminAnalytics from "@/components/admin-analytics";
 import FacilityIso from "@/components/facility-iso";
 import FacilityDetail from "@/components/facility-detail";
 import RoomReports from "@/components/room-reports";
+import AdminFacilities from "@/components/admin-facilities";
+import SmartRoomConnect, { DEVICE_KIND, type SmartDevice } from "@/components/smart-room-connect";
 import { fmtRelativeDay, fmtTime, myAt, myDateKey } from "@/lib/time";
 
 interface FmRow { id: string; facility_id: string; manager_id: string }
@@ -52,16 +58,6 @@ function AdminSkeleton() {
 }
 
 // step 1: a category owns the venue and the rules
-const NEW_CATEGORY_DEFAULTS = {
-  name: "", venue: "",
-  open_time: "08:00", close_time: "22:00", slot_minutes: 60,
-  min_duration_mins: 30, max_duration_mins: 120,
-  max_advance_days: 14, cancellation_hours: 24, auto_approve: false,
-  checkin_grace_mins: null as number | null,
-};
-// step 2: a court/room under a category
-const NEW_COURT_DEFAULTS = { category_id: "", name: "", capacity: 10, description: "" };
-
 export default function AdminDashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -74,11 +70,7 @@ export default function AdminDashboard() {
   const [unassignedPending, setUnassignedPending] = useState<PendingRow[]>([]);
   const [stats, setStats] = useState({ users: 0, bookings: 0, pending: 0 });
   const [categories, setCategories] = useState<FacilityCategory[]>([]);
-  const [nc, setNc] = useState({ ...NEW_CATEGORY_DEFAULTS });
-  const [ncourt, setNcourt] = useState({ ...NEW_COURT_DEFAULTS });
   const [newEquip, setNewEquip] = useState({ type: "", name: "", qty: 1 });
-  const [showAddCat, setShowAddCat] = useState(false);
-  const [showAddCourt, setShowAddCourt] = useState(false);
   const [activity, setActivity] = useState<ActivityLog[]>([]);
   const [logFilter, setLogFilter] = useState<string>("all");
   const [logSearch, setLogSearch] = useState("");
@@ -93,7 +85,9 @@ export default function AdminDashboard() {
   const [openFac, setOpenFac] = useState<string | null>(null);   // facility detail open
   const [facFilter, setFacFilter] = useState<string>("all");
   const [facSearch, setFacSearch] = useState("");
-  const [smartIds, setSmartIds] = useState<Set<string>>(new Set()); // rooms with a Wokwi device
+  const [devices, setDevices] = useState<SmartDevice[]>([]);       // smart-room devices (Wokwi / MQTT)
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [rekey, setRekey] = useState<SmartDevice | null>(null);
 
   const load = useCallback(async () => {
     const [{ data: f }, { data: r }, { data: m }, { data: fm }, { data: eq }, { data: cats }] = await Promise.all([
@@ -144,8 +138,9 @@ export default function AdminDashboard() {
     setTodayRes((td as Reservation[]) ?? []);
 
     // which rooms have a smart device (view from upgrade-room-end.sql; absent = none)
-    const { data: devs } = await supabase.from("room_devices_visible").select("facility_id");
-    setSmartIds(new Set(((devs as { facility_id: string }[] | null) ?? []).map((d) => d.facility_id)));
+    const viaView = await supabase.from("room_devices_visible").select("*");
+    const devs = viaView.error ? (await supabase.from("room_devices").select("*")).data : viaView.data;
+    setDevices(((devs as SmartDevice[] | null) ?? []));
 
     // open room problems reported by students (table from upgrade-room-reports.sql)
     const { count: fb } = await supabase.from("room_reports")
@@ -161,7 +156,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     (async () => {
       const prof = await ensureProfile();
-      if (!prof || prof.role !== "admin") { router.push("/login"); return; }
+      if (!prof || prof.role !== "admin") { router.replace("/login"); return; }
       setProfile(prof);
       await load();
       setNowMs(Date.now());
@@ -171,68 +166,8 @@ export default function AdminDashboard() {
     return () => clearInterval(t);
   }, [router, load]);
 
-  // ---------- step 1: categories (own the rules) ----------
-  async function createCategory() {
-    if (!nc.name || !nc.venue) { toast.error("Category name and venue are required"); return; }
-    const slug = nc.name.trim().toLowerCase().replace(/\s+/g, "_");
-    // only send the grace rule when set, so this still works before
-    // upgrade-auto-release.sql has added the column
-    const { checkin_grace_mins, ...base } = nc;
-    const { error } = await supabase.from("facility_categories")
-      .insert({ ...base, slug, ...(checkin_grace_mins ? { checkin_grace_mins } : {}) });
-    if (error) {
-      toast.error(error.message.includes("duplicate") ? "That category already exists" : error.message);
-      return;
-    }
-    toast.success(`Category "${nc.name}" created - now add its rooms/courts`);
-    setNc({ ...NEW_CATEGORY_DEFAULTS });
-    setShowAddCat(false);
-    setShowAddCourt(true);
-    await load();
-  }
-
-  async function saveCategoryRule(categoryId: string, patch: Partial<FacilityCategory>) {
-    const { error } = await supabase.from("facility_categories").update(patch).eq("id", categoryId);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Category rules updated - applies to all its rooms/courts");
-    await load();
-  }
-
-  async function deleteCategory(c: FacilityCategory) {
-    const count = facilities.filter((f) => f.category_id === c.id).length;
-    if (!window.confirm(
-      `Delete "${c.name}"${count ? ` and its ${count} room(s)/court(s)` : ""}? Bookings will be removed too.`
-    )) return;
-    const { error } = await supabase.from("facility_categories").delete().eq("id", c.id);
-    if (error) { toast.error(error.message); return; }
-    toast.success(`${c.name} deleted`);
-    setOpenFac(null);
-    await load();
-  }
-
-  // ---------- step 2: rooms / courts ----------
-  async function createCourt() {
-    if (!ncourt.category_id || !ncourt.name) {
-      toast.error("Pick a category and give the room/court a name"); return;
-    }
-    const { error } = await supabase.from("facilities").insert({
-      category_id: ncourt.category_id, name: ncourt.name,
-      capacity: ncourt.capacity, description: ncourt.description || null, status: "active",
-    });
-    if (error) { toast.error(error.message); return; }
-    toast.success(`${ncourt.name} added`);
-    setNcourt({ ...NEW_COURT_DEFAULTS, category_id: ncourt.category_id });
-    await load();
-  }
-
-  async function deleteCourt(f: Facility) {
-    if (!window.confirm(`Delete "${f.name}"? Its bookings will be removed too.`)) return;
-    const { error } = await supabase.from("facilities").delete().eq("id", f.id);
-    if (error) { toast.error(error.message); return; }
-    toast.success(`${f.name} deleted`);
-    setOpenFac(null);
-    await load();
-  }
+  // stats, approvals, feedback count and the activity log stay current
+  useAutoRefresh(load, 30_000, !loading);
 
   async function changeRole(u: Profile, role: string) {
     if (u.id === profile?.id && role !== "admin") {
@@ -241,43 +176,6 @@ export default function AdminDashboard() {
     const { error } = await supabase.from("profiles").update({ role }).eq("id", u.id);
     if (error) { toast.error(error.message); return; }
     toast.success(`${u.full_name} is now ${role.replace("_", " ")}`);
-    await load();
-  }
-
-  async function toggleStatus(f: Facility) {
-    const status = f.status === "active" ? "inactive" : "active";
-    await supabase.from("facilities").update({ status }).eq("id", f.id);
-    toast.success(`${f.name} is now ${status}`);
-    await load();
-  }
-
-  // ---------- managers ----------
-  async function addManager(facilityId: string, managerId: string) {
-    const { error } = await supabase.from("facility_managers")
-      .insert({ facility_id: facilityId, manager_id: managerId });
-    if (error) { toast.error(error.message.includes("duplicate") ? "Already assigned" : error.message); return; }
-    await load();
-  }
-
-  async function removeManager(rowId: string) {
-    await supabase.from("facility_managers").delete().eq("id", rowId);
-    await load();
-  }
-
-  // ---------- per-court overrides (NULL columns = inherit from category) ----------
-  async function saveOverride(facilityId: string, patch: Record<string, unknown>) {
-    const { error } = await supabase
-      .from("facility_rules")
-      .upsert({ facility_id: facilityId, ...patch }, { onConflict: "facility_id" });
-    if (error) { toast.error(error.message); return; }
-    toast.success("Override saved for this room/court");
-    await load();
-  }
-
-  async function clearOverride(facilityId: string) {
-    const { error } = await supabase.from("facility_rules").delete().eq("facility_id", facilityId);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Override removed - now inherits its category");
     await load();
   }
 
@@ -309,7 +207,6 @@ export default function AdminDashboard() {
     await load();
   }
 
-  const venues = Array.from(new Set(categories.map((c) => c.venue)));
   const fname = (id: string) => facilities.find((f) => f.id === id)?.name ?? "-";
 
   const LOG_TABS: { key: string; label: string; entities: string[] }[] = [
@@ -350,13 +247,30 @@ export default function AdminDashboard() {
   });
 
 
-  // ---------- facilities: grid + detail ----------
+  // ---------- smart rooms: only rooms with an active device ----------
   const openFacility = openFac ? facilities.find((f) => f.id === openFac) ?? null : null;
-    const shownFacilities = facilities.filter((f) => {
+  const deviceOf = (facilityId: string) => devices.find((d) => d.facility_id === facilityId && d.active);
+  const smartRooms = facilities.filter((f) => deviceOf(f.id));
+  const smartCats = categories.filter((c) => smartRooms.some((f) => f.category_id === c.id));
+  const shownFacilities = smartRooms.filter((f) => {
     const q = facSearch.trim().toLowerCase();
     return (facFilter === "all" || f.category_id === facFilter) &&
       (!q || f.name.toLowerCase().includes(q) || f.venue.toLowerCase().includes(q));
   });
+  async function disconnect(d: SmartDevice) {
+    if (!window.confirm(`Disconnect ${d.label}? Its key stops working. Its history is kept, and you can connect it again later.`)) return;
+    const { error } = await supabase.from("room_devices").update({ active: false }).eq("id", d.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`${d.label} disconnected`);
+    await load();
+  }
+  /** "Online" if the device reported in the last 30 s. */
+  const seen = (d: SmartDevice) => {
+    if (!d.last_seen_at) return { online: false, text: "Never connected" };
+    const ago = Math.max(0, Math.round((now - new Date(d.last_seen_at).getTime()) / 1000));
+    if (ago < 30) return { online: true, text: "Online" };
+    return { online: false, text: ago < 3600 ? `Seen ${Math.round(ago / 60)} min ago` : ago < 86400 ? `Seen ${Math.round(ago / 3600)} h ago` : `Seen ${Math.round(ago / 86400)} d ago` };
+  };
 
   return (
     <AppShell
@@ -532,93 +446,119 @@ export default function AdminDashboard() {
           )}
 
           {tab === "rooms" && !openFacility && (
-            <div key="rooms" className="space-y-6">
-              <div className="animate-reveal">
-                <h2 className="font-display flex items-center gap-2 text-xl font-semibold">
-                  <Cpu className="h-5 w-5 text-primary" /> Smart rooms
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Open a room for its live 3D twin, readings and energy. Rooms marked Live 3D have a Wokwi device;
-                  the rest are shown from their bookings.
-                </p>
+            <div key="rooms" className="space-y-5">
+              <SmartRoomConnect open={connectOpen || !!rekey} rekey={rekey} facilities={facilities} devices={devices}
+                onOpenChange={(v) => { if (!v) { setConnectOpen(false); setRekey(null); } }} onDone={load} />
+              <div className="animate-reveal flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h2 className="font-display flex items-center gap-2 text-xl font-semibold">
+                    <Cpu className="h-5 w-5 text-primary" /> Smart rooms
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Rooms with a connected device. Open one for its live 3D twin, readings, remote control and energy.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {smartRooms.length > 0 && (
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input placeholder="Search rooms or venues" value={facSearch}
+                        onChange={(e) => setFacSearch(e.target.value)} className="h-9 w-56 pl-8" />
+                    </div>
+                  )}
+                  <Button className="gap-2" onClick={() => setConnectOpen(true)} disabled={facilities.length === 0}>
+                    <Plus className="h-4 w-4" /> Connect a room
+                  </Button>
+                </div>
               </div>
-              {facilities.length === 0 && (
-                <p className="rounded-xl border border-dashed py-12 text-center text-sm text-muted-foreground">
-                  No facilities yet - add them in the Facilities tab.
-                </p>
+
+              {smartCats.length > 1 && (
+                <div className="animate-reveal flex flex-wrap items-center gap-2">
+                  {[{ id: "all", name: "All", n: smartRooms.length },
+                    ...smartCats.map((c) => ({ id: c.id, name: c.name, n: smartRooms.filter((f) => f.category_id === c.id).length }))]
+                    .map((c) => (
+                      <button key={c.id} onClick={() => setFacFilter(c.id)}
+                        className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                          facFilter === c.id ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
+                        {c.name}
+                        <span className={`rounded-full px-1.5 ${facFilter === c.id ? "bg-primary-foreground/20" : "bg-muted"}`}>{c.n}</span>
+                      </button>
+                    ))}
+                </div>
               )}
-          {/* ---------- one panel per room; click opens its detail ---------- */}
-          {facilities.length > 0 && (
-            <div className="animate-reveal flex flex-wrap items-center gap-2">
-              {[{ id: "all", name: "All", n: facilities.length },
-                ...categories.map((c) => ({ id: c.id, name: c.name, n: facilities.filter((f) => f.category_id === c.id).length }))]
-                .map((c) => (
-                  <button key={c.id} onClick={() => setFacFilter(c.id)}
-                    className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                      facFilter === c.id ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
-                    {c.name}
-                    <span className={`rounded-full px-1.5 ${facFilter === c.id ? "bg-primary-foreground/20" : "bg-muted"}`}>{c.n}</span>
-                  </button>
-                ))}
-              <div className="relative ml-auto w-full sm:w-64">
-                <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input placeholder="Search rooms or venues..." value={facSearch}
-                  onChange={(e) => setFacSearch(e.target.value)} className="pl-8" />
-              </div>
-            </div>
-          )}
 
-          {facilities.length > 0 && (
-            shownFacilities.length === 0 ? (
-              <div className="flex flex-col items-center gap-1.5 rounded-xl border border-dashed py-12 text-center">
-                <Building2 className="h-7 w-7 text-muted-foreground/50" />
-                <p className="text-sm font-medium">Nothing matches</p>
-                <p className="text-xs text-muted-foreground">
-                  Try another type or search.
-                </p>
-              </div>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-                {shownFacilities.map((f, fi) => {
-                  const busy = inUse.has(f.id);
-                  const off = f.status !== "active";
-                  const smart = smartIds.has(f.id);
-                  const today = todayRes.filter((r) => r.facility_id === f.id).length;
-                  const mgrs = fmRows.filter((x) => x.facility_id === f.id).length;
-                  return (
-                    <button key={f.id} onClick={() => { setOpenFac(f.id); window.scrollTo({ top: 0, behavior: "smooth" }); }} style={stagger(fi)}
-                      className={`animate-reveal stagger group overflow-hidden rounded-xl border bg-card text-left shadow-sm transition-all hover:-translate-y-1 hover:border-primary hover:shadow-lg ${off ? "opacity-75" : ""}`}>
-                      <div className="relative h-32 bg-muted/40">
-                        <div className={off ? "h-full grayscale" : "h-full"}><FacilityIso type={f.type} busy={busy} /></div>
-                        <span className="absolute left-2 top-2 rounded-full bg-card/90 px-2 py-0.5 text-[11px] font-medium shadow">
-                          {off ? f.status : busy ? "In use" : "Free now"}
-                        </span>
-                        {smart && (
-                          <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground shadow">
-                            <Cpu className="h-3 w-3" /> Live 3D
+              {smartRooms.length === 0 ? (
+                <Card className="animate-reveal">
+                  <CardContent className="flex flex-col items-center gap-2 py-16 text-center">
+                    <Cpu className="h-10 w-10 text-muted-foreground/40" />
+                    <p className="font-display text-lg font-semibold">No smart rooms yet</p>
+                    <p className="max-w-md text-sm text-muted-foreground">
+                      Connect an existing room to a Wokwi simulation or a real MQTT device. You get a device ID and key to paste into it.
+                    </p>
+                    <Button className="mt-2 gap-2" onClick={() => setConnectOpen(true)} disabled={facilities.length === 0}>
+                      <Plus className="h-4 w-4" /> Connect a room
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : shownFacilities.length === 0 ? (
+                <p className="py-12 text-center text-sm text-muted-foreground">Nothing matches. Try another type or search.</p>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                  {shownFacilities.map((f, fi) => {
+                    const d = deviceOf(f.id)!;
+                    const st = seen(d);
+                    const busy = inUse.has(f.id);
+                    const off = f.status !== "active";
+                    const today = todayRes.filter((r) => r.facility_id === f.id).length;
+                    const openRoom = () => { setOpenFac(f.id); window.scrollTo({ top: 0, behavior: "smooth" }); };
+                    return (
+                      <Card key={f.id} style={stagger(fi)}
+                        className={`animate-reveal stagger group flex flex-col gap-0 overflow-hidden py-0 transition-all hover:-translate-y-0.5 hover:shadow-md ${off ? "opacity-75" : ""}`}>
+                        <button onClick={openRoom} className="relative h-32 bg-muted/40 text-left" aria-label={`Open ${f.name}`}>
+                          <div className={off ? "h-full grayscale" : "h-full"}><FacilityIso type={f.type} busy={busy} /></div>
+                          <span className="absolute left-2 top-2 rounded-full bg-card/90 px-2 py-0.5 text-[11px] font-medium shadow">
+                            {off ? f.status : busy ? "In use" : "Free now"}
                           </span>
-                        )}
-                      </div>
-                      <div className="space-y-1.5 p-4">
-                        <div className="flex items-start justify-between gap-2">
-                          <h3 className="font-display font-semibold leading-tight">{f.name}</h3>
-                          <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+                          <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-card/90 px-2 py-0.5 text-[11px] font-medium shadow">
+                            {d.connection === "mqtt" ? <CircuitBoard className="h-3 w-3 text-primary" /> : <Laptop className="h-3 w-3 text-primary" />}
+                            {DEVICE_KIND[d.connection === "mqtt" ? "mqtt" : "wokwi"].title}
+                          </span>
+                        </button>
+                        <div className="flex flex-1 flex-col gap-3 p-4">
+                          <div>
+                            <h3 className="font-display font-semibold leading-tight">{f.name}</h3>
+                            <p className="pt-0.5 text-xs text-muted-foreground">{f.venue} · {typeLabel(f.type)}</p>
+                          </div>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="flex items-center gap-1.5">
+                              <span className={`h-2 w-2 rounded-full ${st.online ? "bg-green-500" : "bg-muted-foreground/40"}`} />
+                              <span className={st.online ? "font-medium" : "text-muted-foreground"}>{st.text}</span>
+                            </span>
+                            <span className="flex items-center gap-1 text-muted-foreground"><CalendarRange className="h-3.5 w-3.5" /> {today} today</span>
+                          </div>
+                          <div className="mt-auto flex gap-2">
+                            <Button variant="outline" className="flex-1 gap-2" onClick={openRoom}>
+                              Live view <ArrowRight className="h-4 w-4" />
+                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="icon" aria-label={`Device actions for ${f.name}`}><MoreHorizontal className="h-4 w-4" /></Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => setRekey(d)}><KeyRound className="h-4 w-4" /> New device key</DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => disconnect(d)}>
+                                  <Unplug className="h-4 w-4" /> Disconnect
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </div>
-                        <p className="text-xs text-muted-foreground">{f.venue} · {typeLabel(f.type)}</p>
-                        <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 pt-1 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1"><Users2 className="h-3.5 w-3.5" /> {f.capacity}</span>
-                          <span className="flex items-center gap-1"><CalendarRange className="h-3.5 w-3.5" /> {today} today</span>
-                          <span className="flex items-center gap-1"><UserCog className="h-3.5 w-3.5" /> {mgrs ? `${mgrs} manager${mgrs > 1 ? "s" : ""}` : "admin"}</span>
-                          {rules[f.id]?.has_override && <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">custom rules</Badge>}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )
-          )}
-
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -704,411 +644,10 @@ export default function AdminDashboard() {
           </Card>
           )}
 
-          {tab === "facilities" && (<div key="fac" className="space-y-6">
-
-          {/* ---------- stepper header ---------- */}
-          <div className="animate-reveal grid gap-4 md:grid-cols-2">
-            {/* STEP 1 */}
-            <Card className="overflow-hidden border-l-4 border-l-primary">
-              <button className="flex w-full items-start gap-3 p-5 text-left transition-colors hover:bg-muted/40"
-                onClick={() => setShowAddCat((s) => !s)}>
-                <span className="font-display flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
-                  1
-                </span>
-                <span className="flex-1">
-                  <span className="font-display block font-semibold">Create a facility type</span>
-                  <span className="block pt-0.5 text-xs leading-relaxed text-muted-foreground">
-                    e.g. Badminton or Football. Set the venue and booking rules once - every
-                    room or court you add inherits them.
-                  </span>
-                </span>
-                <ChevronDown className={`mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-300 ${showAddCat ? "rotate-180" : ""}`} />
-              </button>
-              {showAddCat && (
-                <CardContent className="animate-field-in space-y-4 border-t pt-4">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium">Facility type</label>
-                      <Input placeholder="e.g. Badminton" value={nc.name}
-                        onChange={(e) => setNc({ ...nc, name: e.target.value })} />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium">Venue</label>
-                      <Input placeholder="e.g. Sports Hall" value={nc.venue} list="venue-list"
-                        onChange={(e) => setNc({ ...nc, venue: e.target.value })} />
-                      <datalist id="venue-list">
-                        {venues.map((v) => <option key={v} value={v} />)}
-                      </datalist>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
-                    <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      <Clock className="h-3.5 w-3.5" /> Booking rules
-                    </p>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">Opening hours</label>
-                        <div className="flex items-center gap-1.5">
-                          <Input type="time" value={nc.open_time}
-                            onChange={(e) => setNc({ ...nc, open_time: e.target.value })} />
-                          <span className="text-xs text-muted-foreground">to</span>
-                          <Input type="time" value={nc.close_time}
-                            onChange={(e) => setNc({ ...nc, close_time: e.target.value })} />
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">Booking length (min)</label>
-                        <div className="flex items-center gap-1.5">
-                          <Input type="number" min={15} step={15} value={nc.min_duration_mins}
-                            onChange={(e) => setNc({ ...nc, min_duration_mins: Number(e.target.value) })} />
-                          <span className="text-xs text-muted-foreground">to</span>
-                          <Input type="number" min={15} step={15} value={nc.max_duration_mins}
-                            onChange={(e) => setNc({ ...nc, max_duration_mins: Number(e.target.value) })} />
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">Book up to (days ahead)</label>
-                        <Input type="number" min={1} value={nc.max_advance_days}
-                          onChange={(e) => setNc({ ...nc, max_advance_days: Number(e.target.value) })} />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">Cancellation notice (hours)</label>
-                        <Input type="number" min={0} value={nc.cancellation_hours}
-                          onChange={(e) => setNc({ ...nc, cancellation_hours: Number(e.target.value) })} />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">
-                          Check-in grace (min) - blank = never auto-release
-                        </label>
-                        <Input type="number" min={1} max={120} placeholder="off"
-                          value={nc.checkin_grace_mins ?? ""}
-                          onChange={(e) => setNc({
-                            ...nc,
-                            checkin_grace_mins: e.target.value === "" ? null : Number(e.target.value),
-                          })} />
-                      </div>
-                    </div>
-                    <label className="flex cursor-pointer items-center justify-between rounded-lg bg-card px-3 py-2">
-                      <span>
-                        <span className="block text-sm font-medium">Auto-approve bookings</span>
-                        <span className="block text-xs text-muted-foreground">
-                          Skip the manager queue for this type
-                        </span>
-                      </span>
-                      <Button size="sm" variant={nc.auto_approve ? "default" : "outline"}
-                        onClick={() => setNc({ ...nc, auto_approve: !nc.auto_approve })}>
-                        {nc.auto_approve ? "On" : "Off"}
-                      </Button>
-                    </label>
-                  </div>
-
-                  <Button className="w-full gap-2" onClick={createCategory}>
-                    <Plus className="h-4 w-4" /> Create facility type
-                  </Button>
-                </CardContent>
-              )}
-            </Card>
-
-            {/* STEP 2 */}
-            <Card className={`overflow-hidden border-l-4 ${categories.length ? "border-l-primary" : "border-l-muted"}`}>
-              <button className="flex w-full items-start gap-3 p-5 text-left transition-colors hover:bg-muted/40"
-                onClick={() => setShowAddCourt((s) => !s)}>
-                <span className={`font-display flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                  categories.length ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-                  2
-                </span>
-                <span className="flex-1">
-                  <span className="font-display block font-semibold">Add rooms &amp; courts</span>
-                  <span className="block pt-0.5 text-xs leading-relaxed text-muted-foreground">
-                    {categories.length === 0
-                      ? "Create a facility type first, then add its rooms here."
-                      : "e.g. Court 1, Court 2 under Badminton. Only a name and capacity needed."}
-                  </span>
-                </span>
-                <ChevronDown className={`mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-300 ${showAddCourt ? "rotate-180" : ""}`} />
-              </button>
-              {showAddCourt && (
-                <CardContent className="animate-field-in space-y-3 border-t pt-4">
-                  {categories.length === 0 ? (
-                    <p className="py-4 text-center text-sm text-muted-foreground">
-                      No facility types yet - complete step 1 first.
-                    </p>
-                  ) : (
-                    <>
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium">Facility type</label>
-                        <Select value={ncourt.category_id} onValueChange={(v) => setNcourt({ ...ncourt, category_id: v })}>
-                          <SelectTrigger><SelectValue placeholder="Choose type" /></SelectTrigger>
-                          <SelectContent>
-                            {categories.map((c) => (
-                              <SelectItem key={c.id} value={c.id}>{c.name} - {c.venue}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="space-y-1">
-                          <label className="text-xs font-medium">Room / court name</label>
-                          <Input placeholder="e.g. Court 1" value={ncourt.name}
-                            onChange={(e) => setNcourt({ ...ncourt, name: e.target.value })} />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-xs font-medium">Capacity (people)</label>
-                          <Input type="number" min={1} value={ncourt.capacity}
-                            onChange={(e) => setNcourt({ ...ncourt, capacity: Number(e.target.value) })} />
-                        </div>
-                      </div>
-                      <Button className="w-full gap-2" onClick={createCourt}>
-                        <Plus className="h-4 w-4" /> Add room / court
-                      </Button>
-                    </>
-                  )}
-                </CardContent>
-              )}
-            </Card>
-          </div>
-
-          {/* ---------- existing types ---------- */}
-          {categories.map((c, ci) => {
-            const courts = facilities.filter((f) => f.category_id === c.id);
-            const activeCount = courts.filter((f) => f.status === "active").length;
-            return (
-              <Card key={c.id} className="animate-reveal overflow-hidden"
-                style={{ animationDelay: `${80 + ci * 50}ms` }}>
-                <CardHeader className="border-b bg-muted/30">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex items-start gap-3">
-                      <span className="h-14 w-16 shrink-0 overflow-hidden rounded-lg border bg-card">
-                        <FacilityIso type={c.slug} busy={false} />
-                      </span>
-                      <div>
-                        <CardTitle className="font-display text-lg">{c.name}</CardTitle>
-                        <CardDescription className="flex flex-wrap items-center gap-1.5 pt-1">
-                          <Badge variant="secondary" className="gap-1">
-                            <MapPin className="h-3 w-3" />{c.venue}
-                          </Badge>
-                          <Badge variant="outline">{courts.length} room(s)</Badge>
-                          {courts.length > 0 && (
-                            <Badge variant="outline">{activeCount} active</Badge>
-                          )}
-                          {c.auto_approve && <Badge>auto-approve</Badge>}
-                        </CardDescription>
-                      </div>
-                    </div>
-                    <Button size="sm" variant="ghost" className="gap-1.5 text-destructive hover:bg-destructive/10"
-                      onClick={() => deleteCategory(c)}>
-                      <Trash2 className="h-4 w-4" /> Delete type
-                    </Button>
-                  </div>
-                </CardHeader>
-
-                <CardContent className="space-y-5 pt-5">
-                  {/* shared rules */}
-                  <div className="rounded-xl border bg-muted/30 p-4">
-                    <p className="flex items-center gap-1.5 pb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      <Clock className="h-3.5 w-3.5" />
-                      Booking rules - apply to every room in {c.name}
-                    </p>
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                      <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">Opening hours</label>
-                        <div className="flex items-center gap-1.5">
-                          <Input type="time" defaultValue={c.open_time.slice(0, 5)}
-                            onBlur={(e) => e.target.value !== c.open_time.slice(0, 5) &&
-                              saveCategoryRule(c.id, { open_time: e.target.value })} />
-                          <span className="text-xs text-muted-foreground">to</span>
-                          <Input type="time" defaultValue={c.close_time.slice(0, 5)}
-                            onBlur={(e) => e.target.value !== c.close_time.slice(0, 5) &&
-                              saveCategoryRule(c.id, { close_time: e.target.value })} />
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">Booking length (min)</label>
-                        <div className="flex items-center gap-1.5">
-                          <Input type="number" defaultValue={c.min_duration_mins}
-                            onKeyDown={(e) => e.key === "Enter" &&
-                              saveCategoryRule(c.id, { min_duration_mins: Number((e.target as HTMLInputElement).value) })} />
-                          <span className="text-xs text-muted-foreground">to</span>
-                          <Input type="number" defaultValue={c.max_duration_mins}
-                            onKeyDown={(e) => e.key === "Enter" &&
-                              saveCategoryRule(c.id, { max_duration_mins: Number((e.target as HTMLInputElement).value) })} />
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">Advance / cancel notice</label>
-                        <div className="flex items-center gap-1.5">
-                          <Input type="number" defaultValue={c.max_advance_days} title="days ahead"
-                            onKeyDown={(e) => e.key === "Enter" &&
-                              saveCategoryRule(c.id, { max_advance_days: Number((e.target as HTMLInputElement).value) })} />
-                          <span className="whitespace-nowrap text-xs text-muted-foreground">d /</span>
-                          <Input type="number" defaultValue={c.cancellation_hours} title="hours notice"
-                            onKeyDown={(e) => e.key === "Enter" &&
-                              saveCategoryRule(c.id, { cancellation_hours: Number((e.target as HTMLInputElement).value) })} />
-                          <span className="text-xs text-muted-foreground">h</span>
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">Auto-approve</label>
-                        <Button size="sm" className="w-full" variant={c.auto_approve ? "default" : "outline"}
-                          onClick={() => saveCategoryRule(c.id, { auto_approve: !c.auto_approve })}>
-                          {c.auto_approve ? "On - instant booking" : "Off - needs approval"}
-                        </Button>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">Check-in grace (min)</label>
-                        <Input type="number" min={1} max={120} placeholder="off - never release"
-                          defaultValue={c.checkin_grace_mins ?? ""}
-                          title="Release a booking if nobody checks in within this many minutes of its start. Blank = off."
-                          onKeyDown={(e) => {
-                            if (e.key !== "Enter") return;
-                            const v = (e.target as HTMLInputElement).value;
-                            saveCategoryRule(c.id, { checkin_grace_mins: v === "" ? null : Number(v) });
-                          }} />
-                      </div>
-                    </div>
-                    <p className="pt-2 text-[11px] text-muted-foreground">
-                      Edit a value and press Enter (or click away for times) to save.
-                    </p>
-                  </div>
-
-                  {/* rooms */}
-                  {courts.length === 0 ? (
-                    <div className="flex flex-col items-center gap-1.5 rounded-xl border border-dashed py-8 text-center">
-                      <Building2 className="h-6 w-6 text-muted-foreground/50" />
-                      <p className="text-sm font-medium">No rooms or courts yet</p>
-                      <p className="text-xs text-muted-foreground">Add one using step 2 above.</p>
-                    </div>
-                  ) : (
-                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                      {courts.map((f, fi) => {
-                        const r = rules[f.id];
-                        const assigned = fmRows.filter((x) => x.facility_id === f.id);
-                        const unassignedManagers = managers.filter(
-                          (m) => !assigned.some((a) => a.manager_id === m.id)
-                        );
-                        const busy = inUse.has(f.id);
-                        const off = f.status !== "active";
-                        return (
-                          <div key={f.id} style={stagger(fi)}
-                            className={`animate-reveal stagger flex flex-col overflow-hidden rounded-xl border bg-card shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${off ? "opacity-75" : ""}`}>
-                            <div className="relative h-28 bg-muted/40">
-                              <div className={off ? "h-full grayscale" : "h-full"}>
-                                <FacilityIso type={f.type} busy={busy} />
-                              </div>
-                              <span className="absolute left-2 top-2 rounded-full bg-card/90 px-2 py-0.5 text-[11px] font-medium shadow">
-                                {off ? f.status : busy ? "In use" : "Free now"}
-                              </span>
-                              <Button size="sm" variant="ghost"
-                                className="absolute right-1.5 top-1.5 h-7 w-7 bg-card/80 p-0 text-destructive hover:bg-destructive/10"
-                                onClick={() => deleteCourt(f)} aria-label={`Delete ${f.name}`}>
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                            <div className="flex flex-1 flex-col gap-3 p-3">
-                            {/* name + capacity */}
-                            <div>
-                              <p className="font-display font-semibold">{f.name}</p>
-                              <div className="flex items-center gap-1.5 pt-0.5">
-                                <Users2 className="h-3.5 w-3.5 text-muted-foreground" />
-                                <Input type="number" defaultValue={f.capacity} className="h-7 w-16 text-xs"
-                                  onKeyDown={async (e) => {
-                                    if (e.key === "Enter") {
-                                      await supabase.from("facilities")
-                                        .update({ capacity: Number((e.target as HTMLInputElement).value) }).eq("id", f.id);
-                                      toast.success("Capacity updated"); await load();
-                                    }
-                                  }} />
-                                <span className="text-xs text-muted-foreground">people</span>
-                              </div>
-                            </div>
-
-                            {/* rules badge */}
-                            <div>
-                              {r?.has_override ? (
-                                <div className="flex items-center gap-1.5">
-                                  <Badge variant="secondary">custom rules</Badge>
-                                  <button className="text-xs text-muted-foreground underline hover:text-foreground"
-                                    onClick={() => clearOverride(f.id)}>reset</button>
-                                </div>
-                              ) : (
-                                <button className="text-xs text-muted-foreground underline hover:text-foreground"
-                                  onClick={() => {
-                                    const v = window.prompt(
-                                      `Override max booking minutes for ${f.name} (leave blank to cancel):`,
-                                      String(r?.max_duration_mins ?? c.max_duration_mins)
-                                    );
-                                    if (v) saveOverride(f.id, { max_duration_mins: Number(v) });
-                                  }}>
-                                  inherits type rules
-                                </button>
-                              )}
-                            </div>
-
-                            {/* managers */}
-                            <div className="flex-1">
-                              <p className="pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Managers</p>
-                              <div className="flex flex-wrap items-center gap-1">
-                                {assigned.map((a) => {
-                                  const m = managers.find((x) => x.id === a.manager_id);
-                                  return (
-                                    <Badge key={a.id} variant="secondary" className="gap-1">
-                                      {m?.full_name ?? "?"}
-                                      <button className="ml-0.5 text-muted-foreground hover:text-destructive"
-                                        onClick={() => removeManager(a.id)}>x</button>
-                                    </Badge>
-                                  );
-                                })}
-                                {assigned.length === 0 && (
-                                  <span className="text-xs text-muted-foreground">admin-managed</span>
-                                )}
-                                {unassignedManagers.length > 0 && (
-                                  <Select value="" onValueChange={(v) => addManager(f.id, v)}>
-                                    <SelectTrigger className="h-6 w-auto gap-1 border-dashed px-2 text-xs">
-                                      <SelectValue placeholder="+ manager" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {unassignedManagers.map((m) => (
-                                        <SelectItem key={m.id} value={m.id}>{m.full_name}</SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* actions */}
-                            <Button size="sm" className="w-full" variant={off ? "default" : "outline"}
-                              onClick={() => toggleStatus(f)}>
-                              {off ? "Reactivate" : "Take offline"}
-                            </Button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-
-          {categories.length === 0 && (
-            <Card className="animate-reveal">
-              <CardContent className="flex flex-col items-center gap-2 py-16 text-center">
-                <Building2 className="h-10 w-10 text-muted-foreground/40" />
-                <p className="font-display text-lg font-semibold">No facilities yet</p>
-                <p className="max-w-sm text-sm text-muted-foreground">
-                  Start with step 1: create a facility type such as Badminton or Discussion Room,
-                  then add its individual rooms and courts.
-                </p>
-                <Button className="mt-2 gap-2" onClick={() => setShowAddCat(true)}>
-                  <Plus className="h-4 w-4" /> Create your first facility type
-                </Button>
-              </CardContent>
-            </Card>
+          {tab === "facilities" && (
+            <AdminFacilities key="fac" categories={categories} facilities={facilities} rules={rules}
+              fmRows={fmRows} managers={managers} inUse={inUse} reload={load} />
           )}
-          </div>)}
 
           {tab === "feedback" && (
             <div key="fb" className="animate-reveal"><RoomReports onActiveCount={setFeedbackCount} /></div>

@@ -10,7 +10,7 @@ import mqtt from "mqtt";
  *   MQTT_USERNAME   from HiveMQ Cloud -> Access Management
  *   MQTT_PASSWORD
  * Without them, publishing is skipped and the device picks the command up
- * over HTTP on its next status poll instead (up to 30 s later).
+ * over HTTP on its next status poll instead (a few seconds later).
  */
 export function mqttConfigured(): boolean {
   return !!process.env.MQTT_URL;

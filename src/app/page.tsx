@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ThemeToggle from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "@/components/app-shell";
 import { CalendarCheck, Sparkles, SlidersHorizontal, MessageCircle } from "lucide-react";
@@ -47,9 +48,12 @@ export default function Home() {
       <header className="sticky top-0 z-40 border-b bg-card/95 shadow-sm backdrop-blur">
         <div className="mx-auto flex h-16 w-full max-w-[1680px] items-center justify-between px-4 sm:px-6 lg:px-10">
           <BrandMark />
-          <Button asChild>
-            <Link href="/login">Sign in</Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Button asChild>
+              <Link href="/login">Sign in</Link>
+            </Button>
+          </div>
         </div>
       </header>
 

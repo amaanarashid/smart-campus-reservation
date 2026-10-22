@@ -181,7 +181,7 @@ export default function AdminAnalytics() {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} interval={1} />
                 <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, background: "var(--popover)", color: "var(--popover-foreground)", border: "1px solid var(--border)" }} />
                 <Area type="monotone" dataKey="count" stroke="var(--primary)"
                   fill="var(--primary)" fillOpacity={0.15} strokeWidth={2} />
               </AreaChart>
@@ -200,7 +200,7 @@ export default function AdminAnalytics() {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="hour" tick={{ fontSize: 11 }} interval={1} />
                 <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, background: "var(--popover)", color: "var(--popover-foreground)", border: "1px solid var(--border)" }} />
                 <Bar dataKey="count" fill="var(--chart-3)" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -218,7 +218,7 @@ export default function AdminAnalytics() {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
                 <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
                 <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11 }} />
-                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, background: "var(--popover)", color: "var(--popover-foreground)", border: "1px solid var(--border)" }} />
                 <Bar dataKey="count" fill="var(--chart-2)" radius={[0, 3, 3, 0]}>
                   {byFacility.map((_, i) => <Cell key={i} fill={CHART[i % CHART.length]} />)}
                 </Bar>
@@ -239,7 +239,7 @@ export default function AdminAnalytics() {
                   innerRadius={55} outerRadius={90} paddingAngle={2}>
                   {byStatus.map((s) => <Cell key={s.name} fill={STATUS_COLOR[s.name] ?? "var(--chart-5)"} />)}
                 </Pie>
-                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, background: "var(--popover)", color: "var(--popover-foreground)", border: "1px solid var(--border)" }} />
               </PieChart>
             </ResponsiveContainer>
             <div className="flex flex-wrap justify-center gap-3 pt-1">

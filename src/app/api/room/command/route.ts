@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
   return json({
     ok: true, id, delivery, mqtt_error: mqttError,
     message: `${describeCommand(v.value.kind, v.value.args)} - ` +
-      (delivery === "mqtt" ? "sent to the room" : `the room picks it up within 30 s`),
+      (delivery === "mqtt" ? "sent to the room" : `the room picks it up within a few seconds`),
     expires_in_s: COMMAND_TTL_S,
   });
 }
