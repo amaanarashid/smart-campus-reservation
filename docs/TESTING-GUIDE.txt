@@ -468,10 +468,8 @@ Signed in as student. Press F12 -> Console. Paste each line, press Enter.
    OneDrive. Harmless, but moving it off OneDrive makes it faster.
  - "Blocked cross-origin request ... 169.254.x.x": harmless, you use
    localhost.
- - npm run lint shows 5 older errors in student/page.tsx. The app still
-   runs.
- - The hardware sensor files (firmware/, api/sensor,
-   upgrade-occupancy.sql) are parked. Do not test them yet.
+ - The old occupancy-sensor draft (api/sensor, upgrade-occupancy.sql,
+   firmware/occupancy-cam) has been removed; the smart room replaces it.
 
 
 --------------------------------------------------------------------------
@@ -545,3 +543,36 @@ Signed in as student. Press F12 -> Console. Paste each line, press Enter.
  ____________________________________________________________________
  ____________________________________________________________________
 ==========================================================================
+
+
+ PART 12 - WHO CAN BOOK, FAIR USE, FORGOT PASSWORD
+--------------------------------------------------------------------------
+Run supabase/upgrade-access-limits.sql first. The automated proof is
+outputs/pgtest-access.mjs (16 checks) and scripts/eval/concurrency.mjs.
+
+[ ] 12.1 Admin -> Facilities -> Meeting Room -> View details. Under "Who can
+         book & fair use" turn Undergraduate off, Save rules.
+         Expected: the facility row shows "Postgraduates and staff".
+[ ] 12.2 As a student (undergraduate), open the Meeting Room's venue.
+         Expected: its card is greyed with a lock badge and can't be opened.
+         The chatbot never suggests it as an alternative.
+[ ] 12.3 Admin -> Users: set that student's member type to Staff.
+         Expected: as the student (reload), the Meeting Room can be booked.
+[ ] 12.4 Set Badminton "Max upcoming" = 1. As a student book one court, then
+         try a second court on another day.
+         Expected: "You already have 1 upcoming Badminton booking. The limit
+         is 1." Cancel the first one: the second now works.
+[ ] 12.5 Set "Max hours / week" = 2 on a facility. Book 1.5 h, then another
+         1 h in the same Mon-Sun week.
+         Expected: "Weekly limit for ... is 2.0 h. You already have 1.5 h
+         booked that week." The following week works.
+[ ] 12.6 Ask the chatbot "Who can book the meeting room?" / "Siapa boleh
+         tempah bilik mesyuarat?"
+         Expected: the rules answer includes who may book and any limits.
+[ ] 12.7 Sign in page -> "Forgot password?" -> enter your email -> Send.
+         Open the email link on the same device.
+         Expected: the "Choose a new password" page; after saving you land
+         on your dashboard and can sign in with the new password.
+         (Needs <site>/reset-password in Supabase -> Authentication -> URL
+         Configuration -> Redirect URLs.)
+

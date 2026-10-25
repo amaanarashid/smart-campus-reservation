@@ -14,7 +14,7 @@
 --  there is no table of codes to leak - which matters because every signed-in
 --  user can currently read the reservations table.
 --
---  This supersedes the parked upgrade-occupancy.sql / api/sensor draft.
+--  This replaced the old occupancy-sensor draft (since removed).
 -- =========================================================================
 
 -- ------------------------------------------------------------- devices --

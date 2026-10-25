@@ -1,0 +1,1212 @@
+{
+  "generated_by": "scripts/eval/chatbot-eval.ts",
+  "now": "2026-10-21T01:00:00.000Z",
+  "first_run": {
+    "ok": 31,
+    "n": 38,
+    "english": "18/20",
+    "malay": "13/18"
+  },
+  "overall": {
+    "ok": 38,
+    "n": 38
+  },
+  "english": {
+    "ok": 20,
+    "n": 20
+  },
+  "malay": {
+    "ok": 18,
+    "n": 18
+  },
+  "held_out": {
+    "ok": 14,
+    "n": 16
+  },
+  "held_out_english": {
+    "ok": 6,
+    "n": 8
+  },
+  "held_out_malay": {
+    "ok": 8,
+    "n": 8
+  },
+  "fields_all_questions": {
+    "lang": {
+      "ok": 54,
+      "n": 54
+    },
+    "intent": {
+      "ok": 52,
+      "n": 54
+    },
+    "facility": {
+      "ok": 39,
+      "n": 39
+    },
+    "date": {
+      "ok": 26,
+      "n": 26
+    },
+    "time": {
+      "ok": 19,
+      "n": 19
+    }
+  },
+  "rows": [
+    {
+      "q": "Is badminton court 2 free tomorrow?",
+      "lang": "en",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "availability",
+        "facility": [
+          "b2"
+        ],
+        "date": "2026-10-22",
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Can I book futsal court at 3pm today?",
+      "lang": "en",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true,
+        "time": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "availability",
+        "facility": [
+          "s1"
+        ],
+        "date": "2026-10-21",
+        "hour": 15,
+        "part": null
+      }
+    },
+    {
+      "q": "Any discussion room available this evening?",
+      "lang": "en",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true,
+        "time": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "availability",
+        "facility": [
+          "d1",
+          "d2",
+          "d3"
+        ],
+        "date": "2026-10-21",
+        "hour": null,
+        "part": "evening"
+      }
+    },
+    {
+      "q": "Is Discussion Room B free on Friday at 10am?",
+      "lang": "en",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true,
+        "time": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "availability",
+        "facility": [
+          "d2"
+        ],
+        "date": "2026-10-23",
+        "hour": 10,
+        "part": null
+      }
+    },
+    {
+      "q": "What time does the event hall close?",
+      "lang": "en",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "rules",
+        "facility": [
+          "e1"
+        ],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "What is the cancellation policy for meeting rooms?",
+      "lang": "en",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "rules",
+        "facility": [
+          "m1"
+        ],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "How long can I book a basketball court for?",
+      "lang": "en",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "rules",
+        "facility": [
+          "k1"
+        ],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Which facilities can I book?",
+      "lang": "en",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "list",
+        "facility": [],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Show me all facilities",
+      "lang": "en",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "list",
+        "facility": [],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "When is my next booking?",
+      "lang": "en",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "mine",
+        "facility": [],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "What are my bookings this week?",
+      "lang": "en",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "mine",
+        "facility": [],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Did I book anything tomorrow?",
+      "lang": "en",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "mine",
+        "facility": [],
+        "date": "2026-10-22",
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Is court 3 free on 28 oct?",
+      "lang": "en",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "availability",
+        "facility": [
+          "b3"
+        ],
+        "date": "2026-10-28",
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Book badminton for 2 hours tomorrow morning",
+      "lang": "en",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true,
+        "time": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "availability",
+        "facility": [
+          "b1",
+          "b2",
+          "b3",
+          "b4"
+        ],
+        "date": "2026-10-22",
+        "hour": null,
+        "part": "morning"
+      }
+    },
+    {
+      "q": "Is the basketball court free next Monday at 5pm?",
+      "lang": "en",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true,
+        "time": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "availability",
+        "facility": [
+          "k1"
+        ],
+        "date": "2026-10-26",
+        "hour": 17,
+        "part": null
+      }
+    },
+    {
+      "q": "Where can I pay my fine?",
+      "lang": "en",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "other",
+        "facility": [],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Can I bring food into the library?",
+      "lang": "en",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "other",
+        "facility": [],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Is badminton court 1 available in the afternoon on Saturday?",
+      "lang": "en",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true,
+        "time": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "availability",
+        "facility": [
+          "b1"
+        ],
+        "date": "2026-10-24",
+        "hour": null,
+        "part": "afternoon"
+      }
+    },
+    {
+      "q": "Who can book the meeting room?",
+      "lang": "en",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "rules",
+        "facility": [
+          "m1"
+        ],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Is futsal free at 8pm tomorrow?",
+      "lang": "en",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true,
+        "time": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "availability",
+        "facility": [
+          "s1"
+        ],
+        "date": "2026-10-22",
+        "hour": 20,
+        "part": null
+      }
+    },
+    {
+      "q": "Gelanggang badminton 2 kosong esok?",
+      "lang": "ms",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "availability",
+        "facility": [
+          "b2"
+        ],
+        "date": "2026-10-22",
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Boleh saya tempah gelanggang futsal pukul 3 petang hari ini?",
+      "lang": "ms",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true,
+        "time": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "availability",
+        "facility": [
+          "s1"
+        ],
+        "date": "2026-10-21",
+        "hour": 15,
+        "part": "afternoon"
+      }
+    },
+    {
+      "q": "Ada bilik perbincangan kosong malam ini?",
+      "lang": "ms",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true,
+        "time": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "availability",
+        "facility": [
+          "d1",
+          "d2",
+          "d3"
+        ],
+        "date": "2026-10-21",
+        "hour": null,
+        "part": "evening"
+      }
+    },
+    {
+      "q": "Bilik perbincangan B kosong hari Jumaat pukul 10 pagi?",
+      "lang": "ms",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true,
+        "time": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "availability",
+        "facility": [
+          "d2"
+        ],
+        "date": "2026-10-23",
+        "hour": 10,
+        "part": "morning"
+      }
+    },
+    {
+      "q": "Pukul berapa dewan acara tutup?",
+      "lang": "ms",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "rules",
+        "facility": [
+          "e1"
+        ],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Apa polisi pembatalan bilik mesyuarat?",
+      "lang": "ms",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "rules",
+        "facility": [
+          "m1"
+        ],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Berapa lama boleh tempah gelanggang bola keranjang?",
+      "lang": "ms",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "rules",
+        "facility": [
+          "k1"
+        ],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Senaraikan kemudahan yang ada",
+      "lang": "ms",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "list",
+        "facility": [],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Bila tempahan saya seterusnya?",
+      "lang": "ms",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "mine",
+        "facility": [],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Tunjuk tempahan saya",
+      "lang": "ms",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "mine",
+        "facility": [],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Gelanggang 3 kosong pada 28 okt?",
+      "lang": "ms",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "availability",
+        "facility": [
+          "b3"
+        ],
+        "date": "2026-10-28",
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Tempah badminton 2 jam esok pagi",
+      "lang": "ms",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true,
+        "time": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "availability",
+        "facility": [
+          "b1",
+          "b2",
+          "b3",
+          "b4"
+        ],
+        "date": "2026-10-22",
+        "hour": null,
+        "part": "morning"
+      }
+    },
+    {
+      "q": "Gelanggang bola keranjang kosong Isnin depan pukul 5 petang?",
+      "lang": "ms",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true,
+        "time": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "availability",
+        "facility": [
+          "k1"
+        ],
+        "date": "2026-10-26",
+        "hour": 17,
+        "part": "afternoon"
+      }
+    },
+    {
+      "q": "Di mana saya boleh bayar denda?",
+      "lang": "ms",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "other",
+        "facility": [],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Gelanggang badminton 1 kosong petang Sabtu?",
+      "lang": "ms",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true,
+        "time": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "availability",
+        "facility": [
+          "b1"
+        ],
+        "date": "2026-10-24",
+        "hour": null,
+        "part": "afternoon"
+      }
+    },
+    {
+      "q": "Futsal kosong pukul 8 malam esok?",
+      "lang": "ms",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true,
+        "time": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "availability",
+        "facility": [
+          "s1"
+        ],
+        "date": "2026-10-22",
+        "hour": 20,
+        "part": "evening"
+      }
+    },
+    {
+      "q": "Siapa boleh tempah bilik mesyuarat?",
+      "lang": "ms",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "rules",
+        "facility": [
+          "m1"
+        ],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Boleh tempah dewan acara lusa?",
+      "lang": "ms",
+      "heldOut": false,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "availability",
+        "facility": [
+          "e1"
+        ],
+        "date": "2026-10-23",
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Are any badminton courts open tonight?",
+      "lang": "en",
+      "heldOut": true,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true,
+        "time": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "availability",
+        "facility": [
+          "b1",
+          "b2",
+          "b3",
+          "b4"
+        ],
+        "date": "2026-10-21",
+        "hour": null,
+        "part": "evening"
+      }
+    },
+    {
+      "q": "I want to reserve meeting room 1 on thursday at 2pm",
+      "lang": "en",
+      "heldOut": true,
+      "allOk": false,
+      "checks": {
+        "lang": true,
+        "intent": false,
+        "facility": true,
+        "date": true,
+        "time": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "other",
+        "facility": [
+          "m1"
+        ],
+        "date": "2026-10-22",
+        "hour": 14,
+        "part": null
+      }
+    },
+    {
+      "q": "what's the max booking length for discussion rooms",
+      "lang": "en",
+      "heldOut": true,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "rules",
+        "facility": [
+          "d1",
+          "d2",
+          "d3"
+        ],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Is the event hall available on 30 october?",
+      "lang": "en",
+      "heldOut": true,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "availability",
+        "facility": [
+          "e1"
+        ],
+        "date": "2026-10-30",
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "list all the courts",
+      "lang": "en",
+      "heldOut": true,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "list",
+        "facility": [],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Show my reservations",
+      "lang": "en",
+      "heldOut": true,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "mine",
+        "facility": [],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Is there a limit on how many futsal bookings I can have?",
+      "lang": "en",
+      "heldOut": true,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "rules",
+        "facility": [
+          "s1"
+        ],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "can staff only book the meeting room?",
+      "lang": "en",
+      "heldOut": true,
+      "allOk": false,
+      "checks": {
+        "lang": true,
+        "intent": false,
+        "facility": true
+      },
+      "got": {
+        "lang": "en",
+        "intent": "availability",
+        "facility": [
+          "m1"
+        ],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Ada gelanggang badminton kosong malam ini?",
+      "lang": "ms",
+      "heldOut": true,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true,
+        "time": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "availability",
+        "facility": [
+          "b1",
+          "b2",
+          "b3",
+          "b4"
+        ],
+        "date": "2026-10-21",
+        "hour": null,
+        "part": "evening"
+      }
+    },
+    {
+      "q": "Saya nak tempah bilik mesyuarat hari Khamis pukul 2 petang",
+      "lang": "ms",
+      "heldOut": true,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true,
+        "time": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "availability",
+        "facility": [
+          "m1"
+        ],
+        "date": "2026-10-22",
+        "hour": 14,
+        "part": "afternoon"
+      }
+    },
+    {
+      "q": "Berapa lama maksimum tempahan bilik perbincangan?",
+      "lang": "ms",
+      "heldOut": true,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "rules",
+        "facility": [
+          "d1",
+          "d2",
+          "d3"
+        ],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Dewan acara kosong pada 30 oktober?",
+      "lang": "ms",
+      "heldOut": true,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "availability",
+        "facility": [
+          "e1"
+        ],
+        "date": "2026-10-30",
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Senaraikan semua gelanggang",
+      "lang": "ms",
+      "heldOut": true,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "list",
+        "facility": [],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Tunjuk semua tempahan saya",
+      "lang": "ms",
+      "heldOut": true,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "mine",
+        "facility": [],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Ada had tempahan futsal?",
+      "lang": "ms",
+      "heldOut": true,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "rules",
+        "facility": [
+          "s1"
+        ],
+        "date": null,
+        "hour": null,
+        "part": null
+      }
+    },
+    {
+      "q": "Gelanggang bola keranjang kosong lusa pukul 4 petang?",
+      "lang": "ms",
+      "heldOut": true,
+      "allOk": true,
+      "checks": {
+        "lang": true,
+        "intent": true,
+        "facility": true,
+        "date": true,
+        "time": true
+      },
+      "got": {
+        "lang": "ms",
+        "intent": "availability",
+        "facility": [
+          "k1"
+        ],
+        "date": "2026-10-23",
+        "hour": 16,
+        "part": "afternoon"
+      }
+    }
+  ]
+}

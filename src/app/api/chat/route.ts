@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { busyQuery } from "@/lib/busy";
+import { canBook } from "@/lib/access";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import type { BusySlot, Facility, FacilityRule, Reservation, RecWeights } from "@/lib/types";
+import type { BusySlot, Facility, FacilityRule, MemberType, Reservation, RecWeights } from "@/lib/types";
 import {
   fitsIn, freeWindows, Intent, matchFacilities, parseIntent,
   PART_CENTRE, sanitiseIntent, withContext,
@@ -165,6 +166,18 @@ function words(lang: Lang, now: Date) {
         `up to ${cap} people, bookable up to ${r.max_advance_days} days ahead, cancel at least ${r.cancellation_hours} hours before, ` +
         `${r.auto_approve ? "approved automatically" : "needs manager approval"}` +
         (r.checkin_grace_mins ? `, and you must check in within ${r.checkin_grace_mins} minutes of the start or the booking is released.` : "."),
+    // who may book + fair-use limits (upgrade-access-limits.sql)
+    access: (r: FacilityRule) => {
+      const who = (r.allowed_members?.length ?? 3) < 3 ? r.allowed_members! : null;
+      const label = ms
+        ? { undergraduate: "pelajar prasiswazah", postgraduate: "pelajar pascasiswazah", staff: "staf" }
+        : { undergraduate: "undergraduates", postgraduate: "postgraduates", staff: "staff" };
+      const parts: string[] = [];
+      if (who) parts.push(ms ? `Hanya ${who.map((m) => label[m]).join(" dan ")} boleh menempah.` : `Only ${who.map((m) => label[m]).join(" and ")} can book it.`);
+      if (r.max_upcoming) parts.push(ms ? `Setiap orang boleh ada sehingga ${r.max_upcoming} tempahan akan datang.` : `Each person may hold up to ${r.max_upcoming} upcoming bookings.`);
+      if (r.max_hours_week) parts.push(ms ? `Had ${r.max_hours_week} jam seminggu bagi setiap orang.` : `Limit of ${r.max_hours_week} hours a week per person.`);
+      return parts.length ? " " + parts.join(" ") : "";
+    },
     bookingLine: (fac: string, d: string, a: Date, b: Date, approved: boolean) => ms
       ? `${fac} ${d}, ${range(a, b)}, ${approved ? "diluluskan" : "menunggu kelulusan"}`
       : `${fac} ${d}, ${range(a, b)}, ${approved ? "approved" : "waiting for approval"}`,
@@ -201,7 +214,7 @@ function listFacts(all: Facility[], w: Words): string {
 function rulesFacts(matched: Facility[], rules: Record<string, FacilityRule>, w: Words): string {
   return matched.slice(0, 4).map((f) => {
     const r = rules[f.id];
-    return r ? w.rules(f.name, f.category_name, r, f.capacity) : w.noRules(f.name);
+    return r ? `${w.rules(f.name, f.category_name, r, f.capacity)}${w.access(r)}` : w.noRules(f.name);
   }).join(" ");
 }
 
@@ -314,7 +327,7 @@ async function alternatives(
   const duration = Math.min(rule.max_duration_mins, Math.max(rule.min_duration_mins, it.duration ?? 60));
 
   const out = recommendAcross({
-    requested, facilities: all, rules,
+    requested, facilities: all.filter((f) => canBook(rules[f.id], (prof?.member_type as MemberType | undefined))), rules,
     reservations: (res ?? []) as BusySlot[],
     date, durationMins: duration, participants: 1, preferredHour,
     weights, peaks: learnPeakHours(hist ?? []), now, lookAheadDays: LOOK_AHEAD,

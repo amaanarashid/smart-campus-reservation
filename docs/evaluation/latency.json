@@ -1,0 +1,57 @@
+{
+  "generated_by": "scripts/eval/recommender-latency.ts",
+  "node": "v22.23.4",
+  "reps": 500,
+  "target_ms": 1000,
+  "pass": true,
+  "rows": [
+    {
+      "rooms": 3,
+      "case": "typical (1 day)",
+      "bookings": 83,
+      "median_ms": 0.271,
+      "p95_ms": 0.395,
+      "max_ms": 2.728
+    },
+    {
+      "rooms": 3,
+      "case": "worst (7 days searched)",
+      "bookings": 223,
+      "median_ms": 2.214,
+      "p95_ms": 2.576,
+      "max_ms": 3.734
+    },
+    {
+      "rooms": 10,
+      "case": "typical (1 day)",
+      "bookings": 292,
+      "median_ms": 0.758,
+      "p95_ms": 0.997,
+      "max_ms": 2.245
+    },
+    {
+      "rooms": 10,
+      "case": "worst (7 days searched)",
+      "bookings": 769,
+      "median_ms": 7.639,
+      "p95_ms": 8.521,
+      "max_ms": 10.425
+    },
+    {
+      "rooms": 30,
+      "case": "typical (1 day)",
+      "bookings": 896,
+      "median_ms": 2.423,
+      "p95_ms": 2.924,
+      "max_ms": 3.961
+    },
+    {
+      "rooms": 30,
+      "case": "worst (7 days searched)",
+      "bookings": 2291,
+      "median_ms": 23.082,
+      "p95_ms": 24.912,
+      "max_ms": 33.058
+    }
+  ]
+}

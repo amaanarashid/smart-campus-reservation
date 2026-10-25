@@ -1,4 +1,5 @@
 import { resolveScene } from "./scene";
+import type { MemberType } from "./types";
 
 /**
  * Helpers for the admin "New facility" and "Add room" wizards. Pure, so the
@@ -10,6 +11,10 @@ export interface RuleDefaults {
   min_duration_mins: number; max_duration_mins: number;
   max_advance_days: number; cancellation_hours: number;
   auto_approve: boolean; checkin_grace_mins: number | null;
+  /** Who can book + fair use (upgrade-access-limits.sql); omitted = everyone, no limits. */
+  allowed_members?: MemberType[];
+  max_upcoming?: number | null;
+  max_hours_week?: number | null;
 }
 
 export interface Preset { name: string; capacity: number; rules: RuleDefaults }
@@ -24,7 +29,7 @@ export const PRESETS: Preset[] = [
   { name: "Basketball", capacity: 10, rules: r("08:00", "22:00", 60, 120, 14, 24, false, 15) },
   { name: "Tennis", capacity: 4, rules: r("07:00", "22:00", 60, 120, 14, 24, false, 15) },
   { name: "Discussion Room", capacity: 6, rules: r("08:00", "22:00", 30, 120, 7, 2, true, 15) },
-  { name: "Meeting Room", capacity: 10, rules: r("08:00", "20:00", 30, 180, 14, 12, false, 15) },
+  { name: "Meeting Room", capacity: 10, rules: { ...r("08:00", "20:00", 30, 180, 14, 12, false, 15), allowed_members: ["postgraduate", "staff"] } },
   { name: "Event Hall", capacity: 150, rules: r("08:00", "22:00", 120, 480, 30, 72, false, null) },
   { name: "Computer Lab", capacity: 30, rules: r("08:00", "20:00", 60, 180, 14, 24, false, 15) },
 ];

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { busyQuery } from "@/lib/busy";
+import { accessLabel, accessMessage, canBook, limitProblem, limitsLabel } from "@/lib/access";
 import {
   BusySlot, Facility, FacilityRule, Profile, Reservation, Equipment, typeLabel,
 } from "@/lib/types";
@@ -36,7 +37,7 @@ import {
 import { logEvent } from "@/lib/evaluation";
 import {
   CalendarDays, Clock, CheckCircle2, ChevronRight, ChevronDown, ArrowLeft,
-  Sparkles, MapPin, Users2, CalendarX, Copy, KeyRound, Loader2, TriangleAlert, MessageSquareWarning,
+  Sparkles, MapPin, Users2, CalendarX, Copy, KeyRound, Loader2, TriangleAlert, MessageSquareWarning, Lock,
 } from "lucide-react";
 
 const STATUS_COLOR: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -216,6 +217,11 @@ export default function StudentDashboard() {
     if (start > maxDay) return `Bookings open ${rule.max_advance_days} days in advance.`;
     if (participants > facility.capacity)
       return `${facility.name} holds ${facility.capacity}; reduce the group size.`;
+    if (!canBook(rule, profile?.member_type)) return accessMessage(rule.category_name, rule);
+    const limit = limitProblem(rule.category_name, rule,
+      myBookings.map((b) => ({ ...b, sameType: facilities.find((x) => x.id === b.facility_id)?.category_id === facility.category_id })),
+      start, end, now);
+    if (limit) return limit;
     const open = myAt(date, rule.open_time.slice(0, 5));
     const close = myAt(date, rule.close_time.slice(0, 5));
     if (start < open || end > close)
@@ -347,7 +353,7 @@ export default function StudentDashboard() {
     const peaks = learnPeakHours(hist ?? []);
     const preferredHour = Number(startTime.split(":")[0]);
     const out = recommendAcross({
-      requested: facility, facilities, rules,
+      requested: facility, facilities: facilities.filter((x) => canBook(rules[x.id], profile?.member_type)), rules,
       reservations: (res as BusySlot[] | null) ?? [],
       date, durationMins: duration, participants, preferredHour,
       weights: profile?.rec_weights ?? DEFAULT_WEIGHTS,
@@ -791,23 +797,30 @@ export default function StudentDashboard() {
                   {venueFacilities.map((f, i) => {
                     const busy = busyNow.has(f.id);
                     const r = rules[f.id];
+                    const locked = !canBook(r, profile?.member_type);
                     return (
-                      <button key={f.id}
+                      <button key={f.id} disabled={locked}
+                        title={locked ? accessMessage(f.name, r) : undefined}
                         onClick={() => {
                           setFacility(f);
                           setParticipants(Math.min(2, f.capacity));
                           setDuration((d) => clampDuration(d, rules[f.id]));
                           setSuggestions(null);
                         }}
-                        className="animate-reveal overflow-hidden rounded-xl border bg-card text-left shadow-sm transition-all hover:-translate-y-1 hover:border-primary hover:shadow-lg"
+                        className={`animate-reveal overflow-hidden rounded-xl border bg-card text-left shadow-sm transition-all ${
+                          locked ? "cursor-not-allowed opacity-60" : "hover:-translate-y-1 hover:border-primary hover:shadow-lg"}`}
                         style={{ animationDelay: `${i * 60}ms` }}>
-                        <div className="h-32 bg-muted/40"><FacilityIso type={f.type} busy={busy} /></div>
+                        <div className={`h-32 bg-muted/40 ${locked ? "grayscale" : ""}`}><FacilityIso type={f.type} busy={busy} /></div>
                         <div className="p-4">
                           <div className="flex items-start justify-between gap-2">
                             <h3 className="font-display font-semibold">{f.name}</h3>
-                            <Badge variant={busy ? "destructive" : "default"}>
-                              {busy ? "In use" : "Free now"}
-                            </Badge>
+                            {locked ? (
+                              <Badge variant="secondary" className="gap-1"><Lock className="h-3 w-3" />{accessLabel(r)}</Badge>
+                            ) : (
+                              <Badge variant={busy ? "destructive" : "default"}>
+                                {busy ? "In use" : "Free now"}
+                              </Badge>
+                            )}
                           </div>
                           <p className="flex items-center gap-1.5 pt-1 text-sm text-muted-foreground">
                             <Users2 className="h-3.5 w-3.5" /> up to {f.capacity} people
@@ -823,6 +836,12 @@ export default function StudentDashboard() {
                               <Clock className="h-3.5 w-3.5" />
                               {r.open_time.slice(0, 5)}-{r.close_time.slice(0, 5)} - {r.min_duration_mins}-{r.max_duration_mins} min
                               {r.auto_approve ? " - instant" : " - needs approval"}
+                            </p>
+                          )}
+                          {!locked && (accessLabel(r) || limitsLabel(r)) && (
+                            <p className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+                              <Lock className="h-3.5 w-3.5" />
+                              {[accessLabel(r), limitsLabel(r) && `fair use: ${limitsLabel(r)}`].filter(Boolean).join(" - ")}
                             </p>
                           )}
                         </div>

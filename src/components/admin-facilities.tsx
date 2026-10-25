@@ -17,13 +17,14 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  ArrowLeft, ArrowRight, Building2, Clock, Loader2, MapPin, MoreHorizontal, Plus, Search, Settings2,
+  ArrowLeft, ArrowRight, Building2, Clock, Loader2, Lock, MapPin, MoreHorizontal, Plus, Search, Settings2,
   Trash2, Users2, X,
 } from "lucide-react";
 import FacilityIso from "@/components/facility-iso";
 import VenueArt from "@/components/venue-art";
 import { Field, RuleFields, type RuleDraft } from "@/components/facility-form";
 import { AddRoomWizard, NewFacilityWizard } from "@/components/facility-wizards";
+import { accessLabel, limitsLabel } from "@/lib/access";
 
 /**
  * Admin -> Facilities. Overview grouped by location (venue card with a 2D
@@ -40,7 +41,14 @@ const draftOf = (c: FacilityCategory): RuleDraft => ({
   min_duration_mins: c.min_duration_mins, max_duration_mins: c.max_duration_mins,
   max_advance_days: c.max_advance_days, cancellation_hours: c.cancellation_hours,
   auto_approve: c.auto_approve, checkin_grace_mins: c.checkin_grace_mins ?? null,
+  // only present once upgrade-access-limits.sql has run
+  ...(c.allowed_members ? { allowed_members: c.allowed_members, max_upcoming: c.max_upcoming ?? null, max_hours_week: c.max_hours_week ?? null } : {}),
 });
+
+const ACCESS_COLS = ["allowed_members", "max_upcoming", "max_hours_week"] as const;
+/** Without the access columns, for databases where upgrade-access-limits.sql has not run yet. */
+const withoutAccess = <T extends Record<string, unknown>>(o: T) =>
+  Object.fromEntries(Object.entries(o).filter(([k]) => !(ACCESS_COLS as readonly string[]).includes(k)));
 
 function Stat({ label, value }: { label: string; value: number | string }) {
   return (
@@ -87,7 +95,11 @@ export default function AdminFacilities({ categories, facilities, rules, fmRows,
     if (draft.min_duration_mins > draft.max_duration_mins) { toast.error("Shortest booking is longer than the longest"); return; }
     if (draft.open_time >= draft.close_time) { toast.error("Closing time must be after opening time"); return; }
     setSaving(true);
-    const { error } = await supabase.from("facility_categories").update(draft).eq("id", open.id);
+    let { error } = await supabase.from("facility_categories").update(draft).eq("id", open.id);
+    if (error && /allowed_members|max_upcoming|max_hours_week/.test(error.message)) {
+      ({ error } = await supabase.from("facility_categories").update(withoutAccess(draft)).eq("id", open.id));
+      if (!error) toast.warning("Saved, but who-can-book and limits need upgrade-access-limits.sql in Supabase.");
+    }
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success(`Rules saved - apply to every room in ${open.name}`);
@@ -528,6 +540,8 @@ export default function AdminFacilities({ categories, facilities, rules, fmRows,
                                 <span>{active}/{rooms.length} active{busy ? ` · ${busy} in use` : ""}</span>
                                 <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{hhmm(c.open_time)}-{hhmm(c.close_time)}</span>
                                 <span>{c.min_duration_mins}-{c.max_duration_mins} min</span>
+                                {accessLabel(c) && <span className="flex items-center gap-1 font-medium text-foreground"><Lock className="h-3 w-3" />{accessLabel(c)}</span>}
+                                {limitsLabel(c) && <span>{limitsLabel(c)}</span>}
                               </p>
                             </div>
                             <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" title={`Add rooms to ${c.name}`}

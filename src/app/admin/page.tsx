@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { Facility, FacilityCategory, FacilityRule, Profile, Equipment, Reservation, ActivityLog, typeLabel } from "@/lib/types";
+import { Facility, FacilityCategory, FacilityRule, Profile, Equipment, Reservation, ActivityLog, typeLabel, type MemberType } from "@/lib/types";
+import { MEMBER_LABEL, MEMBER_TYPES } from "@/lib/access";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -176,6 +177,16 @@ export default function AdminDashboard() {
     const { error } = await supabase.from("profiles").update({ role }).eq("id", u.id);
     if (error) { toast.error(error.message); return; }
     toast.success(`${u.full_name} is now ${role.replace("_", " ")}`);
+    await load();
+  }
+
+  async function changeMemberType(u: Profile, member_type: MemberType) {
+    const { error } = await supabase.from("profiles").update({ member_type }).eq("id", u.id);
+    if (error) {
+      toast.error(/member_type/.test(error.message) ? "Run upgrade-access-limits.sql in Supabase first." : error.message);
+      return;
+    }
+    toast.success(`${u.full_name} is now ${MEMBER_LABEL[member_type].toLowerCase()}`);
     await load();
   }
 
@@ -598,7 +609,7 @@ export default function AdminDashboard() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Role</TableHead>
+                    <TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Member type</TableHead><TableHead>Role</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -617,6 +628,16 @@ export default function AdminDashboard() {
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">{u.email}</TableCell>
                         <TableCell>
+                          {u.member_type ? (
+                            <Select value={u.member_type} onValueChange={(v) => changeMemberType(u, v as MemberType)}>
+                              <SelectTrigger className="h-8 w-40" aria-label={`Member type of ${u.full_name}`}><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {MEMBER_TYPES.map((m) => <SelectItem key={m} value={m}>{MEMBER_LABEL[m]}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          ) : <span className="text-xs text-muted-foreground">-</span>}
+                        </TableCell>
+                        <TableCell>
                           <Select value={u.role} onValueChange={(v) => changeRole(u, v)}>
                             <SelectTrigger className="h-8 w-44"><SelectValue /></SelectTrigger>
                             <SelectContent>
@@ -634,7 +655,7 @@ export default function AdminDashboard() {
                       </TableRow>
                     ))}
                   {shownUsers.length === 0 && (
-                    <TableRow><TableCell colSpan={3} className="py-8 text-center text-muted-foreground">
+                    <TableRow><TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
                       {allUsers.length === 0 ? "No users yet" : "Nobody matches this filter"}
                     </TableCell></TableRow>
                   )}

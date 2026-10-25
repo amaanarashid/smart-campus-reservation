@@ -1,0 +1,39 @@
+{
+  "generated_by": "scripts/eval/concurrency.mjs",
+  "students": 50,
+  "rounds": 20,
+  "scenarios": {
+    "same_slot": {
+      "requests": 1000,
+      "accepted": 20,
+      "refused_as_overlap": 980,
+      "other_errors": 0,
+      "rounds_with_exactly_one_winner": 20,
+      "overlapping_pairs_found": 0
+    },
+    "staggered": {
+      "requests": 1000,
+      "accepted": 44,
+      "refused_as_overlap": 956,
+      "other_errors": 0,
+      "overlapping_pairs_found": 0,
+      "note": "1-hour requests at random 15-minute offsets inside a 3-hour window; at most 3 can fit per round"
+    },
+    "fair_use_limit": {
+      "requests": 200,
+      "accepted": 20,
+      "rounds_with_exactly_one_accepted": 20,
+      "note": "same student, 10 different courts, same moment, limit = 1 upcoming booking",
+      "failures": []
+    }
+  },
+  "other_errors": {},
+  "latency_ms": {
+    "requests": 2000,
+    "median": 34.63,
+    "p95": 71.95,
+    "max": 342.04,
+    "note": "database round trip per request with 50 requests in flight (local Postgres; excludes network to Supabase)"
+  },
+  "pass": true
+}

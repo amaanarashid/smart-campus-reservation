@@ -8,7 +8,11 @@ export interface Profile {
   rec_weights: RecWeights;
   /** LinUCB state for slot ranking; null until the student first gives feedback. */
   rec_bandit?: unknown;
+  /** Who they are on campus; decides which facilities they may book (upgrade-access-limits.sql). */
+  member_type?: MemberType;
 }
+
+export type MemberType = "undergraduate" | "postgraduate" | "staff";
 
 export interface RecWeights {
   time: number;
@@ -32,6 +36,11 @@ export interface FacilityCategory {
   cancellation_hours: number;
   auto_approve: boolean;
   checkin_grace_mins?: number | null;
+  /** Who may book (upgrade-access-limits.sql); missing = everyone. */
+  allowed_members?: MemberType[];
+  /** Fair use per person: max upcoming bookings / booked hours per Mon-Sun week; null = no limit. */
+  max_upcoming?: number | null;
+  max_hours_week?: number | null;
 }
 
 /** An individual room/court, read from the `facilities_full` view. */
@@ -142,6 +151,11 @@ export interface FacilityRule {
   has_override: boolean;
   /** Minutes after start before an un-checked-in booking is released; null = off. */
   checkin_grace_mins?: number | null;
+  /** Who may book (upgrade-access-limits.sql); missing = everyone. */
+  allowed_members?: MemberType[];
+  /** Fair use per person: max upcoming bookings / booked hours per Mon-Sun week; null = no limit. */
+  max_upcoming?: number | null;
+  max_hours_week?: number | null;
 }
 
 /** A taken slot from the reservation_busy view: when, not who (upgrade-private-bookings.sql). */

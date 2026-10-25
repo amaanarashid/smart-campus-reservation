@@ -44,6 +44,14 @@ declare
   le  timestamp;
   keep constant text[] := array['status', 'cancel_reason', 'checked_in_at'];
 begin
+  -- Requests for the same room queue here, one at a time. Without this, many
+  -- simultaneous inserts can deadlock inside the no-overlap index check and
+  -- fail with "deadlock detected" instead of a clean "slot taken"
+  -- (found by scripts/eval/concurrency.mjs). Released at commit.
+  if tg_op = 'INSERT' then
+    perform pg_advisory_xact_lock(hashtextextended('facility:' || new.facility_id::text, 0));
+  end if;
+
   -- only direct client requests; trusted code runs as another role
   if current_user <> 'authenticated' then
     return new;

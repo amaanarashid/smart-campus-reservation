@@ -36,6 +36,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [forgot, setForgot] = useState(false);   // "Forgot password?" panel (sign-in mode)
 
   // Already signed in (e.g. came back with the browser's Back button)?
   // Go straight to the dashboard instead of showing the sign-in form.
@@ -51,7 +52,21 @@ export default function LoginPage() {
   }, [router]);
 
   function switchMode(m: "signin" | "signup") {
-    setMode(m); setError(null); setNotice(null);
+    setMode(m); setError(null); setNotice(null); setForgot(false);
+  }
+
+  // Email a reset link that opens /reset-password (add that URL under
+  // Supabase -> Authentication -> URL Configuration -> Redirect URLs).
+  async function sendReset() {
+    if (!email.trim()) { setError("Enter your email first."); return; }
+    setBusy(true); setError(null); setNotice(null);
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setBusy(false);
+    if (error) { setError(error.message); return; }
+    // same message whether or not the address has an account
+    setNotice("If that email has an account, a reset link is on its way. Open it on this device.");
   }
 
   async function signIn() {
@@ -199,10 +214,30 @@ export default function LoginPage() {
             <div className="animate-field-in" style={{ animationDelay: isSignup ? "0.1s" : "0.05s" }}>
               <Input placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
+            {forgot && !isSignup ? (
+              <div className="animate-field-in space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  We&apos;ll email you a link to choose a new password.
+                </p>
+                <Button className="w-full gap-2" onClick={sendReset} disabled={busy}>
+                  {busy ? "Sending..." : "Send reset link"}
+                </Button>
+                <button className="w-full text-center text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => { setForgot(false); setError(null); setNotice(null); }}>
+                  Back to sign in
+                </button>
+              </div>
+            ) : (<>
             <div className="animate-field-in" style={{ animationDelay: isSignup ? "0.15s" : "0.1s" }}>
               <Input placeholder={isSignup ? "Password (min 6 chars)" : "Password"} type="password"
                 value={password} onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && !busy && (isSignup ? signUp() : signIn())} />
+              {!isSignup && (
+                <button className="mt-1.5 block w-full text-right text-xs text-muted-foreground hover:text-primary"
+                  onClick={() => { setForgot(true); setError(null); setNotice(null); }}>
+                  Forgot password?
+                </button>
+              )}
             </div>
             <Button className="w-full gap-2 transition-transform active:scale-[0.98]"
               onClick={isSignup ? signUp : signIn} disabled={busy}>
@@ -218,6 +253,7 @@ export default function LoginPage() {
                 </>
               )}
             </Button>
+            </>)}
           </div>
 
           {error && (

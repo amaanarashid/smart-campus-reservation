@@ -64,6 +64,12 @@ Twelve tables; full details in `supabase/README.md` and the ERD in `docs/diagram
 - [x] AI: booking recommendations (rule-based scoring + adaptive weights)
 - [x] AI: chatbot for availability/policy Q&A (provider-agnostic, grounded)
 - [x] Notifications (booking status updates, trigger-driven)
+- [x] Booking rules + no-overlap enforced by the database (trigger + exclusion constraint); private bookings (free/busy view)
+- [x] Access permissions (undergraduate / postgraduate / staff) and fair-use limits per facility type, enforced by the database
+- [x] Smart-room extension: ESP32 door in Wokwi, room automation, MQTT remote control, 3D digital twin, energy estimate
+- [x] Chatbot in English + Bahasa Melayu; forgot password; venue-first facility admin with wizards
+- [x] Objective 5 evaluation scripts and results (`docs/evaluation/`): DS1 concurrency, DS4 latency, chatbot known-answer set
+- [ ] User study + SUS, live metrics (`scripts/eval/live-metrics.sql`), Phase 2 report
 - [x] Unit tests on recommendation engine (16 Vitest cases); eval instrumentation for Phase 2 metrics
 - [ ] Final submission tasks: cover details, ToC update, Turnitin, appendices, presentation slides
 
@@ -92,3 +98,4 @@ Governed by the SOE Student Project Handbook (v11) and the four module lecture d
 - **2026-07-24** — In-app notifications: header bell with unread badge, driven by database triggers (student notified on approve/reject, managers/admins on new requests); polls every 30s (run `supabase/upgrade-notifications.sql`). Consolidated `supabase/setup-all.sql` covers all migrations in order.
 - **2026-07-24** — Admin analytics dashboard (Analytics tab): KPIs (total, approval rate, avg group size, busiest facility) + 4 recharts (bookings over 14 days, peak hours, most-booked facilities, status breakdown). Client-side aggregation, no schema change. Completes the analytics extension objective.
 - **2026-07-24** — Check-in / no-show tracking: students self-check-in around booking time; managers mark attended/no-show on started sessions; no-show rate KPI added to analytics (run `supabase/upgrade-checkin.sql`). Enables the occupancy/no-show-detection future work cited in the report.
+- **2026-10-25** — Project feature-complete. Added access permissions (member types) and fair-use limits to the rule model, enforced in the booking trigger; forgot-password flow; removed the parked occupancy-sensor draft. Objective 5 evaluation: 0 overlapping bookings in 2,200 simultaneous requests (found and fixed a deadlock under contention with a per-room advisory lock), recommender p95 25 ms worst case, chatbot 87.5% on a held-out known-answer set. Remaining: user study + SUS, live metrics, Phase 2 report (see `docs/evaluation/README.md`).

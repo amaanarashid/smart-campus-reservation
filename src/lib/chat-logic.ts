@@ -81,6 +81,17 @@ export function matchFacilities<F extends FacLike>(text: string | null, faciliti
  */
 export function englishFacilityWords(q: string): string {
   return q.toLowerCase()
+    // Malay sport and venue words first, so "gelanggang bola keranjang" -> "basketball court"
+    .replace(/\bbola\s+keranjang\b/g, "basketball")
+    .replace(/\bbola\s+sepak\b/g, "football")
+    .replace(/\bbola\s+tampar\b/g, "volleyball")
+    .replace(/\bbola\s+jaring\b/g, "netball")
+    .replace(/\bping\s*pong\b|\bpingpong\b/g, "table tennis")
+    .replace(/\btenis\b/g, "tennis")
+    .replace(/\bskuasy\b/g, "squash")
+    .replace(/\bacara\b/g, "event")
+    .replace(/\bmakmal\s+komputer\b/g, "computer lab")
+    .replace(/\bmakmal\b/g, "lab")
     .replace(/\bbilik\s+perbincangan\b/g, "discussion room")
     .replace(/\bbilik\s+mesyuarat\b/g, "meeting room")
     .replace(/\bbilik\s+seminar\b/g, "seminar room")
@@ -120,7 +131,7 @@ export function parseDate(q: string, now: Date = new Date()): string | null {
   const today = myDateKey(now);
   if (/day after tomorrow|\blusa\b/.test(t)) return addDays(today, 2);
   if (/\btomorrow\b|\btmr\b|\besok\b/.test(t)) return addDays(today, 1);
-  if (/\btoday\b|\btonight\b|\bnow\b|\bhari ini\b|\bsekarang\b|\bmalam ini\b|\bpetang ini\b|\bpagi ini\b/.test(t)) return today;
+  if (/\btoday\b|\btonight\b|\bnow\b|\bthis\s+(morning|afternoon|evening)\b|\bhari ini\b|\bsekarang\b|\bmalam ini\b|\bpetang ini\b|\bpagi ini\b/.test(t)) return today;
 
   const iso = t.match(/\b(20\d\d)-(\d{2})-(\d{2})\b/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
@@ -215,8 +226,10 @@ export function parseIntent(q: string, facilities: FacLike[], now: Date = new Da
     /\b(saya|aku)\s+(ada|sudah|dah|telah)\s+(tempah|book|buat tempahan)/.test(t)
   ) intent = "mine";
   else if (
-    /\b(rule|rules|policy|policies|cancel|cancellation|advance|approval|approve|maximum|minimum|max|min)\b/.test(t) ||
-    /\b(peraturan|polisi|syarat|batal|pembatalan|maksimum|minimum|kelulusan|lulus)\b/.test(t)
+    /\b(rule|rules|policy|policies|cancel|cancellation|advance|approval|approve|maximum|minimum|max|min|limit|limits)\b/.test(t) ||
+    /\bwho\s+(can|may|is allowed to)\s+(book|use|reserve)\b/.test(t) ||
+    /\b(peraturan|polisi|syarat|batal|pembatalan|maksimum|minimum|kelulusan|lulus|had)\b/.test(t) ||
+    /\bsiapa\s+(boleh|dibenarkan)\b/.test(t)
   ) intent = "rules";
   else if (
     /\b(list|show)\b.*\b(facilities|rooms|courts|halls|venues)\b/.test(t) ||

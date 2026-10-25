@@ -153,9 +153,14 @@ export function NewFacilityWizard({ open, startVenue, categories, facilities, on
     setSaving(true);
     const slug = uniqueSlug(name, where, categories.map((c) => c.slug));
     const { checkin_grace_mins, ...base } = rules;
-    const { data, error } = await supabase.from("facility_categories")
-      .insert({ ...base, slot_minutes: 30, name: name.trim(), venue: where, slug, ...(checkin_grace_mins ? { checkin_grace_mins } : {}) })
-      .select("id").single();
+    const row: Record<string, unknown> = { ...base, slot_minutes: 30, name: name.trim(), venue: where, slug, ...(checkin_grace_mins ? { checkin_grace_mins } : {}) };
+    let { data, error } = await supabase.from("facility_categories").insert(row).select("id").single();
+    if (error && /allowed_members|max_upcoming|max_hours_week/.test(error.message)) {
+      // upgrade-access-limits.sql not run yet: create without who-can-book / limits
+      for (const k of ["allowed_members", "max_upcoming", "max_hours_week"]) delete row[k];
+      ({ data, error } = await supabase.from("facility_categories").insert(row).select("id").single());
+      if (!error) toast.warning("Created, but who-can-book and limits need upgrade-access-limits.sql in Supabase.");
+    }
     if (error || !data) { setSaving(false); toast.error(error?.message ?? "Could not create the facility"); return; }
     if (rooms > 0) {
       const { error: e2 } = await supabase.from("facilities")
