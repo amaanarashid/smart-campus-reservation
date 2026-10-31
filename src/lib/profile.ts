@@ -7,9 +7,12 @@ import { Profile } from "./types";
  * an administrator afterwards. Works whether or not email confirmation is on.
  */
 export async function ensureProfile(): Promise<Profile | null> {
+  // getSession reads this tab's stored session (no network call); every
+  // query below is still checked by the database with the token.
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
+  const user = session?.user;
   if (!user) return null;
 
   const { data: existing } = await supabase

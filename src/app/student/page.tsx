@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
 import { busyQuery } from "@/lib/busy";
 import { accessLabel, accessMessage, canBook, limitProblem, limitsLabel } from "@/lib/access";
@@ -18,13 +19,15 @@ import {
 import { addDays, fmtDay, fmtRelativeDay, fmtTime, myAt, myDateKey } from "@/lib/time";
 import { ensureProfile } from "@/lib/profile";
 import { useAutoRefresh } from "@/lib/use-auto-refresh";
+
+// the chat widget loads after the booking page, in its own bundle
+const Chatbot = dynamic(() => import("@/components/chatbot"));
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast, Toaster } from "sonner";
-import Chatbot from "@/components/chatbot";
 import AppShell from "@/components/app-shell";
 import FacilityIso from "@/components/facility-iso";
 import VenueArt from "@/components/venue-art";
@@ -154,10 +157,20 @@ export default function StudentDashboard() {
       const p = await ensureProfile();
       if (!p) { router.replace("/login"); return; }
       setProfile(p);
-      const [{ data: f, error: fErr }, { data: r, error: rErr }, { data: e }] = await Promise.all([
+      // all first-load reads at once (one round trip of waiting, not five in a row)
+      const nowIso = new Date().toISOString();
+      const [{ data: f, error: fErr }, { data: r, error: rErr }, { data: e }, { data: cur }, { data: doors }] = await Promise.all([
         supabase.from("facilities_full").select("*").eq("status", "active").order("name"),
         supabase.from("effective_facility_rules").select("*"),
         supabase.from("equipment").select("*").order("name"),
+        // which facilities are in use right now?
+        busyQuery((t) => supabase
+          .from(t).select("facility_id")
+          .in("status", ["pending", "approved"])
+          .lte("start_time", nowIso).gte("end_time", nowIso)),
+        // view added by upgrade-room-access.sql; if it is not there yet, no doors
+        supabase.from("door_facilities").select("facility_id"),
+        loadBookings(p.id),
       ]);
       if (fErr || rErr) {
         setLoadError((fErr ?? rErr)!.message);
@@ -168,17 +181,8 @@ export default function StudentDashboard() {
       (r as FacilityRule[] | null)?.forEach((x) => { map[x.facility_id] = x; });
       setRules(map);
       setEquipment((e as Equipment[]) ?? []);
-      // which facilities are in use right now?
-      const nowIso = new Date().toISOString();
-      const { data: cur } = await busyQuery((t) => supabase
-        .from(t).select("facility_id")
-        .in("status", ["pending", "approved"])
-        .lte("start_time", nowIso).gte("end_time", nowIso));
-      setBusyNow(new Set((cur ?? []).map((x) => x.facility_id)));
-      // view added by upgrade-room-access.sql; if it is not there yet, no doors
-      const { data: doors } = await supabase.from("door_facilities").select("facility_id");
+      setBusyNow(new Set(((cur as { facility_id: string }[] | null) ?? []).map((x) => x.facility_id)));
       setDoorRooms(new Set((doors ?? []).map((d: { facility_id: string }) => d.facility_id)));
-      await loadBookings(p.id);
       setNowMs(Date.now());
       setLoading(false);
     })();

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type ComponentType, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase";
+import { useAutoRefresh } from "@/lib/use-auto-refresh";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -141,11 +142,10 @@ export default function RoomPanel({ hideWhenEmpty = false, heading }: { hideWhen
   }, []);
 
   useEffect(() => {
-    // first load, then refresh every 30 s while the tab is open
     const first = setTimeout(load, 0);
-    const t = setInterval(load, 30_000);
-    return () => { clearTimeout(first); clearInterval(t); };
+    return () => clearTimeout(first);
   }, [load]);
+  useAutoRefresh(load, 30_000);   // every 30 s while the tab is visible
 
   async function refresh() {
     setRefreshing(true);

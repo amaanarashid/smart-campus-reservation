@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
 import { Facility, FacilityCategory, FacilityRule, Profile, Equipment, Reservation, ActivityLog, typeLabel, type MemberType } from "@/lib/types";
 import { MEMBER_LABEL, MEMBER_TYPES } from "@/lib/access";
@@ -24,13 +25,15 @@ import {
   MapPin, Users2, ShieldCheck, GraduationCap, UserCog, Activity,
   ArrowRight, Check, X, Loader2, Search, Cpu, MessageSquareWarning, CircuitBoard, Laptop, KeyRound, Unplug, MoreHorizontal,
 } from "lucide-react";
-import AdminAnalytics from "@/components/admin-analytics";
 import FacilityIso from "@/components/facility-iso";
-import FacilityDetail from "@/components/facility-detail";
-import RoomReports from "@/components/room-reports";
-import AdminFacilities from "@/components/admin-facilities";
 import SmartRoomConnect, { DEVICE_KIND, type SmartDevice } from "@/components/smart-room-connect";
 import { fmtRelativeDay, fmtTime, myAt, myDateKey } from "@/lib/time";
+
+// heavy tabs (charts, 3D twin, editors) download only when opened
+const AdminAnalytics = dynamic(() => import("@/components/admin-analytics"), { loading: () => <div className="skeleton h-64 rounded-xl" /> });
+const FacilityDetail = dynamic(() => import("@/components/facility-detail"), { loading: () => <div className="skeleton h-64 rounded-xl" /> });
+const RoomReports = dynamic(() => import("@/components/room-reports"), { loading: () => <div className="skeleton h-64 rounded-xl" /> });
+const AdminFacilities = dynamic(() => import("@/components/admin-facilities"), { loading: () => <div className="skeleton h-64 rounded-xl" /> });
 
 interface FmRow { id: string; facility_id: string; manager_id: string }
 interface PendingRow extends Reservation { profiles: { full_name: string } | null }
@@ -90,11 +93,47 @@ export default function AdminDashboard() {
   const [connectOpen, setConnectOpen] = useState(false);
   const [rekey, setRekey] = useState<SmartDevice | null>(null);
 
+  // the live parts: approvals, stats, today's bookings, devices, feedback, log.
+  // Everything runs at once - one round trip of waiting instead of ten in a row.
+  const loadLive = useCallback(async (facs: Facility[], fms: FmRow[]) => {
+    // pending bookings for facilities without any assigned manager
+    const assigned = new Set(fms.map((x) => x.facility_id));
+    const unassignedIds = facs.filter((x) => !assigned.has(x.id)).map((x) => x.id);
+    // today's bookings across campus, for the live venue overview
+    const today = myDateKey();
+    const [up, { count: users }, { count: bookings }, { count: pending }, { data: td }, viaView, { count: fb }, { data: log }] = await Promise.all([
+      unassignedIds.length > 0
+        ? supabase.from("reservations").select("*, profiles(full_name)")
+            .eq("status", "pending").in("facility_id", unassignedIds).order("start_time")
+        : Promise.resolve({ data: [] }),
+      supabase.from("profiles").select("id", { count: "exact", head: true }),
+      supabase.from("reservations").select("id", { count: "exact", head: true }),
+      supabase.from("reservations").select("id", { count: "exact", head: true }).eq("status", "pending"),
+      supabase.from("reservations").select("*")
+        .in("status", ["approved", "pending"])
+        .gte("start_time", myAt(today, "00:00").toISOString())
+        .lt("start_time", myAt(today, "23:59").toISOString()),
+      // which rooms have a smart device (view from upgrade-room-end.sql; absent = none)
+      supabase.from("room_devices_visible").select("*"),
+      // open room problems reported by students (table from upgrade-room-reports.sql)
+      supabase.from("room_reports").select("id", { count: "exact", head: true }).in("status", ["open", "in_progress"]),
+      supabase.from("activity_log").select("*").order("at", { ascending: false }).limit(300),
+    ]);
+    setUnassignedPending((up.data as PendingRow[]) ?? []);
+    setStats({ users: users ?? 0, bookings: bookings ?? 0, pending: pending ?? 0 });
+    setTodayRes((td as Reservation[]) ?? []);
+    const devs = viaView.error ? (await supabase.from("room_devices").select("*")).data : viaView.data;
+    setDevices(((devs as SmartDevice[] | null) ?? []));
+    setFeedbackCount(fb ?? 0);
+    setActivity((log as ActivityLog[]) ?? []);
+  }, []);
+
+  // everything: setup data (rooms, rules, people, equipment) + the live parts
   const load = useCallback(async () => {
-    const [{ data: f }, { data: r }, { data: m }, { data: fm }, { data: eq }, { data: cats }] = await Promise.all([
+    const [{ data: f }, { data: r }, { data: us }, { data: fm }, { data: eq }, { data: cats }] = await Promise.all([
       supabase.from("facilities_full").select("*").order("venue").order("name"),
       supabase.from("effective_facility_rules").select("*"),
-      supabase.from("profiles").select("*").eq("role", "facility_manager").order("full_name"),
+      supabase.from("profiles").select("*").order("full_name"),
       supabase.from("facility_managers").select("*"),
       supabase.from("equipment").select("*").order("facility_type").order("name"),
       supabase.from("facility_categories").select("*").order("name"),
@@ -105,54 +144,14 @@ export default function AdminDashboard() {
     const map: Record<string, FacilityRule> = {};
     (r as FacilityRule[] | null)?.forEach((x) => { map[x.facility_id] = x; });
     setRules(map);
-    setManagers((m as Profile[]) ?? []);
-    const { data: us } = await supabase.from("profiles").select("*").order("full_name");
-    setAllUsers((us as Profile[]) ?? []);
+    const all = (us as Profile[]) ?? [];
+    setAllUsers(all);
+    setManagers(all.filter((u) => u.role === "facility_manager"));
     const fms = (fm as FmRow[]) ?? [];
     setFmRows(fms);
     setEquipment((eq as Equipment[]) ?? []);
-
-    // pending bookings for facilities without any assigned manager
-    const assigned = new Set(fms.map((x) => x.facility_id));
-    const unassignedIds = facs.filter((x) => !assigned.has(x.id)).map((x) => x.id);
-    if (unassignedIds.length > 0) {
-      const { data: up } = await supabase
-        .from("reservations").select("*, profiles(full_name)")
-        .eq("status", "pending").in("facility_id", unassignedIds).order("start_time");
-      setUnassignedPending((up as PendingRow[]) ?? []);
-    } else setUnassignedPending([]);
-
-    const [{ count: users }, { count: bookings }, { count: pending }] = await Promise.all([
-      supabase.from("profiles").select("*", { count: "exact", head: true }),
-      supabase.from("reservations").select("*", { count: "exact", head: true }),
-      supabase.from("reservations").select("*", { count: "exact", head: true }).eq("status", "pending"),
-    ]);
-    setStats({ users: users ?? 0, bookings: bookings ?? 0, pending: pending ?? 0 });
-
-    // today's bookings across campus, for the live venue overview
-    const today = myDateKey();
-    const { data: td } = await supabase
-      .from("reservations").select("*")
-      .in("status", ["approved", "pending"])
-      .gte("start_time", myAt(today, "00:00").toISOString())
-      .lt("start_time", myAt(today, "23:59").toISOString());
-    setTodayRes((td as Reservation[]) ?? []);
-
-    // which rooms have a smart device (view from upgrade-room-end.sql; absent = none)
-    const viaView = await supabase.from("room_devices_visible").select("*");
-    const devs = viaView.error ? (await supabase.from("room_devices").select("*")).data : viaView.data;
-    setDevices(((devs as SmartDevice[] | null) ?? []));
-
-    // open room problems reported by students (table from upgrade-room-reports.sql)
-    const { count: fb } = await supabase.from("room_reports")
-      .select("id", { count: "exact", head: true }).in("status", ["open", "in_progress"]);
-    setFeedbackCount(fb ?? 0);
-
-    const { data: log } = await supabase
-      .from("activity_log").select("*")
-      .order("at", { ascending: false }).limit(300);
-    setActivity((log as ActivityLog[]) ?? []);
-  }, []);
+    await loadLive(facs, fms);
+  }, [loadLive]);
 
   useEffect(() => {
     (async () => {
@@ -168,7 +167,8 @@ export default function AdminDashboard() {
   }, [router, load]);
 
   // stats, approvals, feedback count and the activity log stay current
-  useAutoRefresh(load, 30_000, !loading);
+  // (setup data only reloads after an edit, not on every tick)
+  useAutoRefresh(() => loadLive(facilities, fmRows), 30_000, !loading);
 
   async function changeRole(u: Profile, role: string) {
     if (u.id === profile?.id && role !== "admin") {

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase";
+import { useAutoRefresh } from "@/lib/use-auto-refresh";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -76,9 +77,9 @@ export default function RoomReports({ facilityId, onActiveCount, compact = false
 
   useEffect(() => {
     const first = setTimeout(load, 0);
-    const t = setInterval(load, 60_000);
-    return () => { clearTimeout(first); clearInterval(t); };
+    return () => clearTimeout(first);
   }, [load]);
+  useAutoRefresh(load, 60_000);
 
   async function setStatus(r: Row, status: ReportStatus) {
     if (acting) return;

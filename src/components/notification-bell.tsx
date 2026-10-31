@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useAutoRefresh } from "@/lib/use-auto-refresh";
 import { AppNotification } from "@/lib/types";
 import { Bell, CheckCheck } from "lucide-react";
 
@@ -40,16 +41,17 @@ export default function NotificationBell() {
   }, []);
 
   useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | undefined;
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) return;
       setUid(user.id);
       await load(user.id);
-      timer = setInterval(() => load(user.id), 30000);
     })();
-    return () => { if (timer) clearInterval(timer); };
   }, [load]);
+
+  // new notifications every 30 s, paused while the tab is hidden
+  useAutoRefresh(() => uid && load(uid), 30_000, !!uid);
 
   // close on outside click
   useEffect(() => {

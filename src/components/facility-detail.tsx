@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type ComponentType } from "react";
 import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
+import { useAutoRefresh } from "@/lib/use-auto-refresh";
 import type { Facility, FacilityRule } from "@/lib/types";
 import { typeLabel } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,7 +18,7 @@ import {
 } from "recharts";
 import RoomControls from "@/components/room-controls";
 import { twinReading, type TwinBooking, type TwinEvent } from "@/lib/twin-state";
-import { AC_KW, LIGHT_KW, energyReport, lastWeek, type EnergyBooking, type EnergyEvent } from "@/lib/energy";
+import { AC_KW, LIGHT_KW, energyReport, lastWeek, type EnergyBooking, type EnergyEvent, type EnergyReport } from "@/lib/energy";
 import { fmtDay, fmtRelativeDay, fmtTime, myAt, myDateKey } from "@/lib/time";
 
 // three.js is only downloaded when a facility is opened
@@ -83,9 +84,9 @@ export default function FacilityDetail({ facility, rule, onBack }: {
 }) {
   const [device, setDevice] = useState<DeviceRow | null>(null);
   const [events, setEvents] = useState<Ev[]>([]);
-  const [weekEvents, setWeekEvents] = useState<Ev[]>([]);
   const [bookings, setBookings] = useState<Bk[]>([]);
-  const [weekBookings, setWeekBookings] = useState<Bk[]>([]);
+  // worked out once per week load (every minute), not on every 1 s clock tick
+  const [weekEnergy, setWeekEnergy] = useState<EnergyReport | null>(null);
   const [polledAt, setPolledAt] = useState(0);
   const [nowMs, setNowMs] = useState(0);
 
@@ -111,7 +112,8 @@ export default function FacilityDetail({ facility, rule, onBack }: {
   }, [facility.id]);
 
   const loadWeek = useCallback(async () => {
-    const { fromDay } = lastWeek(new Date());
+    const now = new Date();
+    const { fromDay, toDay } = lastWeek(now);
     const since = new Date(myAt(fromDay, "00:00").getTime() - 86_400_000).toISOString();
     const [{ data: ev }, { data: bk }] = await Promise.all([
       supabase.from("room_events").select("id, at, kind, detail, reservation_id")
@@ -120,14 +122,11 @@ export default function FacilityDetail({ facility, rule, onBack }: {
         .select("id, start_time, end_time, status, checked_in_at, cancel_reason, participants, profiles(full_name)")
         .eq("facility_id", facility.id).gte("start_time", since),
     ]);
-    setWeekEvents((ev as Ev[]) ?? []);
-    setWeekBookings((bk as unknown as Bk[]) ?? []);
+    setWeekEnergy(energyReport((ev as Ev[]) ?? [], (bk as unknown as Bk[]) ?? [], fromDay, toDay, now));
   }, [facility.id]);
 
   useEffect(() => {
     const first = setTimeout(() => { loadLive(); loadWeek(); }, 0);
-    const live = setInterval(loadLive, LIVE_MS);
-    const week = setInterval(loadWeek, ENERGY_MS);
     const clock = setInterval(() => setNowMs(Date.now()), 1000);   // countdown + "updated 3 s ago"
 
     // Realtime: reload the moment the room reports something or a booking changes
@@ -143,11 +142,14 @@ export default function FacilityDetail({ facility, rule, onBack }: {
       .subscribe();
 
     return () => {
-      clearTimeout(first); clearInterval(live); clearInterval(week); clearInterval(clock);
+      clearTimeout(first); clearInterval(clock);
       if (pending) clearTimeout(pending);
       supabase.removeChannel(channel);
     };
   }, [loadLive, loadWeek, facility.id]);
+  // backup polls, paused while the tab is hidden
+  useAutoRefresh(loadLive, LIVE_MS);
+  useAutoRefresh(loadWeek, ENERGY_MS);
 
   const now = new Date(nowMs || 0);
   const reading = twinReading({
@@ -157,8 +159,7 @@ export default function FacilityDetail({ facility, rule, onBack }: {
   const running = reading.running as Bk | null;
   const secsLeft = running ? Math.max(0, Math.floor((new Date(running.end_time).getTime() - nowMs) / 1000)) : 0;
   const powerKw = (reading.lights ? LIGHT_KW : 0) + (reading.ac ? AC_KW : 0);
-  const { fromDay, toDay } = lastWeek(now);
-  const energy = device && nowMs ? energyReport(weekEvents, weekBookings, fromDay, toDay, now) : null;
+  const energy = device ? weekEnergy : null;
   const todayKwh = energy?.days[energy.days.length - 1]?.actualKwh ?? 0;
   const statusText = { free: "Free now", booked: "Booked - waiting for check-in", in_use: "In use", offline: "Offline", inactive: "Offline for maintenance" }[reading.status];
   const ago = polledAt ? Math.max(0, Math.round((nowMs - polledAt) / 1000)) : null;

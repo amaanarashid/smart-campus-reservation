@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
 import {
   Facility, FacilityRule, Profile, Reservation, Equipment, typeLabel,
@@ -18,12 +19,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast, Toaster } from "sonner";
 import AppShell from "@/components/app-shell";
 import FacilityIso from "@/components/facility-iso";
-import RoomPanel from "@/components/room-panel";
 import RoomReports from "@/components/room-reports";
 import NoShowBadge, { type BookingRisk } from "@/components/noshow-badge";
 import { issuesByFacility, type ReportCategory, type ReportUrgency } from "@/lib/reports";
 import { ensureProfile } from "@/lib/profile";
 import { useAutoRefresh } from "@/lib/use-auto-refresh";
+
+// smart-room section (charts, remote control) in its own bundle
+const RoomPanel = dynamic(() => import("@/components/room-panel"));
 import {
   Boxes, CalendarDays, Check, CheckCircle2, Clock, Inbox, Loader2, MapPin,
   PackageSearch, UserX, Users2, X, TriangleAlert,
@@ -119,10 +122,16 @@ export default function ManagerDashboard() {
   const [nowMs, setNowMs] = useState(0);                          // ticking clock (never Date.now() in render)
   const [risks, setRisks] = useState<Record<string, BookingRisk>>({}); // no-show risk per booking (next 24 h)
 
+  // Queries run in parallel waves (setup -> my rooms' data -> per-booking extras)
+  // so a refresh waits for 3 round trips instead of ~9 in a row.
   const load = useCallback(async (prof: Profile) => {
-    const [{ data: f }, { data: ru }] = await Promise.all([
+    const [{ data: f }, { data: ru }, { data: fm }] = await Promise.all([
       supabase.from("facilities_full").select("*").order("name"),
       supabase.from("effective_facility_rules").select("*"),
+      // scope: admins see everything; managers only their assigned facilities
+      prof.role === "admin"
+        ? Promise.resolve({ data: null })
+        : supabase.from("facility_managers").select("facility_id").eq("manager_id", prof.id),
     ]);
     const facs = (f as Facility[]) ?? [];
     setFacilities(facs);
@@ -130,15 +139,9 @@ export default function ManagerDashboard() {
     ((ru as FacilityRule[]) ?? []).forEach((r) => { rm[r.facility_id] = r; });
     setRules(rm);
 
-    // scope: admins see everything; managers only their assigned facilities
-    let ids: string[];
-    if (prof.role === "admin") {
-      ids = facs.map((x) => x.id);
-    } else {
-      const { data: fm } = await supabase
-        .from("facility_managers").select("facility_id").eq("manager_id", prof.id);
-      ids = (fm ?? []).map((x) => x.facility_id);
-    }
+    const ids: string[] = prof.role === "admin"
+      ? facs.map((x) => x.id)
+      : ((fm as { facility_id: string }[] | null) ?? []).map((x) => x.facility_id);
     setAssignedIds(ids);
 
     if (ids.length === 0) {
@@ -146,59 +149,51 @@ export default function ManagerDashboard() {
       return;
     }
 
-    const { data: p } = await supabase
-      .from("reservations").select("*, profiles(full_name)")
-      .eq("status", "pending").in("facility_id", ids).order("start_time");
-    setPending((p as Row[]) ?? []);
-    // requested equipment per pending reservation
-    const resIds = (p ?? []).map((x) => x.id);
-    if (resIds.length > 0) {
-      const { data: re } = await supabase
-        .from("reservation_equipment")
-        .select("reservation_id, qty, equipment(name)")
-        .in("reservation_id", resIds);
-      const m: Record<string, string> = {};
-      (re as { reservation_id: string; qty: number; equipment: { name: string } | null }[] | null)?.forEach((x) => {
-        const label = `${x.qty}x ${x.equipment?.name ?? "item"}`;
-        m[x.reservation_id] = m[x.reservation_id] ? `${m[x.reservation_id]}, ${label}` : label;
-      });
-      setEquipByRes(m);
-    } else setEquipByRes({});
-
     // today starts at midnight Malaysia time, whatever the browser's timezone
     const todayStart = myAt(myDateKey(), "00:00");
-    const { data: u } = await supabase
-      .from("reservations").select("*, profiles(full_name)")
-      .eq("status", "approved").in("facility_id", ids)
-      .gte("start_time", todayStart.toISOString())
-      .order("start_time").limit(60);
-    setUpcoming((u as Row[]) ?? []);
-
-    // no-show risk badges (scored for the next 24 h; absent before upgrade-noshow.sql)
-    const scoredIds = [...(p ?? []), ...(u ?? [])].map((x) => x.id);
-    if (scoredIds.length > 0) {
-      const { data: br } = await supabase.from("booking_risk")
-        .select("reservation_id, risk, reasons, threshold").in("reservation_id", scoredIds);
-      const rk: Record<string, BookingRisk> = {};
-      ((br as BookingRisk[] | null) ?? []).forEach((x) => { rk[x.reservation_id] = x; });
-      setRisks(rk);
-    } else setRisks({});
-
     // equipment for my facility categories
     const myTypes = Array.from(new Set(facs.filter((x) => ids.includes(x.id)).map((x) => x.type)));
-    const { data: eq } = await supabase
-      .from("equipment").select("*").in("facility_type", myTypes).order("name");
+    const [{ data: p }, { data: u }, { data: eq }, { data: lf }, { data: iss }] = await Promise.all([
+      supabase.from("reservations").select("*, profiles(full_name)")
+        .eq("status", "pending").in("facility_id", ids).order("start_time"),
+      supabase.from("reservations").select("*, profiles(full_name)")
+        .eq("status", "approved").in("facility_id", ids)
+        .gte("start_time", todayStart.toISOString())
+        .order("start_time").limit(60),
+      supabase.from("equipment").select("*").in("facility_type", myTypes).order("name"),
+      // lost & found for my facilities
+      supabase.from("lost_and_found").select("*").in("facility_id", ids)
+        .order("created_at", { ascending: false }),
+      // open room problems, for the badges on the room cards (absent before upgrade-room-reports.sql)
+      supabase.from("facility_open_issues").select("facility_id, category, urgency").in("facility_id", ids),
+    ]);
+    setPending((p as Row[]) ?? []);
+    setUpcoming((u as Row[]) ?? []);
     setEquipment((eq as Equipment[]) ?? []);
-
-    // lost & found for my facilities
-    const { data: lf } = await supabase
-      .from("lost_and_found").select("*").in("facility_id", ids)
-      .order("created_at", { ascending: false });
     setLostItems((lf as LostFoundItem[]) ?? []);
-
-    // open room problems, for the badges on the room cards (absent before upgrade-room-reports.sql)
-    const { data: iss } = await supabase.from("facility_open_issues").select("facility_id, category, urgency").in("facility_id", ids);
     setOpenIssues((iss as { facility_id: string; category: ReportCategory; urgency: ReportUrgency }[]) ?? []);
+
+    // requested equipment per pending reservation + no-show risk badges
+    // (scored for the next 24 h; absent before upgrade-noshow.sql)
+    const resIds = (p ?? []).map((x) => x.id);
+    const scoredIds = [...(p ?? []), ...(u ?? [])].map((x) => x.id);
+    const [{ data: re }, { data: br }] = await Promise.all([
+      resIds.length > 0
+        ? supabase.from("reservation_equipment").select("reservation_id, qty, equipment(name)").in("reservation_id", resIds)
+        : Promise.resolve({ data: [] }),
+      scoredIds.length > 0
+        ? supabase.from("booking_risk").select("reservation_id, risk, reasons, threshold").in("reservation_id", scoredIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+    const m: Record<string, string> = {};
+    (re as { reservation_id: string; qty: number; equipment: { name: string } | null }[] | null)?.forEach((x) => {
+      const label = `${x.qty}x ${x.equipment?.name ?? "item"}`;
+      m[x.reservation_id] = m[x.reservation_id] ? `${m[x.reservation_id]}, ${label}` : label;
+    });
+    setEquipByRes(m);
+    const rk: Record<string, BookingRisk> = {};
+    ((br as BookingRisk[] | null) ?? []).forEach((x) => { rk[x.reservation_id] = x; });
+    setRisks(rk);
   }, []);
 
   const [loading, setLoading] = useState(true);

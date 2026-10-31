@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useAutoRefresh } from "@/lib/use-auto-refresh";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -53,13 +54,13 @@ export default function RoomControls({ facilityId }: { facilityId: string }) {
 
   useEffect(() => {
     const first = setTimeout(load, 0);
-    const t = setInterval(load, 8000);       // backup; Realtime below is the fast path
     // "waiting for room" turns into "done" the moment the device confirms
     const channel = supabase.channel(`room-commands-${facilityId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "room_commands", filter: `facility_id=eq.${facilityId}` }, () => { load(); })
       .subscribe();
-    return () => { clearTimeout(first); clearInterval(t); supabase.removeChannel(channel); };
+    return () => { clearTimeout(first); supabase.removeChannel(channel); };
   }, [load, facilityId]);
+  useAutoRefresh(load, 8000);   // backup; Realtime above is the fast path
 
   async function send(kind: CommandKind, args: Record<string, unknown>, key: string) {
     if (busy) return;
