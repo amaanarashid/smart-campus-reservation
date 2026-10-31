@@ -18,6 +18,7 @@ const DOT: Record<string, string> = {
   booking_rejected: "bg-destructive",
   new_request: "bg-primary",
   booking_ending: "bg-amber-500",
+  noshow_check: "bg-amber-500",
   booking_released: "bg-destructive",
   room_overstay: "bg-amber-500",
   room_report: "bg-destructive",

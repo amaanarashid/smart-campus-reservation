@@ -7,6 +7,7 @@
 import EmbeddedPostgres from "embedded-postgres";
 import pg from "pg";
 import { readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -15,12 +16,12 @@ export const MIGRATIONS = [
   "setup-all.sql", "upgrade-recommender.sql", "fix-role-escalation.sql", "upgrade-auto-release.sql",
   "upgrade-room-access.sql", "upgrade-room-end.sql", "upgrade-room-reports.sql", "fix-room-reports-insert.sql",
   "upgrade-room-commands.sql", "upgrade-realtime.sql", "upgrade-room-connect.sql", "upgrade-private-bookings.sql",
-  "upgrade-booking-rules.sql", "upgrade-access-limits.sql",
+  "upgrade-booking-rules.sql", "upgrade-access-limits.sql", "upgrade-noshow.sql",
 ];
 export const PORT = 5499;
 export const CONN = { host: "localhost", port: PORT, user: "postgres", password: "pw", database: "postgres" };
 
-export async function startDb(dir = "/tmp/campus-eval-pg") {
+export async function startDb(dir = join(tmpdir(), "campus-eval-pg")) { // os temp dir: /tmp is not there on Windows
   rmSync(dir, { recursive: true, force: true });
   const db = new EmbeddedPostgres({ databaseDir: dir, user: "postgres", password: "pw", port: PORT, persistent: false, onLog: () => {} });
   await db.initialise(); await db.start();

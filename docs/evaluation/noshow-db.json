@@ -1,0 +1,156 @@
+{
+  "generated_by": "scripts/eval/noshow-db.ts",
+  "run_at": "2026-10-31T02:44:50.461Z",
+  "passed": 33,
+  "total": 33,
+  "checks": [
+    {
+      "name": "parity (baseline): features equal on 86 bookings",
+      "ok": true,
+      "detail": "max |diff| 8.88e-16"
+    },
+    {
+      "name": "parity (baseline): p equal within 1e-6",
+      "ok": true,
+      "detail": "max |diff| 0.00e+0"
+    },
+    {
+      "name": "parity (baseline): same reasons",
+      "ok": true,
+      "detail": "86/86"
+    },
+    {
+      "name": "suggestion link found for some bookings",
+      "ok": true,
+      "detail": "6"
+    },
+    {
+      "name": "parity (logreg): features equal on 86 bookings",
+      "ok": true,
+      "detail": "max |diff| 8.88e-16"
+    },
+    {
+      "name": "parity (logreg): p equal within 1e-6",
+      "ok": true,
+      "detail": "max |diff| 5.55e-17"
+    },
+    {
+      "name": "parity (logreg): same reasons",
+      "ok": true,
+      "detail": "86/86"
+    },
+    {
+      "name": "scores pending + approved bookings in the next 24 h only",
+      "ok": true,
+      "detail": "5 scored"
+    },
+    {
+      "name": "one reminder for the high-risk booking, none on the second run",
+      "ok": true,
+      "detail": "run 1 sent 1, run 2 sent 0"
+    },
+    {
+      "name": "reminder wording",
+      "ok": true,
+      "detail": "Still coming to Room A at 11:44 am? If not, please cancel so someone else can use it."
+    },
+    {
+      "name": "no reminder for pending, later-today or tomorrow bookings",
+      "ok": true
+    },
+    {
+      "name": "low-risk booking in the window gets no reminder",
+      "ok": true,
+      "detail": "risk 0.256 vs threshold 0.678"
+    },
+    {
+      "name": "stored score carries model version, mode and reasons",
+      "ok": true
+    },
+    {
+      "name": "never cancels: the high-risk booking is still approved",
+      "ok": true
+    },
+    {
+      "name": "student reads no booking_risk rows (not even their own)",
+      "ok": true,
+      "detail": "0 rows"
+    },
+    {
+      "name": "student reads no noshow_model rows",
+      "ok": true
+    },
+    {
+      "name": "manager sees only their own rooms' scores",
+      "ok": true,
+      "detail": "3 of 5"
+    },
+    {
+      "name": "manager reads no noshow_model rows",
+      "ok": true
+    },
+    {
+      "name": "admin sees every score and the model",
+      "ok": true
+    },
+    {
+      "name": "the other manager does not see Room A",
+      "ok": true
+    },
+    {
+      "name": "authenticated cannot call score_upcoming_bookings()",
+      "ok": true,
+      "detail": "permission denied for function score_upcoming_bookings"
+    },
+    {
+      "name": "even an admin's session cannot call score_upcoming_bookings()",
+      "ok": true
+    },
+    {
+      "name": "authenticated cannot call noshow_score()",
+      "ok": true,
+      "detail": "permission denied for function noshow_score"
+    },
+    {
+      "name": "even an admin's session cannot call noshow_score()",
+      "ok": true
+    },
+    {
+      "name": "authenticated cannot call noshow_features()",
+      "ok": true,
+      "detail": "permission denied for function noshow_features"
+    },
+    {
+      "name": "even an admin's session cannot call noshow_features()",
+      "ok": true
+    },
+    {
+      "name": "student cannot write booking_risk",
+      "ok": true
+    },
+    {
+      "name": "manager cannot change a score",
+      "ok": true
+    },
+    {
+      "name": "admin session cannot insert a model directly (service role only)",
+      "ok": true
+    },
+    {
+      "name": "migration runs a second time and keeps the scores",
+      "ok": true
+    },
+    {
+      "name": "cron job not duplicated by a re-run",
+      "ok": true
+    },
+    {
+      "name": "booking_risk row goes when the booking is deleted",
+      "ok": true
+    },
+    {
+      "name": "cron job scheduled every 10 minutes",
+      "ok": true
+    }
+  ]
+}

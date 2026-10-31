@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Facility } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import NoShowCard from "@/components/noshow-card";
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -168,6 +169,8 @@ export default function AdminAnalytics() {
           </div>
         </div>
       </div>
+
+      <NoShowCard />
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card>

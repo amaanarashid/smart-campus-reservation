@@ -1,0 +1,316 @@
+{
+  "label": "SIMULATED - synthetic campus with a known no-show process, not live data",
+  "generated_by": "scripts/eval/noshow-simulate.ts",
+  "seed": 20261031,
+  "students": 300,
+  "weeks": 8,
+  "simulated_now": "2026-10-31T00:00:00+08:00",
+  "ground_truth": {
+    "intercept": -2.6,
+    "habitual_share": 0.12,
+    "habitual_boost": 2,
+    "student_noise_sd": 0.4,
+    "per_log_lead_day": 0.45,
+    "early_morning": 0.8,
+    "evening": 0.3,
+    "large_group_needing_approval": 0.9,
+    "from_suggestion": -0.4,
+    "category_effects": {
+      "discussion_room": 0,
+      "meeting_room": 0.1,
+      "badminton": -0.1,
+      "futsal": 0.3,
+      "event_hall": -0.2
+    }
+  },
+  "bookings": 4399,
+  "labelled": 4399,
+  "no_shows": 905,
+  "no_show_rate": 0.2057,
+  "split": {
+    "method": "time-based: oldest 80% train, newest 20% test",
+    "n_train": 3519,
+    "n_test": 880,
+    "test_from": "2026-10-20T04:00:00.000Z"
+  },
+  "mode": "logreg",
+  "lambda": 0.01,
+  "train_ms": 195,
+  "test": {
+    "logreg": {
+      "auc": 0.7154790103232757,
+      "brier": 0.15579662019542106,
+      "log_loss": 0.4813382790351461,
+      "calibration": [
+        {
+          "lo": 0,
+          "hi": 0.2,
+          "n": 504,
+          "mean_p": 0.12695760072646065,
+          "rate": 0.13095238095238096
+        },
+        {
+          "lo": 0.2,
+          "hi": 0.4,
+          "n": 310,
+          "mean_p": 0.2757656773077494,
+          "rate": 0.3
+        },
+        {
+          "lo": 0.4,
+          "hi": 0.6,
+          "n": 54,
+          "mean_p": 0.4762066635773956,
+          "rate": 0.5555555555555556
+        },
+        {
+          "lo": 0.6,
+          "hi": 0.8,
+          "n": 12,
+          "mean_p": 0.677043259566661,
+          "rate": 0.8333333333333334
+        },
+        {
+          "lo": 0.8,
+          "hi": 1,
+          "n": 0,
+          "mean_p": null,
+          "rate": null
+        }
+      ]
+    },
+    "baseline": {
+      "auc": 0.6610844235863605,
+      "brier": 0.16376651269605305,
+      "log_loss": 0.5072506514756343,
+      "calibration": [
+        {
+          "lo": 0,
+          "hi": 0.2,
+          "n": 514,
+          "mean_p": 0.12742143059423977,
+          "rate": 0.1575875486381323
+        },
+        {
+          "lo": 0.2,
+          "hi": 0.4,
+          "n": 274,
+          "mean_p": 0.26804068409224263,
+          "rate": 0.2737226277372263
+        },
+        {
+          "lo": 0.4,
+          "hi": 0.6,
+          "n": 67,
+          "mean_p": 0.47270590875571916,
+          "rate": 0.417910447761194
+        },
+        {
+          "lo": 0.6,
+          "hi": 0.8,
+          "n": 25,
+          "mean_p": 0.6796686821011051,
+          "rate": 0.6
+        },
+        {
+          "lo": 0.8,
+          "hi": 1,
+          "n": 0,
+          "mean_p": null,
+          "rate": null
+        }
+      ]
+    },
+    "campus": {
+      "auc": 0.44899977124978785,
+      "brier": 0.17562189720110225,
+      "log_loss": 0.5364485737326926,
+      "calibration": [
+        {
+          "lo": 0,
+          "hi": 0.2,
+          "n": 21,
+          "mean_p": 0.199791382803211,
+          "rate": 0.42857142857142855
+        },
+        {
+          "lo": 0.2,
+          "hi": 0.4,
+          "n": 859,
+          "mean_p": 0.2027621252039335,
+          "rate": 0.22118742724097787
+        },
+        {
+          "lo": 0.4,
+          "hi": 0.6,
+          "n": 0,
+          "mean_p": null,
+          "rate": null
+        },
+        {
+          "lo": 0.6,
+          "hi": 0.8,
+          "n": 0,
+          "mean_p": null,
+          "rate": null
+        },
+        {
+          "lo": 0.8,
+          "hi": 1,
+          "n": 0,
+          "mean_p": null,
+          "rate": null
+        }
+      ]
+    },
+    "user_rate": {
+      "auc": 0.650786974520178,
+      "brier": 0.16357549809695682,
+      "log_loss": 0.5076790421528391,
+      "calibration": [
+        {
+          "lo": 0,
+          "hi": 0.2,
+          "n": 490,
+          "mean_p": 0.13072922100870973,
+          "rate": 0.15918367346938775
+        },
+        {
+          "lo": 0.2,
+          "hi": 0.4,
+          "n": 322,
+          "mean_p": 0.2675082605075774,
+          "rate": 0.2608695652173913
+        },
+        {
+          "lo": 0.4,
+          "hi": 0.6,
+          "n": 56,
+          "mean_p": 0.48171234392399914,
+          "rate": 0.5714285714285714
+        },
+        {
+          "lo": 0.6,
+          "hi": 0.8,
+          "n": 12,
+          "mean_p": 0.6308912398313471,
+          "rate": 0.4166666666666667
+        },
+        {
+          "lo": 0.8,
+          "hi": 1,
+          "n": 0,
+          "mean_p": null,
+          "rate": null
+        }
+      ]
+    },
+    "category": {
+      "auc": 0.5481925043720807,
+      "brier": 0.17421416558883424,
+      "log_loss": 0.5325386349937775,
+      "calibration": [
+        {
+          "lo": 0,
+          "hi": 0.2,
+          "n": 535,
+          "mean_p": 0.1752815609795585,
+          "rate": 0.1925233644859813
+        },
+        {
+          "lo": 0.2,
+          "hi": 0.4,
+          "n": 345,
+          "mean_p": 0.24764390159445204,
+          "rate": 0.2782608695652174
+        },
+        {
+          "lo": 0.4,
+          "hi": 0.6,
+          "n": 0,
+          "mean_p": null,
+          "rate": null
+        },
+        {
+          "lo": 0.6,
+          "hi": 0.8,
+          "n": 0,
+          "mean_p": null,
+          "rate": null
+        },
+        {
+          "lo": 0.8,
+          "hi": 1,
+          "n": 0,
+          "mean_p": null,
+          "rate": null
+        }
+      ]
+    }
+  },
+  "oracle_true_p": {
+    "auc": 0.7597606239715464,
+    "brier": 0.14459237191876476,
+    "log_loss": 0.4531391253905206,
+    "calibration": [
+      {
+        "lo": 0,
+        "hi": 0.2,
+        "n": 550,
+        "mean_p": 0.10757523019971729,
+        "rate": 0.11818181818181818
+      },
+      {
+        "lo": 0.2,
+        "hi": 0.4,
+        "n": 198,
+        "mean_p": 0.27356706750420223,
+        "rate": 0.2878787878787879
+      },
+      {
+        "lo": 0.4,
+        "hi": 0.6,
+        "n": 74,
+        "mean_p": 0.49070849642375836,
+        "rate": 0.5405405405405406
+      },
+      {
+        "lo": 0.6,
+        "hi": 0.8,
+        "n": 47,
+        "mean_p": 0.6821910178798333,
+        "rate": 0.5957446808510638
+      },
+      {
+        "lo": 0.8,
+        "hi": 1,
+        "n": 11,
+        "mean_p": 0.8486343004112786,
+        "rate": 0.8181818181818182
+      }
+    ]
+  },
+  "beats_user_rate": true,
+  "reminder_threshold": {
+    "threshold": 0.35,
+    "flagged_share": 0.1193,
+    "precision": 0.5048,
+    "recall": 0.2663,
+    "note": "Share of test bookings that would get the extra reminder, how many of those were no-shows, and how many no-shows were caught."
+  },
+  "weights_refit_on_all": {
+    "bias": -1.4795,
+    "user_rate": 0.4246,
+    "user_log_n": -0.0174,
+    "first_booking": 0.0771,
+    "category_rate": 0.0933,
+    "lead_log_h": 0.3839,
+    "early_morning": 0.217,
+    "evening": 0.1328,
+    "weekend": -0.0029,
+    "duration_h": -0.0567,
+    "party_ratio": 0.1703,
+    "needed_approval": 0.1463,
+    "from_suggestion": -0.1031
+  }
+}

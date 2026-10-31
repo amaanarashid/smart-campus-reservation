@@ -20,6 +20,7 @@ import AppShell from "@/components/app-shell";
 import FacilityIso from "@/components/facility-iso";
 import RoomPanel from "@/components/room-panel";
 import RoomReports from "@/components/room-reports";
+import NoShowBadge, { type BookingRisk } from "@/components/noshow-badge";
 import { issuesByFacility, type ReportCategory, type ReportUrgency } from "@/lib/reports";
 import { ensureProfile } from "@/lib/profile";
 import { useAutoRefresh } from "@/lib/use-auto-refresh";
@@ -116,6 +117,7 @@ export default function ManagerDashboard() {
   const [openIssues, setOpenIssues] = useState<{ facility_id: string; category: ReportCategory; urgency: ReportUrgency }[]>([]);
   const [acting, setActing] = useState<string | null>(null);     // reservation being updated
   const [nowMs, setNowMs] = useState(0);                          // ticking clock (never Date.now() in render)
+  const [risks, setRisks] = useState<Record<string, BookingRisk>>({}); // no-show risk per booking (next 24 h)
 
   const load = useCallback(async (prof: Profile) => {
     const [{ data: f }, { data: ru }] = await Promise.all([
@@ -171,6 +173,16 @@ export default function ManagerDashboard() {
       .gte("start_time", todayStart.toISOString())
       .order("start_time").limit(60);
     setUpcoming((u as Row[]) ?? []);
+
+    // no-show risk badges (scored for the next 24 h; absent before upgrade-noshow.sql)
+    const scoredIds = [...(p ?? []), ...(u ?? [])].map((x) => x.id);
+    if (scoredIds.length > 0) {
+      const { data: br } = await supabase.from("booking_risk")
+        .select("reservation_id, risk, reasons, threshold").in("reservation_id", scoredIds);
+      const rk: Record<string, BookingRisk> = {};
+      ((br as BookingRisk[] | null) ?? []).forEach((x) => { rk[x.reservation_id] = x; });
+      setRisks(rk);
+    } else setRisks({});
 
     // equipment for my facility categories
     const myTypes = Array.from(new Set(facs.filter((x) => ids.includes(x.id)).map((x) => x.type)));
@@ -489,6 +501,7 @@ export default function ManagerDashboard() {
                             </span>
                             <span className="font-medium">{r.profiles?.full_name ?? "Student"}</span>
                             <span className="text-xs text-muted-foreground">wants {f?.name ?? "a facility"}</span>
+                            <NoShowBadge risk={risks[r.id]} />
                           </div>
                           <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                             <span className="flex items-center gap-1 font-medium text-foreground">
@@ -581,6 +594,9 @@ export default function ManagerDashboard() {
                                 <p className="text-xs text-muted-foreground">
                                   {r.profiles?.full_name ?? "Student"} · {r.participants} people · until {fmtTime(end)}
                                 </p>
+                                {!started && !r.checked_in_at && risks[r.id] && (
+                                  <div className="pt-1"><NoShowBadge risk={risks[r.id]} /></div>
+                                )}
                               </div>
                               <div className="ml-auto flex flex-wrap items-center gap-1.5">
                                 {r.checked_in_at ? <Badge className="gap-1"><CheckCircle2 className="h-3 w-3" />checked in</Badge>
