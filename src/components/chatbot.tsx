@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { logEvent } from "@/lib/evaluation";
-import { ThumbsUp, ThumbsDown } from "lucide-react";
+import { MessageCircle, ThumbsUp, ThumbsDown } from "lucide-react";
 
 interface Msg { role: "user" | "assistant"; content: string; rated?: boolean }
 
@@ -53,19 +53,23 @@ export default function Chatbot() {
 
   if (!open) {
     return (
-      <Button className="fixed bottom-6 right-6 h-13 gap-2 rounded-full px-5 shadow-lg shadow-primary/25 transition-transform hover:scale-105"
+      // phones: a small round icon that does not cover the page; wider screens: the full label
+      <Button aria-label="Ask the assistant"
+        className="fixed bottom-4 right-4 z-30 h-12 w-12 gap-2 rounded-full p-0 shadow-lg shadow-primary/25 transition-transform hover:scale-105 sm:bottom-6 sm:right-6 sm:h-13 sm:w-auto sm:px-5"
         onClick={() => setOpen(true)}>
-        <span className="relative flex h-2 w-2">
+        <MessageCircle className="size-5 sm:hidden" />
+        <span className="relative hidden h-2 w-2 sm:flex">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary-foreground/60" />
           <span className="relative inline-flex h-2 w-2 rounded-full bg-primary-foreground" />
         </span>
-        Ask the assistant
+        <span className="hidden sm:inline">Ask the assistant</span>
       </Button>
     );
   }
 
   return (
-    <Card className="fixed bottom-6 right-6 flex h-[500px] w-[370px] flex-col overflow-hidden rounded-2xl border-0 p-0 shadow-2xl">
+    // phones: equal gaps left and right, and part of the page stays visible above
+    <Card className="fixed inset-x-3 bottom-3 z-50 flex h-[min(440px,70dvh)] flex-col overflow-hidden rounded-2xl border-0 p-0 shadow-2xl sm:inset-x-auto sm:bottom-6 sm:right-6 sm:h-[500px] sm:w-[370px]">
       <CardHeader className="flex flex-row items-center justify-between bg-gradient-to-r from-primary to-primary/85 py-3.5 text-primary-foreground">
         <div className="flex items-center gap-2.5">
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-xs font-bold">AI</span>
@@ -120,6 +124,9 @@ export default function Chatbot() {
         <div className="flex gap-2 border-t pt-3">
           <Input value={input} onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && send()}
+            aria-label="Your question"
+            // 16px on phones: smaller text makes iPhones zoom the page when typing
+            className="text-base sm:text-sm"
             placeholder="Ask in English or Bahasa Melayu..." />
           <Button onClick={send} disabled={busy}>Send</Button>
         </div>

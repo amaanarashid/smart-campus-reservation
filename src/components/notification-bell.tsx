@@ -78,7 +78,7 @@ export default function NotificationBell() {
     <div className="relative" ref={ref}>
       <button onClick={toggle}
         className="relative flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        aria-label="Notifications">
+        aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}>
         <Bell className="h-5 w-5" />
         {unread > 0 && (
           <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-white">
@@ -88,7 +88,8 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-11 z-50 w-80 overflow-hidden rounded-xl border bg-card shadow-xl">
+        // phones: fits the screen with equal gaps; lined up with the bell it would run off the left edge
+        <div className="fixed inset-x-3 top-[4.5rem] z-50 overflow-hidden rounded-xl border bg-card shadow-xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-11 sm:w-80">
           <div className="flex items-center justify-between border-b px-4 py-2.5">
             <span className="font-display text-sm font-semibold">Notifications</span>
             {items.length > 0 && (
@@ -97,7 +98,7 @@ export default function NotificationBell() {
               </span>
             )}
           </div>
-          <div className="max-h-96 overflow-y-auto">
+          <div className="max-h-[min(24rem,70dvh)] overflow-y-auto">
             {items.length === 0 ? (
               <p className="px-4 py-10 text-center text-sm text-muted-foreground">
                 No notifications yet
