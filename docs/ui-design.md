@@ -19,7 +19,7 @@ Dark mode mirrors the palette with a navy-black background and a deeper crimson 
 
 ## Layout
 
-- `src/components/app-shell.tsx` wraps all three dashboards: sticky header (brand, role badge, user name, sign out), a crimson page-title band with subtitle, a max-width content column, and an institutional footer. Adding a new role page means wrapping it in `<AppShell title=... role=...>` — nothing else.
+- `src/components/app-shell.tsx` wraps all three dashboards: sticky header (brand, role badge, user name, sign out), a crimson page-title band with subtitle, a max-width content column, and an institutional footer. Adding a new role page means wrapping it in `<AppShell title=... role=...>` — nothing else. `focused` narrows the column and shortens the band for one-task pages (student).
 - The landing page (`src/app/page.tsx`) uses the same header/footer plus a hero gradient, a facility-type strip, a feature grid with crimson left-border cards, and a four-step "How it works".
 - The login page sits on a crimson gradient with the brand mark above the card.
 
@@ -69,22 +69,43 @@ Within tabs: stat cards carry an icon tile, an uppercase label, and a serif numb
 
 ## Student dashboard
 
-- **Loading:** a skeleton in the shape of the real page (stat cards and venue
-  grid) with a shimmer, so nothing jumps when the data arrives.
-- **Steps:** venue (cards use the same 2D venue drawing as the admin page), then room, then booking form. Each step slides in
-  (`animate-step-in`, keyed by step), and venue and room cards cascade in.
-- **AI suggestions:** cards cascade in (`.stagger`). The best option has a
+Designed to ask for as little thought as possible: one task on screen, one filled
+button, and extra detail only when asked for. `AppShell focused` gives it a
+narrower column and a shorter title band.
+
+- **Loading:** a skeleton in the shape of the real page (tabs and venue grid)
+  with a shimmer, so nothing jumps when the data arrives.
+- **Two tabs:** Book and My bookings (with a count), so the two tasks never
+  compete. The old stat tiles are gone: their numbers now sit where they are
+  used (tab count, "waiting for approval" line, "n of m free now" on venues).
+- **Up next:** on the first step of Book only, the booking that is running or
+  starts within 24 hours, with its actions.
+- **Steps:** place, room, time, in a numbered stepper that shows what was picked;
+  past steps are clickable (`components/booking-ui.tsx`). "Book again" chips jump
+  straight to a recent room, and a venue with one room skips the room step. Each
+  step slides in (`animate-step-in`, keyed by step), and cards cascade in. On
+  phones the cards are horizontal, so more fit on screen.
+- **The form follows the rules:** the day chips, time list and length chips only
+  offer what the room allows (`lib/booking-form.ts`, tested), starting at the
+  soonest bookable time. Opening hours and length limits no longer need reading.
+  The checks themselves are unchanged. A summary with the single primary button
+  sits beside the form (below it on phones), with what happens next.
+- **Hidden until asked for** (`Disclosure`): purpose, equipment and popular times,
+  which also load only when opened.
+- **Colour:** in a crimson theme, red now only means "in use"; free is neutral.
+- **AI suggestions:** appear under the summary, and the book button goes quiet so
+  they become the next step. Cards cascade in (`.stagger`). The best option has a
   ring and a "Best" badge that pops in. While a booking is being made, every
   card is disabled and the chosen one shows a spinner, which prevents double
   bookings from double clicks.
+- **After booking:** the page moves to My bookings with the new booking ringed,
+  and the form is reset for next time.
 - **My bookings:** upcoming and running bookings come first, soonest first.
   History sits under a collapsible "Past and cancelled" toggle. A running
-  booking is highlighted with a pulsing "Now" dot. The Check in / Door code
-  button pulses gently while a check-in deadline is close. The door code is
-  revealed digit by digit and has a copy button.
-- **The form follows the rules:** the duration list only offers what the room
-  allows, and the date picker is limited to today through the advance-booking
-  window.
+  booking is highlighted with a pulsing "Now" dot. Status uses plain words
+  (Confirmed, Waiting for approval). The Check in / Door code button pulses gently
+  while a check-in deadline is close; Cancel and Report a problem stay quiet. The
+  door code is revealed digit by digit and has a copy button.
 - **Time-dependent UI** (check-in buttons, deadlines, "Now") runs off a clock
   that ticks every 30 seconds, never `Date.now()` during render. That keeps it
   current and React-Compiler-safe.

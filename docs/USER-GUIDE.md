@@ -10,12 +10,12 @@ Forgot your password? Click **Forgot password?** on the sign-in page, enter your
 
 ### Booking a room or court
 
-1. On your dashboard, pick a **location** (for example Library or Sports Complex). Each card shows how many rooms there are free right now.
-2. Pick a **room or court**. The card shows its hours, booking length, whether it books instantly or needs approval, and any known problems. A greyed card with a lock is limited to other member types (for example "Staff only").
-3. Choose the date, start time, length and group size, and add a purpose and any equipment you need. The form only offers lengths and dates the room allows.
-4. Press **Check availability & book**. Rooms marked instant are booked at once; the others go to the facility manager for approval and show as Pending.
+1. On the **Book** tab, pick a **location** (for example Library or Sports Complex). Each card shows how many rooms there are free right now. **Book again** jumps straight to a room you used recently.
+2. Pick a **room or court**. The card shows whether it books instantly or needs approval, and any known problems. A greyed card with a lock is limited to other member types (for example "Staff only").
+3. Choose the day, start time, length and group size. The form only offers days, times and lengths the room allows, and starts at the soonest time. A purpose and equipment are optional, under **Add a purpose or equipment**.
+4. Press **Book this time** (instant rooms) or **Request this time** (the facility manager approves it first and it shows as Waiting for approval). You then land on **My bookings**, where you find your door code, check in, extend, cancel or report a problem.
 
-Under the location you can see **Popular times**, which shows how busy its rooms usually are at each hour, based on past bookings. Quieter hours are easier to get.
+Open **See when it is usually busy** to see **Popular times**: how busy the rooms usually are at each hour, based on past bookings. Quieter hours are easier to get.
 
 ### When your time is taken
 

@@ -205,7 +205,7 @@ Signed in as student. All of this uses Badminton, set up by the seed.
 
 [ ] 6.1  SAME FACILITY, OTHER TIMES
          Badminton -> Court 1 -> TOMORROW, 15:00, 60 min, 2 people.
-         Press Check availability & book.
+         Press Request this time (Book this time on instant rooms).
          Expected: "That time is taken - AI-ranked alternatives".
          4 cards, one marked "Best", each with reasons such as
          "close to your preferred time" or "off-peak, likely quieter".
@@ -424,7 +424,7 @@ Signed in as facility manager (assigned to Courts 1-3 + futsal by the seed).
 [ ] 9.1  Open the app in two browser windows: the demo student in one,
          ben@seed.campus / demo1234 in a private window.
          Pick the SAME court, SAME date, SAME time in both.
-         Click "Check availability & book" in both as close together as
+         Click the book button in both as close together as
          you can.
          Expected: exactly ONE succeeds. The other says the slot was just
          taken and shows alternatives. The database itself refuses the

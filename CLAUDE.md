@@ -41,7 +41,7 @@ npm install      # needed after pulls (three, mqtt, vitest)
 npm run dev      # localhost:3000
 npm run build
 npm run lint
-npm test         # vitest — 169 cases, all with explicit +08:00 times
+npm test         # vitest — 182 cases, all with explicit +08:00 times
 npx tsx scripts/simulate-recommender.ts && python scripts/plot-simulation.py   # recommender simulation → docs/simulation/
 npx tsx scripts/eval/recommender-latency.ts && npx tsx scripts/eval/chatbot-eval.ts   # objective 5 → docs/evaluation/
 cd scripts/eval && npm install && node concurrency.mjs   # DS1 concurrent-booking stress test (local Postgres 17)
@@ -55,7 +55,7 @@ npx tsx scripts/eval/noshow-train.ts --dry-run   # train on live data (.env.loca
 ```
 src/app/
   page.tsx, login/page.tsx (redirects signed-in users; router.replace; Forgot password), reset-password/page.tsx
-  student/page.tsx           booking flow, suggestions, my bookings, door code, extend, report a problem
+  student/page.tsx           tabs Book / My bookings: place → room → time (booking-ui.tsx, lib/booking-form.ts), suggestions, door code, extend, report a problem
   facility-manager/page.tsx  room cards + timelines, approval queue, schedule, room problems, smart room, equipment, lost & found
   admin/page.tsx             tabs: overview, analytics, smart room (grid → 3D detail), users, facilities, approvals, feedback, equipment, records
   api/chat                   grounded chatbot (English + Bahasa Melayu, replies in the user's language)

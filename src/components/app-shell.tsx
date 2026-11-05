@@ -39,21 +39,25 @@ export default function AppShell({
   subtitle,
   role,
   userName,
+  focused = false,
   children,
 }: {
   title: string;
   subtitle?: string;
   role?: string;
   userName?: string;
+  /** One-task page: a narrower column and a shorter title band. */
+  focused?: boolean;
   children: ReactNode;
 }) {
   const router = useRouter();
+  const width = focused ? "max-w-5xl" : "max-w-[1680px]";
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <div className="h-1 bg-gradient-to-r from-primary via-primary/70 to-primary" />
       <header className="sticky top-0 z-40 border-b bg-card/95 shadow-sm backdrop-blur">
-        <div className="mx-auto flex h-16 w-full max-w-[1680px] items-center justify-between px-4 sm:px-6 lg:px-10">
+        <div className={`mx-auto flex h-16 w-full ${width} items-center justify-between px-4 sm:px-6 lg:px-10`}>
           <BrandMark />
           <div className="flex items-center gap-3">
             <ThemeToggle />
@@ -82,16 +86,16 @@ export default function AppShell({
 
       <div className="relative overflow-hidden border-b bg-gradient-to-br from-primary via-primary to-primary/80">
         <div className="pattern-dots absolute inset-0" aria-hidden />
-        <div className="relative mx-auto w-full max-w-[1680px] px-4 sm:px-6 lg:px-10 py-8">
-          <h1 className="font-display text-3xl font-semibold text-primary-foreground">{title}</h1>
-          {subtitle && <p className="pt-1.5 text-sm text-primary-foreground/80">{subtitle}</p>}
+        <div className={`relative mx-auto w-full ${width} px-4 sm:px-6 lg:px-10 ${focused ? "py-4" : "py-8"}`}>
+          <h1 className={`font-display font-semibold text-primary-foreground ${focused ? "text-2xl" : "text-3xl"}`}>{title}</h1>
+          {subtitle && <p className={`text-sm text-primary-foreground/80 ${focused ? "pt-0.5" : "pt-1.5"}`}>{subtitle}</p>}
         </div>
       </div>
 
-      <main className="mx-auto w-full max-w-[1680px] flex-1 space-y-6 px-4 sm:px-6 lg:px-10 py-8">{children}</main>
+      <main className={`mx-auto w-full ${width} flex-1 px-4 sm:px-6 lg:px-10 ${focused ? "space-y-5 py-5" : "space-y-6 py-8"}`}>{children}</main>
 
       <footer className="border-t bg-card">
-        <div className="mx-auto flex w-full max-w-[1680px] flex-col items-center justify-between gap-2 px-4 sm:px-6 lg:px-10 py-5 text-xs text-muted-foreground sm:flex-row">
+        <div className={`mx-auto flex w-full ${width} flex-col items-center justify-between gap-2 px-4 sm:px-6 lg:px-10 py-5 text-xs text-muted-foreground sm:flex-row`}>
           <span>Campus Reserve - Smart Facility Reservation System</span>
           <span>Book campus facilities online</span>
         </div>
