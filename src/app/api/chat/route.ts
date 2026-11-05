@@ -5,13 +5,13 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import type { BusySlot, Facility, FacilityRule, MemberType, Reservation, RecWeights } from "@/lib/types";
 import {
   fitsIn, freeWindows, Intent, matchFacilities, parseIntent,
-  PART_CENTRE, sanitiseIntent, withContext,
+  PART_CENTRE, sanitiseIntent, windowsFrom, withContext,
 } from "@/lib/chat-logic";
 import { recommendAcross, learnPeakHours, DEFAULT_WEIGHTS } from "@/lib/recommend";
 import { initBandit, isBanditState, rankWithBandit } from "@/lib/bandit";
-import { addDays, fmtRelativeDay, fmtTime, myAt, myDateKey } from "@/lib/time";
+import { addDays, fmtDay, fmtRelativeDay, fmtTime, myAt, myDateKey } from "@/lib/time";
 import {
-  FIXED, PART_MS, REASON_MS, fmtRelativeDayMs, fmtTimeMs, hasOtherScript, replyLanguage, type Lang,
+  FIXED, PART_MS, REASON_MS, fmtDayMs, fmtRelativeDayMs, fmtTimeMs, hasOtherScript, replyLanguage, type Lang,
 } from "@/lib/chat-lang";
 
 /**
@@ -103,7 +103,7 @@ async function understand(q: string, history: Msg[], facilities: Facility[], now
   const names = facilities.map((f) => `${f.name} (${f.category_name})`).join("; ");
   const convo = history.slice(-4).map((m) => `${m.role}: ${m.content}`).join("\n");
   const out = await llm(
-    `Extract a campus facility booking question as strict JSON, no prose. The question may be in any language (often English or Bahasa Melayu). Facilities cost nothing to book, so "free" or "available" means not booked (intent availability). Today is ${myDateKey(now)} (Malaysia).
+    `Extract a campus facility booking question as strict JSON, no prose. The question may be in any language (often English or Bahasa Melayu). Facilities cost nothing to book, so "free" or "available" means not booked (intent availability). Today is ${myDateKey(now)} (Malaysia). A day with no month, like "on 6th", means the next date with that day of the month.
 Known facilities: ${names}.
 Schema: {"intent":"availability"|"rules"|"list"|"mine"|"other","facility":string|null,"date":"YYYY-MM-DD"|null,"part_of_day":"morning"|"afternoon"|"evening"|null,"hour":0-23|null,"duration":minutes|null}
 "mine" means the user asks about their own bookings. Use earlier turns to resolve follow-ups like "what about tomorrow?". Use facility and category names exactly as listed.`,
@@ -117,8 +117,14 @@ Schema: {"intent":"availability"|"rules"|"list"|"mine"|"other","facility":string
       if (m) {
         const fromLlm = sanitiseIntent(JSON.parse(m[0]));
         // the local parser only reports facility words that really exist, so
-        // it wins on facility; the model wins on everything it understood
-        merged = { ...local, ...fromLlm, facility: local.facility ?? fromLlm.facility ?? null };
+        // it wins on facility; a date or time it read from the words wins too,
+        // since the model can get those wrong; the model fills in everything else
+        merged = {
+          ...local, ...fromLlm,
+          facility: local.facility ?? fromLlm.facility ?? null,
+          date: local.date ?? fromLlm.date ?? null,
+          hour: local.hour ?? fromLlm.hour ?? null,
+        };
       }
     } catch { /* keep the local parse */ }
   }
@@ -143,12 +149,20 @@ function rateLimited(id: string, limit = 20, windowMs = 60_000): boolean {
 function words(lang: Lang, now: Date) {
   const ms = lang === "ms";
   const time = (d: Date) => (ms ? fmtTimeMs(d) : fmtTime(d));
-  const day = (k: string) => (ms ? fmtRelativeDayMs(k, now) : fmtRelativeDay(k, now));
+  // always the real date too, so "tomorrow" can be checked against "the 6th"
+  const day = (k: string) => {
+    const relative = ms ? fmtRelativeDayMs(k, now) : fmtRelativeDay(k, now);
+    const full = ms ? fmtDayMs(k) : fmtDay(k);
+    return relative === full ? full : `${relative} (${full})`;
+  };
   const range = (a: Date, b: Date) => `${time(a)} ${ms ? "hingga" : "to"} ${time(b)}`;
   return {
     time, day, range,
     windows: (ws: { start: Date; end: Date }[]) => ws.map((w) => range(w.start, w.end)).join(", "),
     part: (p: "morning" | "afternoon" | "evening") => (ms ? ` pada waktu ${PART_MS[p]}` : ` in the ${p}`),
+    from: (at: Date) => (ms ? ` dari ${time(at)}` : ` from ${time(at)}`),
+    timePassed: (d: string, at: Date) => ms ? `${time(at)} ${d} sudah berlalu.` : `${time(at)} ${d} has already passed.`,
+    dayPassed: (d: string) => ms ? `${d} sudah berlalu.` : `${d} has already passed.`,
     reason: (r: string) => (ms ? REASON_MS[r] ?? r : r),
     listIntro: ms ? "Kemudahan yang boleh anda tempah:" : "Facilities you can book:",
     listGroup: (cat: string, venue: string, items: string) => ms ? `${cat} di ${venue}: ${items}.` : `${cat} at ${venue}: ${items}.`,
@@ -246,6 +260,11 @@ async function availabilityFacts(
 ): Promise<string> {
   const date = it.date ?? myDateKey(now);
   const when = w.day(date);
+  if (date < myDateKey(now)) return w.dayPassed(when);
+  const startAt = it.hour !== null ? myAt(date, `${it.hour}:${it.minute ?? 0}`) : null;
+  // an exact slot can be checked; "from 3pm" or a time already gone lists what is left
+  const passed = !!startAt && !it.from && startAt.getTime() <= now.getTime();
+  const exact = !!startAt && !it.from && !passed;
   const shown = matched.slice(0, 4);
   const ids = shown.map((f) => f.id);
 
@@ -262,6 +281,7 @@ async function availabilityFacts(
   const lines: string[] = [];
   let anyFree = false;
   let askedTimeTaken = false;
+  if (passed && startAt) lines.push(w.timePassed(when, startAt));
 
   for (const f of shown) {
     const rule = rules[f.id];
@@ -270,22 +290,29 @@ async function availabilityFacts(
     const label = `${f.name} (${f.category_name})`;
     const partLabel = it.part_of_day ? w.part(it.part_of_day) : "";
 
-    if (it.hour !== null) {
-      const dur = Math.min(rule.max_duration_mins, Math.max(rule.min_duration_mins, it.duration ?? 60));
-      const start = myAt(date, `${it.hour}:00`);
-      if (fitsIn(wins, start, dur)) {
+    if (startAt && it.from) {
+      const later = windowsFrom(wins, startAt, rule.min_duration_mins);
+      if (later.length > 0) {
         anyFree = true;
-        lines.push(w.freeAt(label, when, start, dur));
+        lines.push(w.freeList(label, when, w.from(startAt), w.windows(later)));
+      } else lines.push(w.noTime(label, when, w.from(startAt)));
+      continue;
+    }
+    if (exact && startAt) {
+      const dur = Math.min(rule.max_duration_mins, Math.max(rule.min_duration_mins, it.duration ?? 60));
+      if (fitsIn(wins, startAt, dur)) {
+        anyFree = true;
+        lines.push(w.freeAt(label, when, startAt, dur));
         continue;
       }
       askedTimeTaken = true;
-      lines.push(w.notFreeAt(label, when, start, dur));
+      lines.push(w.notFreeAt(label, when, startAt, dur));
     }
     if (wins.length === 0) {
       lines.push(w.noTime(label, when, partLabel));
     } else {
       anyFree = true;
-      if (it.hour === null) lines.push(w.freeList(label, when, partLabel, w.windows(wins)));
+      if (!exact) lines.push(w.freeList(label, when, partLabel, w.windows(wins)));
     }
   }
   if (matched.length > shown.length) lines.push(w.more(matched.length - shown.length));

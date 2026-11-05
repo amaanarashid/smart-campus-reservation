@@ -60,15 +60,20 @@ export function fmtTimeMs(d: Date): string {
   return `${hm} ${part}`;
 }
 
+/** "Jumaat 2 Okt". */
+export function fmtDayMs(dateKey: string): string {
+  const d = myAt(dateKey, "12:00");
+  const w = new Date(d.getTime() + 8 * 3_600_000);
+  return `${DAYS_MS[w.getUTCDay()]} ${w.getUTCDate()} ${MONTHS_MS[w.getUTCMonth()]}`;
+}
+
 /** "hari ini", "esok", "lusa", or "Jumaat 2 Okt". */
 export function fmtRelativeDayMs(dateKey: string, now: Date): string {
   const diff = daysBetween(myDateKey(now), dateKey);
   if (diff === 0) return "hari ini";
   if (diff === 1) return "esok";
   if (diff === 2) return "lusa";
-  const d = myAt(dateKey, "12:00");
-  const w = new Date(d.getTime() + 8 * 3_600_000);
-  return `${DAYS_MS[w.getUTCDay()]} ${w.getUTCDate()} ${MONTHS_MS[w.getUTCMonth()]}`;
+  return fmtDayMs(dateKey);
 }
 
 /** The recommender's English reasons, in Malay. */

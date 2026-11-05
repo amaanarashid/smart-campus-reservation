@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  parseIntent, parseDate, parseHour, parseDuration, withContext, matchFacilities,
-  freeWindows, fitsIn, sanitiseIntent, describeWindows,
+  parseIntent, parseDate, parseHour, parseDuration, parseMinute, parseRange, withContext, matchFacilities,
+  freeWindows, fitsIn, sanitiseIntent, describeWindows, windowsFrom,
 } from "./chat-logic";
 import { myAt } from "./time";
 import type { Facility } from "./types";
@@ -21,6 +21,95 @@ const FAC = [
 
 // Friday 2 October 2026, 09:00 in Malaysia
 const NOW = myAt("2026-10-02", "09:00");
+
+describe("chatbot - a date with no month", () => {
+  it("reads the reported question: discussion room on 6th from 3:00pm", () => {
+    const i = parseIntent("is discussion room available on 6th from 3:00pm", FAC, NOW);
+    expect(i.intent).toBe("availability");
+    expect(i.date).toBe("2026-10-06");
+    expect(i.hour).toBe(15);
+    expect(i.minute).toBe(0);
+    expect(i.from).toBe(true);
+    expect(matchFacilities(i.facility, FAC).map((x) => x.id)).toEqual(["d1", "d2"]);
+  });
+
+  it("uses this month, or next month once that day has gone", () => {
+    expect(parseDate("free on the 6th?", NOW)).toBe("2026-10-06");
+    expect(parseDate("free on 2nd?", NOW)).toBe("2026-10-02");   // today counts
+    expect(parseDate("free on 1st?", NOW)).toBe("2026-11-01");
+    expect(parseDate("free on 6?", NOW)).toBe("2026-10-06");
+    expect(parseDate("the 6th next month", NOW)).toBe("2026-11-06");
+    expect(parseDate("bilik kosong 6hb?", NOW)).toBe("2026-10-06");
+  });
+
+  it("skips a month too short for that day, and crosses the year", () => {
+    expect(parseDate("on 31st", myAt("2026-11-05", "09:00"))).toBe("2026-12-31");
+    expect(parseDate("on 1st", myAt("2026-12-20", "09:00"))).toBe("2027-01-01");
+  });
+
+  it("reads other ways of writing a date", () => {
+    expect(parseDate("on 6th of november", NOW)).toBe("2026-11-06");
+    expect(parseDate("on 6/11", NOW)).toBe("2026-11-06");
+    expect(parseDate("on 6/11/2027", NOW)).toBe("2027-11-06");
+    expect(parseDate("6hb november", NOW)).toBe("2026-11-06");
+  });
+
+  it("does not mistake other numbers for a date", () => {
+    expect(parseDate("is discussion 2 free", NOW)).toBeNull();
+    expect(parseDate("book 3 discussion rooms", NOW)).toBeNull();
+    expect(parseDate("is mark 5 free", NOW)).toBeNull();
+    expect(parseDate("on 6 people", NOW)).toBeNull();
+    expect(parseDate("on 3pm", NOW)).toBeNull();
+    expect(parseDate("on 3:30", NOW)).toBeNull();
+    expect(parseDate("on court 1", NOW)).toBeNull();
+    expect(parseDate("5th floor room", NOW)).toBeNull();
+  });
+});
+
+describe("chatbot - times", () => {
+  it("keeps the minutes", () => {
+    expect(parseHour("at 3:30pm")).toBe(15);
+    expect(parseMinute("at 3:30pm")).toBe(30);
+    expect(parseHour("at 3.30pm")).toBe(15);
+    expect(parseMinute("at 3.30pm")).toBe(30);
+    expect(parseMinute("pukul 3.30 petang")).toBe(30);
+    expect(parseMinute("at 3pm")).toBe(0);
+  });
+
+  it("reads 3:00 with no am or pm as the afternoon, and leaves 24-hour times alone", () => {
+    expect(parseHour("from 3:00")).toBe(15);
+    expect(parseHour("at 15:00")).toBe(15);
+    expect(parseHour("at 09:00")).toBe(9);
+  });
+
+  it("tells 'from 3pm' from 'at 3pm'", () => {
+    for (const q of ["free from 3pm?", "after 3", "3pm onwards", "kosong dari pukul 3 petang"]) {
+      const i = parseIntent(`court 1 ${q}`, FAC, NOW);
+      expect(i.from).toBe(true);
+      expect(i.hour).toBe(15);
+    }
+    expect(parseIntent("court 1 free at 3pm", FAC, NOW).from).toBe(false);
+    expect(parseIntent("court 1 free tomorrow", FAC, NOW).from).toBe(false);
+  });
+
+  it("treats a range as one slot of that length", () => {
+    expect(parseRange("from 3pm to 5pm")).toEqual({ hour: 15, minute: 0, duration: 120 });
+    expect(parseRange("3-5pm")).toEqual({ hour: 15, minute: 0, duration: 120 });
+    expect(parseRange("10:30 to 1pm")).toEqual({ hour: 10, minute: 30, duration: 150 });
+    expect(parseRange("3 hingga 5 petang")).toEqual({ hour: 15, minute: 0, duration: 120 });
+    expect(parseRange("free at 3pm")).toBeNull();
+    const i = parseIntent("is court 2 free from 3pm to 5pm", FAC, NOW);
+    expect([i.hour, i.duration, i.from]).toEqual([15, 120, false]);
+  });
+
+  it("lists the free time from a given moment, dropping what is too short", () => {
+    const at = (t: string) => myAt("2026-10-06", t);
+    const wins = [{ start: at("08:00"), end: at("10:00") }, { start: at("14:00"), end: at("15:20") }, { start: at("16:00"), end: at("22:00") }];
+    expect(describeWindows(windowsFrom(wins, at("15:00"), 30))).toBe("4:00 pm to 10:00 pm");
+    expect(describeWindows(windowsFrom(wins, at("14:30"), 30))).toBe("2:30 pm to 3:20 pm, 4:00 pm to 10:00 pm");
+    expect(windowsFrom(wins, at("22:00"), 30)).toEqual([]);
+  });
+});
 
 describe("chatbot - understanding the question", () => {
   it("recognises questions about the student's own bookings", () => {

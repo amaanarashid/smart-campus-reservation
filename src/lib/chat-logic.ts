@@ -20,12 +20,16 @@ export interface Intent {
   part_of_day: PartOfDay | null;
   /** Hour asked for, 0-23. */
   hour: number | null;
+  /** Minutes past the hour asked for ("3:30 pm" = 30). */
+  minute: number | null;
+  /** "from 3pm": any time after that, not one exact slot. */
+  from: boolean;
   /** Duration asked for, in minutes. */
   duration: number | null;
 }
 
 export const EMPTY_INTENT: Intent = {
-  intent: "other", facility: null, date: null, part_of_day: null, hour: null, duration: null,
+  intent: "other", facility: null, date: null, part_of_day: null, hour: null, minute: null, from: false, duration: null,
 };
 
 type FacLike = Pick<Facility, "id" | "name" | "category_id" | "category_name" | "type">;
@@ -123,8 +127,23 @@ const MONTH_PREFIX: [string, number][] = [
   ["jan", 0], ["feb", 1], ["mar", 2], ["mac", 2], ["apr", 3], ["may", 4], ["mei", 4], ["jun", 5],
   ["jul", 6], ["aug", 7], ["ogo", 7], ["sep", 8], ["oct", 9], ["okt", 9], ["nov", 10], ["dec", 11], ["dis", 11],
 ];
-const MONTH_RE = "(jan|feb|mar|mac|apr|may|mei|jun|jul|aug|ogo|sep|oct|okt|nov|dec|dis)[a-z]*";
+// whole words only: a loose prefix read "discussion 2" as 2 December
+const MONTH_RE = "(january|jan|february|feb|march|mar|mac|april|apr|may|mei|june|jun|july|jul|august|aug|ogos|september|sept|sep|october|oct|oktober|okt|november|nov|december|dec|disember|dis)";
 const monthIndex = (w: string) => MONTH_PREFIX.find(([p]) => w.startsWith(p))?.[1] ?? -1;
+
+/** The next date with this day of the month: "6th" is this month, or next month once it has gone. */
+function nextDayOfMonth(day: number, today: string, skipThisMonth: boolean): string | null {
+  if (day < 1 || day > 31) return null;
+  const y = Number(today.slice(0, 4));
+  const m = Number(today.slice(5, 7)) - 1;
+  const first = !skipThisMonth && day >= Number(today.slice(8, 10)) ? 0 : 1;
+  for (let i = first; i <= first + 12; i++) {
+    const d = new Date(Date.UTC(y, m + i, 1));
+    if (day <= new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate())
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+  return null;
+}
 
 export function parseDate(q: string, now: Date = new Date()): string | null {
   const t = q.toLowerCase();
@@ -136,16 +155,27 @@ export function parseDate(q: string, now: Date = new Date()): string | null {
   const iso = t.match(/\b(20\d\d)-(\d{2})-(\d{2})\b/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
 
-  // "2 oct", "2nd october", "oct 2"
-  // "2 oct", "2nd october", "oct 2", "2 oktober", "15 ogos"
-  const m1 = t.match(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH_RE}\\b`));
+  // "2 oct", "2nd of october", "oct 2", "2 oktober", "15 ogos"
+  const m1 = t.match(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th|\\s*hb)?(?:\\s+of)?\\s+${MONTH_RE}\\b`));
   const m2 = t.match(new RegExp(`\\b${MONTH_RE}\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`));
-  const dm = m1 ? { d: +m1[1], m: monthIndex(m1[2]) } : m2 ? { d: +m2[2], m: monthIndex(m2[1]) } : null;
+  // "6/11" is day then month, as written in Malaysia
+  const m3 = t.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(20\d\d))?\b/);
+  const dm = m1 ? { d: +m1[1], m: monthIndex(m1[2]) } : m2 ? { d: +m2[2], m: monthIndex(m2[1]) }
+    : m3 && +m3[2] >= 1 && +m3[2] <= 12 ? { d: +m3[1], m: +m3[2] - 1, y: m3[3] ? +m3[3] : undefined } : null;
   if (dm && dm.d >= 1 && dm.d <= 31) {
-    let year = Number(today.slice(0, 4));
+    let year = dm.y ?? Number(today.slice(0, 4));
     const key = (y: number) => `${y}-${String(dm.m + 1).padStart(2, "0")}-${String(dm.d).padStart(2, "0")}`;
-    if (key(year) < today) year += 1; // "2 jan" in December means next year
+    if (!dm.y && key(year) < today) year += 1; // "2 jan" in December means next year
     return key(year);
+  }
+
+  // a day with no month: "on 6th", "the 6th", "on 6", "6hb"
+  const bare = t.match(/\b(\d{1,2})(?:st|nd|rd|th)\b(?!\s*(?:floor|level|week|time))/)
+    ?? t.match(/\b(\d{1,2})\s*hb\b/)
+    ?? t.match(/\b(?:on|pada)\s+(?:the\s+)?(\d{1,2})\b(?![:.]\d|\s*(?:am|pm|pagi|tengah|petang|ptg|malam|people|pax|persons?|orang|hours?|hrs?|mins?|minutes?|minit|jam))/);
+  if (bare) {
+    const key = nextDayOfMonth(+bare[1], today, /\bnext month\b|\bbulan depan\b/.test(t));
+    if (key) return key;
   }
 
   let wd = WEEKDAYS.findIndex((d) => has(t, d) || has(t, d.slice(0, 3)));
@@ -161,7 +191,7 @@ export function parseDate(q: string, now: Date = new Date()): string | null {
 /** Requested hour, 0-23. Bare "at 3" is read as 3 pm, since campus opens at 8. */
 export function parseHour(q: string): number | null {
   const t = q.toLowerCase();
-  const ampm = t.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/);
+  const ampm = t.match(/\b(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)\b/);
   if (ampm) {
     let h = Number(ampm[1]) % 12;
     if (ampm[3] === "pm") h += 12;
@@ -176,8 +206,12 @@ export function parseHour(q: string): number | null {
     return h >= 0 && h <= 23 ? h : null;
   }
   const hhmm = t.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
-  if (hhmm) return Number(hhmm[1]);
-  const at = t.match(/\b(?:at|pukul|jam)\s+(\d{1,2})\b(?!\s*(?:hours?|hrs?|mins?|minutes?|minit|people|pax|persons?|orang))/);
+  if (hhmm) {
+    // "3:00" with no am/pm is afternoon, as with "at 3", since campus opens at 8
+    const n = Number(hhmm[1]);
+    return n >= 1 && n <= 7 ? n + 12 : n;
+  }
+  const at = t.match(/\b(?:at|from|after|pukul|jam|dari|daripada|selepas|lepas)\s+(?:pukul\s+|jam\s+)?(\d{1,2})\b(?!\s*(?:hours?|hrs?|mins?|minutes?|minit|people|pax|persons?|orang))/);
   if (at) {
     const n = Number(at[1]);
     if (n >= 1 && n <= 7) return n + 12;
@@ -185,6 +219,33 @@ export function parseHour(q: string): number | null {
   }
   if (/\bnoon\b|\btengah\s*hari\b/.test(t) && !/\d\s*tengah/.test(t)) return 12;
   return null;
+}
+
+/** Minutes past the hour: "3:30 pm" and "3.30 petang" give 30. */
+export function parseMinute(q: string): number {
+  const t = q.toLowerCase();
+  const m = t.match(/\b\d{1,2}[:.]([0-5]\d)\s*(?:am|pm|pagi|tengah\s*hari|petang|ptg|malam)\b/) ?? t.match(/\b\d{1,2}:([0-5]\d)\b/);
+  return m ? Number(m[1]) : 0;
+}
+
+/** "from 3pm", "after 3", "3pm onwards", "dari pukul 3": any time after, not one exact slot. */
+export function parseFrom(q: string): boolean {
+  const t = q.toLowerCase();
+  return /\b(?:from|after|dari|daripada|selepas|lepas)\s+(?:pukul\s+|jam\s+)?\d/.test(t) || /\d\s*(?:am|pm)?\s+onwards?\b/.test(t);
+}
+
+/** A time range: "from 3pm to 5pm", "3-5pm", "10:30 to 1pm", "3 hingga 5 petang". */
+export function parseRange(q: string): { hour: number; minute: number; duration: number } | null {
+  const m = q.toLowerCase().match(/\b(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm|pagi|petang|ptg|malam)?\s*(?:to|until|till|-|–|hingga|sampai)\s*(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm|pagi|petang|ptg|malam)\b/);
+  if (!m) return null;
+  const isPm = (w: string) => w !== "am" && w !== "pagi";
+  const mins = (h: string, min: string | undefined, pm: boolean) => (Number(h) % 12 + (pm ? 12 : 0)) * 60 + Number(min ?? 0);
+  const end = mins(m[4], m[5], isPm(m[6]));
+  // no am/pm on the start: same as the end, unless that would put it after the end ("10 to 1pm")
+  let start = mins(m[1], m[2], isPm(m[3] ?? m[6]));
+  if (!m[3] && start >= end) start = mins(m[1], m[2], false);
+  if (start >= end) return null;
+  return { hour: Math.floor(start / 60), minute: start % 60, duration: end - start };
 }
 
 /** Requested duration in minutes. */
@@ -251,13 +312,17 @@ export function parseIntent(q: string, facilities: FacLike[], now: Date = new Da
     /\b(tersedia|tempah|penuh|sibuk|bila)\b/.test(t) || /\bada\s+(tak|ke|kah)\b/.test(t) || /\bboleh\b.*\btempah\b/.test(t)
   ) intent = "availability";
 
+  const range = parseRange(q);
+  const hour = range ? range.hour : parseHour(q);
   return {
     intent,
     facility: facilityTerm(q, facilities),
     date: parseDate(q, now),
     part_of_day: parsePart(q),
-    hour: parseHour(q),
-    duration: parseDuration(q),
+    hour,
+    minute: hour === null ? null : range ? range.minute : parseMinute(q),
+    from: hour !== null && !range && parseFrom(q),
+    duration: range ? range.duration : parseDuration(q),
   };
 }
 
@@ -371,6 +436,14 @@ export function freeWindows(
 export function fitsIn(windows: Window[], start: Date, durationMins: number): boolean {
   const end = start.getTime() + durationMins * 60_000;
   return windows.some((w) => w.start.getTime() <= start.getTime() && end <= w.end.getTime());
+}
+
+/** The free time from `start` onwards, leaving out anything too short to book. */
+export function windowsFrom(windows: Window[], start: Date, minMins: number): Window[] {
+  return windows
+    .filter((w) => w.end.getTime() > start.getTime())
+    .map((w) => ({ start: new Date(Math.max(w.start.getTime(), start.getTime())), end: w.end }))
+    .filter((w) => w.end.getTime() - w.start.getTime() >= minMins * 60_000);
 }
 
 export function describeWindows(windows: Window[]): string {

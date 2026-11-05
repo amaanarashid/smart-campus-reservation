@@ -41,7 +41,7 @@ npm install      # needed after pulls (three, mqtt, vitest)
 npm run dev      # localhost:3000
 npm run build
 npm run lint
-npm test         # vitest — 182 cases, all with explicit +08:00 times
+npm test         # vitest — 192 cases, all with explicit +08:00 times
 npx tsx scripts/simulate-recommender.ts && python scripts/plot-simulation.py   # recommender simulation → docs/simulation/
 npx tsx scripts/eval/recommender-latency.ts && npx tsx scripts/eval/chatbot-eval.ts   # objective 5 → docs/evaluation/
 cd scripts/eval && npm install && node concurrency.mjs   # DS1 concurrent-booking stress test (local Postgres 17)
