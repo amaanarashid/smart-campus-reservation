@@ -34,6 +34,8 @@ export default function Chatbot() {
           "Content-Type": "application/json",
           ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
         },
+        // never leave the student waiting on the dots
+        signal: AbortSignal.timeout(20_000),
         body: JSON.stringify({ messages: next.slice(-6) }),
       });
       const data = await res.json();

@@ -2,6 +2,9 @@
 
 | File | What it is |
 |---|---|
+| `USER-GUIDE.md` | How to use the app as a student, facility manager or administrator |
+| `evaluation/` | Objective 5 results (`README.md`), user study protocol and kit, SUS response sheet |
+| `TESTING-GUIDE.txt` | Step-by-step manual test plan, parts 1-12 |
 | `PHASE1-PLAN.md` | Phase 1 execution plan: draft aim and objectives, week-by-week schedule, marking scheme, admin checklist |
 | `PROJECT-LOG.txt` | Full project snapshot — report status, cited papers, tech stack, every feature, migrations, what remains |
 | `CHANGELOG.txt` | Dated record of all work, newest first |

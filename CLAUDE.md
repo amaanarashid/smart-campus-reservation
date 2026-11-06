@@ -41,7 +41,7 @@ npm install      # needed after pulls (three, mqtt, vitest)
 npm run dev      # localhost:3000
 npm run build
 npm run lint
-npm test         # vitest — 192 cases, all with explicit +08:00 times
+npm test         # vitest — 195 cases, all with explicit +08:00 times
 npx tsx scripts/simulate-recommender.ts && python scripts/plot-simulation.py   # recommender simulation → docs/simulation/
 npx tsx scripts/eval/recommender-latency.ts && npx tsx scripts/eval/chatbot-eval.ts   # objective 5 → docs/evaluation/
 cd scripts/eval && npm install && node concurrency.mjs   # DS1 concurrent-booking stress test (local Postgres 17)
@@ -61,9 +61,9 @@ src/app/
   api/chat                   grounded chatbot (English + Bahasa Melayu, replies in the user's language)
   api/bookings/{code,extend} student door code / +30 min
   api/noshow/retrain         admin-only: retrain the no-show model (service role)
-  api/room/{status,unlock,event,extend,command,ack}   smart-room device + remote control
+  api/room/{pair,status,unlock,event,extend,command,ack}   smart-room device + remote control
 src/components/
-  app-shell, campus-icon, notification-bell, chatbot, facility-iso (2.5D art), popular-times, admin-analytics, admin-facilities (venues → facilities → detail), facility-wizards (New facility / Add rooms, step-by-step), facility-form (shared rule fields), venue-art (2D venue drawings), smart-room-connect (connect room / re-key)
+  app-shell, campus-icon, notification-bell, chatbot, facility-iso (2.5D art), popular-times, admin-analytics, admin-facilities (venues → facilities → detail), facility-wizards (New facility / Add rooms, step-by-step), facility-form (shared rule fields), venue-art (2D venue drawings), smart-room-connect (connect a room by pairing code / replace device)
   facility-detail (room page: 3D twin, live tiles, countdown, today, log, remote control, energy chart)
   room-twin (three.js wrapper, next/dynamic), room-panel (manager smart-room section), room-controls (MQTT panel)
   report-problem-dialog, room-reports (feedback inbox)
@@ -95,7 +95,7 @@ presentation/         FYP-Progress-Presentation.pptx, DEMO-STEPS.txt, midpoint d
 ## Database
 
 Run in the Supabase SQL editor, in this order (all re-runnable):
-`setup-all.sql` → `upgrade-recommender.sql` → `fix-role-escalation.sql` → `upgrade-auto-release.sql` (check-in grace, `release_no_shows()` pg_cron) → `upgrade-room-access.sql` (`room_devices`, `room_events`, `register_room_device()`) → `upgrade-room-end.sql` (`extend_booking()`, `remind_booking_end()` pg_cron, `room_devices_visible`) → `upgrade-room-reports.sql` (+ `fix-room-reports-insert.sql`) → `upgrade-room-commands.sql` → `upgrade-realtime.sql` → `upgrade-room-connect.sql` (`room_devices.connection` wokwi/mqtt) → `upgrade-private-bookings.sql` (private reservations/profiles/lost & found, `reservation_busy` view, `is_staff()`) → `upgrade-booking-rules.sql` (`enforce_booking_rules()` trigger) → `upgrade-access-limits.sql` (member types, who can book, fair-use limits) → `upgrade-noshow.sql` (`noshow_model`, `booking_risk`, `score_upcoming_bookings()` pg_cron every 10 min).
+`setup-all.sql` → `upgrade-recommender.sql` → `fix-role-escalation.sql` → `upgrade-auto-release.sql` (check-in grace, `release_no_shows()` pg_cron) → `upgrade-room-access.sql` (`room_devices`, `room_events`, `register_room_device()`) → `upgrade-room-end.sql` (`extend_booking()`, `remind_booking_end()` pg_cron, `room_devices_visible`) → `upgrade-room-reports.sql` (+ `fix-room-reports-insert.sql`) → `upgrade-room-commands.sql` → `upgrade-realtime.sql` → `upgrade-room-connect.sql` (`room_devices.connection` wokwi/mqtt) → `upgrade-private-bookings.sql` (private reservations/profiles/lost & found, `reservation_busy` view, `is_staff()`) → `upgrade-booking-rules.sql` (`enforce_booking_rules()` trigger) → `upgrade-access-limits.sql` (member types, who can book, fair-use limits) → `upgrade-noshow.sql` (`noshow_model`, `booking_risk`, `score_upcoming_bookings()` pg_cron every 10 min) → `upgrade-room-pairing.sql` (`room_pairings`, `room_pair_poll()`, `claim_room_pairing()`).
 
 - Privacy (objective 4): `reservations` readable only by the booker, admins and that room's managers; everyone else (students, recommender, popular times, chatbot) reads `reservation_busy` (id, facility_id, start/end, status — no user, purpose or party size) via `busyQuery()` in `src/lib/busy.ts` (falls back to the table until the migration runs). `profiles` and `lost_and_found` readable by own row / staff only. 23 DB checks in `outputs/pgtest-private.mjs`.
 - Booking rules (objective 2): BEFORE INSERT/UPDATE trigger `enforce_booking_rules()` on `reservations` checks every direct request from role `authenticated`: insert = active room, future start, min/max length, advance window, capacity, opening hours same day (MYT); status forced from auto_approve; attendance fields cleared. Update by the booker = only cancel (before start, with notice; reason 'user') or check in (15 min before → end; server time); anything else refused. Admins + the room's managers unrestricted; admins may insert outside rules. Trusted code (SECURITY DEFINER functions, service role, cron, SQL editor) is skipped because `current_user` ≠ authenticated — keep new trusted functions SECURITY DEFINER. Messages match the student page wording. 23 DB checks in `outputs/pgtest-rules.mjs`.
@@ -114,7 +114,8 @@ Run in the Supabase SQL editor, in this order (all re-runnable):
 - End of booking: pg_cron reminder at 10 min, OLED countdown, ring blue = can extend / red = can't, extend via keypad (A + code + #) or app, "time's up" + AC off, overstay → managers notified once. No-shows auto-released; empty checked-in room released early.
 - ESP32 polls `api/room/status` every 5 s over one kept-alive HTTPS connection; reports events to `api/room/event`.
 - Remote control: `POST api/room/command` (admin or that room's manager) saves to `room_commands`, signs (HMAC-SHA256 keyed by the device `key_hash`) and publishes over MQTT TLS to `campus/rooms/<device>/cmd` (broker: **EMQX Cloud Serverless**, env `MQTT_URL`/`MQTT_USERNAME`/`MQTT_PASSWORD`); device verifies signature, 60 s expiry (NTP) and replay, acts, confirms via `api/room/ack`. HTTP fallback through the status poll. Commands: unlock, lights/AC on/off/auto for N min, door message, lockdown.
-- Admin → Smart room lists only rooms with an active device. "Connect a room" (`components/smart-room-connect.tsx`) picks an existing room + Simulated (Wokwi, stored `wokwi`) or Physical (ESP32, stored `mqtt`) — both use HTTPS + MQTT — generates the key in the browser (only its SHA-256 is saved via the admin RLS policy) and shows ID/key once; per room: New device key, Disconnect (`active=false`, history kept). `register_room_device()` still works from SQL.
+- Connecting a room = pairing code (`upgrade-room-pairing.sql`, `api/room/pair`, `lib/room-pairing.ts`). One firmware for every room: an unconnected door makes its own key (real board: random, in flash; simulated build: `.device-secret`, git-ignored, made by `device_secret.py`), polls `api/room/pair` and shows a 6-digit code. Admin → Smart room → "Connect a room" (`components/smart-room-connect.tsx`) picks the room + types the code → `claim_room_pairing()` (admins only) stores the key's SHA-256. The door then learns its device id and MQTT login from the server, so neither is in the sketch. The door reports its own type (stored `wokwi` or `mqtt`). PlatformIO envs: `esp32` (simulated, what wokwi.toml runs), `board` (real, `-D REAL_BOARD`, Wi-Fi via the `CampusRoom-Setup` portal). Per room: Replace device (same row, history kept), Disconnect (`active=false`, door shows a code again). `register_room_device()` still works from SQL. 34 DB checks in `scripts/eval/pairing-db.mjs`.
+- Admin → Smart room lists only rooms with an active device.
 - 3D twin (Admin → Smart room → room): driven by `room_events` via Supabase Realtime (10 s backup poll); rooms without a device are inferred from bookings and labelled so.
 - Vercel env: `SUPABASE_SERVICE_ROLE_KEY`, `ROOM_CODE_SECRET` (16+ chars, same value locally), `MQTT_*`, `AI_PROVIDER`/`AI_API_KEY`.
 
@@ -126,7 +127,7 @@ Run in the Supabase SQL editor, in this order (all re-runnable):
 
 **Built, needs a live run by the user:** latest firmware (countdown/extend/overstay, NeoPixel ring, MQTT, keep-alive), 3D twin live sync, energy chart with real data, forgot-password email (add `<site>/reset-password` to Supabase Auth → URL Configuration → Redirect URLs).
 
-**Remaining:** run all migrations; re-key the demo device; remove seed data; user study + SUS; Phase 2 report. Run `upgrade-noshow.sql`, then Retrain once there are 200+ labelled bookings / 20+ no-shows (live accuracy pending). Optional: batch allocation, per-device MQTT logins, email notifications.
+**Remaining:** run all migrations; pair the demo door with the new firmware (Replace device) and change the MQTT password, because the old one and the old device key are in git history; remove seed data; user study + SUS; Phase 2 report. Run `upgrade-noshow.sql`, then Retrain once there are 200+ labelled bookings / 20+ no-shows (live accuracy pending). Optional: batch allocation, per-device MQTT logins, email notifications.
 
 ## Conventions
 

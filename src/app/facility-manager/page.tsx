@@ -571,7 +571,7 @@ export default function ManagerDashboard() {
                               <div className={`flex w-[4.5rem] shrink-0 flex-col items-center rounded-lg px-1 py-1.5 text-center
                                 ${running ? "bg-primary text-primary-foreground" : "bg-accent text-accent-foreground"}`}>
                                 <span className="text-sm font-semibold leading-tight">{fmtTime(start)}</span>
-                                <span className="text-[10px] opacity-80">{fmtDur(mins(r))}</span>
+                                <span className="text-[10px]">{fmtDur(mins(r))}</span>
                               </div>
                               <div className="min-w-[9rem] flex-1">
                                 <p className="flex items-center gap-2 font-medium">
@@ -656,7 +656,7 @@ export default function ManagerDashboard() {
                     <TableCell className="font-medium">{e.name}</TableCell>
                     <TableCell>{typeLabel(e.facility_type)}</TableCell>
                     <TableCell>
-                      <Input type="number" min={0} defaultValue={e.total_qty} className="w-20"
+                      <Input type="number" min={0} defaultValue={e.total_qty} className="w-20" aria-label={`Total ${e.name}`}
                         onKeyDown={(ev) => ev.key === "Enter" &&
                           saveQty(e, Number((ev.target as HTMLInputElement).value))} />
                     </TableCell>
@@ -669,14 +669,14 @@ export default function ManagerDashboard() {
             </Table>
             <div className="grid gap-2 sm:grid-cols-4">
               <Select value={newEquip.type} onValueChange={(v) => setNewEquip({ ...newEquip, type: v })}>
-                <SelectTrigger><SelectValue placeholder="Category" /></SelectTrigger>
+                <SelectTrigger aria-label="Category"><SelectValue placeholder="Category" /></SelectTrigger>
                 <SelectContent>
                   {myTypes.map((t) => <SelectItem key={t} value={t}>{typeLabel(t)}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Input placeholder="Item name" value={newEquip.name}
                 onChange={(e) => setNewEquip({ ...newEquip, name: e.target.value })} />
-              <Input type="number" min={1} value={newEquip.qty}
+              <Input type="number" min={1} aria-label="Quantity" value={newEquip.qty}
                 onChange={(e) => setNewEquip({ ...newEquip, qty: Number(e.target.value) })} />
               <Button onClick={addEquipment}>Add item</Button>
             </div>
@@ -697,7 +697,7 @@ export default function ManagerDashboard() {
             {/* log form */}
             <div className="grid gap-2 rounded-xl border bg-muted/30 p-3 sm:grid-cols-3">
               <Select value={newLf.facility_id} onValueChange={(v) => setNewLf({ ...newLf, facility_id: v })}>
-                <SelectTrigger><SelectValue placeholder="Found at facility" /></SelectTrigger>
+                <SelectTrigger aria-label="Found at facility"><SelectValue placeholder="Found at facility" /></SelectTrigger>
                 <SelectContent>
                   {myFacilities.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
                 </SelectContent>
@@ -705,7 +705,7 @@ export default function ManagerDashboard() {
               <Input placeholder="Item (e.g. black wallet)" value={newLf.item_name}
                 onChange={(e) => setNewLf({ ...newLf, item_name: e.target.value })} />
               <Select value={newLf.category} onValueChange={(v) => setNewLf({ ...newLf, category: v as LostFoundCategory })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger aria-label="Item category"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {(Object.keys(LOST_FOUND_CATEGORIES) as LostFoundCategory[]).map((c) => (
                     <SelectItem key={c} value={c}>{LOST_FOUND_CATEGORIES[c]}</SelectItem>
@@ -714,7 +714,7 @@ export default function ManagerDashboard() {
               </Select>
               <Input placeholder="Where exactly (e.g. under table 3)" value={newLf.found_location}
                 onChange={(e) => setNewLf({ ...newLf, found_location: e.target.value })} />
-              <Input type="date" value={newLf.found_date}
+              <Input type="date" aria-label="Date found" value={newLf.found_date}
                 onChange={(e) => setNewLf({ ...newLf, found_date: e.target.value })} />
               <Input placeholder="Handed in by (optional)" value={newLf.reporter_name}
                 onChange={(e) => setNewLf({ ...newLf, reporter_name: e.target.value })} />

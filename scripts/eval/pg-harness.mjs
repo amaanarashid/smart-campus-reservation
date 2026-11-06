@@ -16,7 +16,7 @@ export const MIGRATIONS = [
   "setup-all.sql", "upgrade-recommender.sql", "fix-role-escalation.sql", "upgrade-auto-release.sql",
   "upgrade-room-access.sql", "upgrade-room-end.sql", "upgrade-room-reports.sql", "fix-room-reports-insert.sql",
   "upgrade-room-commands.sql", "upgrade-realtime.sql", "upgrade-room-connect.sql", "upgrade-private-bookings.sql",
-  "upgrade-booking-rules.sql", "upgrade-access-limits.sql", "upgrade-noshow.sql",
+  "upgrade-booking-rules.sql", "upgrade-access-limits.sql", "upgrade-noshow.sql", "upgrade-room-pairing.sql",
 ];
 export const PORT = 5499;
 export const CONN = { host: "localhost", port: PORT, user: "postgres", password: "pw", database: "postgres" };

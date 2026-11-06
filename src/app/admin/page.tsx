@@ -71,8 +71,9 @@ export default function AdminDashboard() {
   const [managers, setManagers] = useState<Profile[]>([]);
   const [fmRows, setFmRows] = useState<FmRow[]>([]);
   const [equipment, setEquipment] = useState<Equipment[]>([]);
-  const [unassignedPending, setUnassignedPending] = useState<PendingRow[]>([]);
-  const [stats, setStats] = useState({ users: 0, bookings: 0, pending: 0 });
+  const [pendingRequests, setPendingRequests] = useState<PendingRow[]>([]);
+  const [pendingFailed, setPendingFailed] = useState(false);          // last load of the requests failed
+  const [stats, setStats] = useState({ users: 0, bookings: 0 });
   const [categories, setCategories] = useState<FacilityCategory[]>([]);
   const [newEquip, setNewEquip] = useState({ type: "", name: "", qty: 1 });
   const [activity, setActivity] = useState<ActivityLog[]>([]);
@@ -91,24 +92,18 @@ export default function AdminDashboard() {
   const [facSearch, setFacSearch] = useState("");
   const [devices, setDevices] = useState<SmartDevice[]>([]);       // smart-room devices (Wokwi / MQTT)
   const [connectOpen, setConnectOpen] = useState(false);
-  const [rekey, setRekey] = useState<SmartDevice | null>(null);
+  const [replacing, setReplacing] = useState<SmartDevice | null>(null);
 
   // the live parts: approvals, stats, today's bookings, devices, feedback, log.
   // Everything runs at once - one round trip of waiting instead of ten in a row.
-  const loadLive = useCallback(async (facs: Facility[], fms: FmRow[]) => {
-    // pending bookings for facilities without any assigned manager
-    const assigned = new Set(fms.map((x) => x.facility_id));
-    const unassignedIds = facs.filter((x) => !assigned.has(x.id)).map((x) => x.id);
+  const loadLive = useCallback(async () => {
     // today's bookings across campus, for the live venue overview
     const today = myDateKey();
-    const [up, { count: users }, { count: bookings }, { count: pending }, { data: td }, viaView, { count: fb }, { data: log }] = await Promise.all([
-      unassignedIds.length > 0
-        ? supabase.from("reservations").select("*, profiles(full_name)")
-            .eq("status", "pending").in("facility_id", unassignedIds).order("start_time")
-        : Promise.resolve({ data: [] }),
+    const [up, { count: users }, { count: bookings }, { data: td }, viaView, { count: fb }, { data: log }] = await Promise.all([
+      // every pending request on campus: the Approvals tab and the overview tile share this list
+      supabase.from("reservations").select("*, profiles(full_name)").eq("status", "pending").order("start_time"),
       supabase.from("profiles").select("id", { count: "exact", head: true }),
       supabase.from("reservations").select("id", { count: "exact", head: true }),
-      supabase.from("reservations").select("id", { count: "exact", head: true }).eq("status", "pending"),
       supabase.from("reservations").select("*")
         .in("status", ["approved", "pending"])
         .gte("start_time", myAt(today, "00:00").toISOString())
@@ -119,8 +114,10 @@ export default function AdminDashboard() {
       supabase.from("room_reports").select("id", { count: "exact", head: true }).in("status", ["open", "in_progress"]),
       supabase.from("activity_log").select("*").order("at", { ascending: false }).limit(300),
     ]);
-    setUnassignedPending((up.data as PendingRow[]) ?? []);
-    setStats({ users: users ?? 0, bookings: bookings ?? 0, pending: pending ?? 0 });
+    // a failed refresh keeps the last good list instead of pretending nothing is waiting
+    setPendingFailed(!!up.error);
+    if (!up.error) setPendingRequests((up.data as PendingRow[]) ?? []);
+    setStats({ users: users ?? 0, bookings: bookings ?? 0 });
     setTodayRes((td as Reservation[]) ?? []);
     const devs = viaView.error ? (await supabase.from("room_devices").select("*")).data : viaView.data;
     setDevices(((devs as SmartDevice[] | null) ?? []));
@@ -150,7 +147,7 @@ export default function AdminDashboard() {
     const fms = (fm as FmRow[]) ?? [];
     setFmRows(fms);
     setEquipment((eq as Equipment[]) ?? []);
-    await loadLive(facs, fms);
+    await loadLive();
   }, [loadLive]);
 
   useEffect(() => {
@@ -168,7 +165,7 @@ export default function AdminDashboard() {
 
   // stats, approvals, feedback count and the activity log stay current
   // (setup data only reloads after an edit, not on every tick)
-  useAutoRefresh(() => loadLive(facilities, fmRows), 30_000, !loading);
+  useAutoRefresh(loadLive, 30_000, !loading);
 
   async function changeRole(u: Profile, role: string) {
     if (u.id === profile?.id && role !== "admin") {
@@ -190,13 +187,16 @@ export default function AdminDashboard() {
     await load();
   }
 
-  // ---------- unassigned approvals ----------
+  // ---------- approvals ----------
   async function decide(r: Reservation, status: "approved" | "rejected") {
     if (acting) return;
     setActing(r.id);
-    const { error } = await supabase.from("reservations").update({ status }).eq("id", r.id);
+    // only while still pending: the room's manager may have just decided it
+    const { data, error } = await supabase.from("reservations").update({ status })
+      .eq("id", r.id).eq("status", "pending").select("id");
     if (error) { toast.error(error.message); setActing(null); return; }
-    toast.success(`Request ${status}`);
+    if (data.length === 0) toast.info("This request was already decided");
+    else toast.success(`Request ${status}`);
     await load();
     setActing(null);
   }
@@ -243,6 +243,13 @@ export default function AdminDashboard() {
     deleted: "destructive", disposed: "destructive", unassigned: "destructive",
   };
 
+  // ---------- approvals: rooms nobody else will decide come first ----------
+  const managedRooms = new Set(fmRows.map((x) => x.facility_id));
+  const approvalGroups = [
+    { title: "No manager - waiting on you", rows: pendingRequests.filter((r) => !managedRooms.has(r.facility_id)) },
+    { title: "Rooms with a manager - you can step in", rows: pendingRequests.filter((r) => managedRooms.has(r.facility_id)) },
+  ].filter((g) => g.rows.length > 0);
+
   // ---------- live overview ----------
   const now = nowMs;
   const inUse = new Set(todayRes.filter((r) =>
@@ -269,7 +276,7 @@ export default function AdminDashboard() {
       (!q || f.name.toLowerCase().includes(q) || f.venue.toLowerCase().includes(q));
   });
   async function disconnect(d: SmartDevice) {
-    if (!window.confirm(`Disconnect ${d.label}? Its key stops working. Its history is kept, and you can connect it again later.`)) return;
+    if (!window.confirm(`Disconnect ${d.label}? The device stops working and shows a pairing code again. The room's history is kept.`)) return;
     const { error } = await supabase.from("room_devices").update({ active: false }).eq("id", d.id);
     if (error) { toast.error(error.message); return; }
     toast.success(`${d.label} disconnected`);
@@ -303,7 +310,7 @@ export default function AdminDashboard() {
               ["rooms", "Smart room", Cpu, 0],
               ["users", "Users", Users, allUsers.length],
               ["facilities", "Facilities", Building2, facilities.length],
-              ["approvals", "Approvals", ClipboardCheck, unassignedPending.length],
+              ["approvals", "Approvals", ClipboardCheck, pendingRequests.length],
               ["feedback", "Feedback", MessageSquareWarning, feedbackCount],
               ["equipment", "Equipment", Package, 0],
               ["records", "Records", ScrollText, 0],
@@ -329,7 +336,7 @@ export default function AdminDashboard() {
               {([
                 ["Registered users", stats.users, Users, "users"],
                 ["Total bookings", stats.bookings, CalendarRange, "analytics"],
-                ["Pending approval", stats.pending, Clock, "approvals"],
+                ["Pending approval", pendingRequests.length, Clock, "approvals"],
                 ["Rooms in use now", `${inUse.size} / ${facilities.length}`, Building2, "facilities"],
               ] as const).map(([label, n, Icon, go], i) => (
                 <button key={label} onClick={() => setTab(go)}
@@ -458,8 +465,8 @@ export default function AdminDashboard() {
 
           {tab === "rooms" && !openFacility && (
             <div key="rooms" className="space-y-5">
-              <SmartRoomConnect open={connectOpen || !!rekey} rekey={rekey} facilities={facilities} devices={devices}
-                onOpenChange={(v) => { if (!v) { setConnectOpen(false); setRekey(null); } }} onDone={load} />
+              <SmartRoomConnect open={connectOpen || !!replacing} replacing={replacing} facilities={facilities} devices={devices}
+                onOpenChange={(v) => { if (!v) { setConnectOpen(false); setReplacing(null); } }} onDone={load} />
               <div className="animate-reveal flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <h2 className="font-display flex items-center gap-2 text-xl font-semibold">
@@ -504,7 +511,7 @@ export default function AdminDashboard() {
                     <Cpu className="h-10 w-10 text-muted-foreground/40" />
                     <p className="font-display text-lg font-semibold">No smart rooms yet</p>
                     <p className="max-w-md text-sm text-muted-foreground">
-                      Connect an existing room to a Wokwi simulation or a real MQTT device. You get a device ID and key to paste into it.
+                      Turn on a door device, simulated or real. It shows a code on its screen, and you type that code here to connect a room.
                     </p>
                     <Button className="mt-2 gap-2" onClick={() => setConnectOpen(true)} disabled={facilities.length === 0}>
                       <Plus className="h-4 w-4" /> Connect a room
@@ -525,7 +532,8 @@ export default function AdminDashboard() {
                     return (
                       <Card key={f.id} style={stagger(fi)}
                         className={`animate-reveal stagger group flex flex-col gap-0 overflow-hidden py-0 transition-all hover:-translate-y-0.5 hover:shadow-md ${off ? "opacity-75" : ""}`}>
-                        <button onClick={openRoom} className="relative h-32 bg-muted/40 text-left" aria-label={`Open ${f.name}`}>
+                        <button onClick={openRoom} className="relative h-32 bg-muted/40 text-left">
+                          <span className="sr-only">Open {f.name}: </span>
                           <div className={off ? "h-full grayscale" : "h-full"}><FacilityIso type={f.type} busy={busy} /></div>
                           <span className="absolute left-2 top-2 rounded-full bg-card/90 px-2 py-0.5 text-[11px] font-medium shadow">
                             {off ? f.status : busy ? "In use" : "Free now"}
@@ -556,7 +564,7 @@ export default function AdminDashboard() {
                                 <Button variant="outline" size="icon" aria-label={`Device actions for ${f.name}`}><MoreHorizontal className="h-4 w-4" /></Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => setRekey(d)}><KeyRound className="h-4 w-4" /> New device key</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setReplacing(d)}><KeyRound className="h-4 w-4" /> Replace device</DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => disconnect(d)}>
                                   <Unplug className="h-4 w-4" /> Disconnect
@@ -639,7 +647,7 @@ export default function AdminDashboard() {
                         </TableCell>
                         <TableCell>
                           <Select value={u.role} onValueChange={(v) => changeRole(u, v)}>
-                            <SelectTrigger className="h-8 w-44"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="h-8 w-44" aria-label={`Role of ${u.full_name}`}><SelectValue /></SelectTrigger>
                             <SelectContent>
                               {(Object.keys(ROLE_META) as (keyof typeof ROLE_META)[]).map((k) => {
                                 const { label, Icon } = ROLE_META[k];
@@ -679,69 +687,78 @@ export default function AdminDashboard() {
             <CardHeader>
               <CardTitle className="font-display flex items-center gap-2">
                 <ClipboardCheck className="h-5 w-5 text-primary" />
-                Approvals - facilities without a manager
-                {unassignedPending.length > 0 && (
-                  <Badge variant="secondary" className="ml-1">{unassignedPending.length}</Badge>
+                Approvals
+                {pendingRequests.length > 0 && (
+                  <Badge variant="secondary" className="ml-1">{pendingRequests.length}</Badge>
                 )}
               </CardTitle>
-              <CardDescription>{unassignedPending.length} request(s) waiting on you</CardDescription>
+              <CardDescription>{pendingRequests.length} request(s) waiting for a decision</CardDescription>
             </CardHeader>
-            <CardContent>
-              {unassignedPending.length === 0 ? (
+            <CardContent className="space-y-6">
+              {pendingFailed && (
+                <p className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+                  Couldn&apos;t load the latest requests. Trying again shortly.
+                </p>
+              )}
+              {pendingRequests.length === 0 && !pendingFailed && (
                 <div className="flex flex-col items-center gap-2 py-12 text-center">
                   <ClipboardCheck className="h-9 w-9 text-primary/60" />
                   <p className="font-medium">All caught up</p>
                   <p className="text-sm text-muted-foreground">
-                    Requests for rooms without a manager land here.
+                    No booking requests are waiting for approval.
                   </p>
                 </div>
-              ) : (
-                <div className="grid gap-3 2xl:grid-cols-2">
-                  {unassignedPending.map((r, i) => {
-                    const f = facilities.find((x) => x.id === r.facility_id);
-                    const start = new Date(r.start_time);
-                    const over = f ? r.participants > f.capacity : false;
-                    return (
-                      <div key={r.id} style={stagger(i)}
-                        className="animate-reveal stagger flex gap-3 rounded-xl border bg-card p-3 transition-all hover:shadow-sm">
-                        <div className="hidden h-20 w-24 shrink-0 overflow-hidden rounded-lg bg-muted/40 sm:block">
-                          {f && <FacilityIso type={f.type} busy={false} />}
-                        </div>
-                        <div className="min-w-0 flex-1 space-y-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-[11px] font-semibold text-accent-foreground">
-                              {initials(r.profiles?.full_name)}
-                            </span>
-                            <span className="font-medium">{r.profiles?.full_name ?? "Student"}</span>
-                            <span className="text-xs text-muted-foreground">wants {fname(r.facility_id)}</span>
-                          </div>
-                          <p className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1 font-medium text-foreground">
-                              <CalendarRange className="h-3.5 w-3.5 text-primary" />
-                              <span className="capitalize">{fmtRelativeDay(myDateKey(start), new Date(now || 0))}</span>,
-                              {" "}{fmtTime(start)} - {fmtTime(new Date(r.end_time))}
-                            </span>
-                            <span className={`flex items-center gap-1 ${over ? "font-medium text-destructive" : ""}`}>
-                              <Users2 className="h-3.5 w-3.5" /> {r.participants}{f ? ` / ${f.capacity}` : ""}
-                            </span>
-                          </p>
-                          {r.purpose && <p className="line-clamp-2 text-sm">&ldquo;{r.purpose}&rdquo;</p>}
-                        </div>
-                        <div className="flex shrink-0 flex-col gap-1.5">
-                          <Button size="sm" className="gap-1" disabled={!!acting} onClick={() => decide(r, "approved")}>
-                            {acting === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                            Approve
-                          </Button>
-                          <Button size="sm" variant="outline" className="gap-1" disabled={!!acting}
-                            onClick={() => decide(r, "rejected")}>
-                            <X className="h-3.5 w-3.5" /> Reject
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
               )}
+              {approvalGroups.map((g) => (
+                <section key={g.title} className="space-y-3">
+                  <h3 className="text-sm font-medium text-muted-foreground">{g.title} ({g.rows.length})</h3>
+                  <div className="grid gap-3 2xl:grid-cols-2">
+                      {g.rows.map((r, i) => {
+                        const f = facilities.find((x) => x.id === r.facility_id);
+                        const start = new Date(r.start_time);
+                        const over = f ? r.participants > f.capacity : false;
+                        return (
+                          <div key={r.id} style={stagger(i)}
+                            className="animate-reveal stagger flex gap-3 rounded-xl border bg-card p-3 transition-all hover:shadow-sm">
+                            <div className="hidden h-20 w-24 shrink-0 overflow-hidden rounded-lg bg-muted/40 sm:block">
+                              {f && <FacilityIso type={f.type} busy={false} />}
+                            </div>
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-[11px] font-semibold text-accent-foreground">
+                                  {initials(r.profiles?.full_name)}
+                                </span>
+                                <span className="font-medium">{r.profiles?.full_name ?? "Student"}</span>
+                                <span className="text-xs text-muted-foreground">wants {fname(r.facility_id)}</span>
+                              </div>
+                              <p className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1 font-medium text-foreground">
+                                  <CalendarRange className="h-3.5 w-3.5 text-primary" />
+                                  <span className="capitalize">{fmtRelativeDay(myDateKey(start), new Date(now || 0))}</span>,
+                                  {" "}{fmtTime(start)} - {fmtTime(new Date(r.end_time))}
+                                </span>
+                                <span className={`flex items-center gap-1 ${over ? "font-medium text-destructive" : ""}`}>
+                                  <Users2 className="h-3.5 w-3.5" /> {r.participants}{f ? ` / ${f.capacity}` : ""}
+                                </span>
+                              </p>
+                              {r.purpose && <p className="line-clamp-2 text-sm">&ldquo;{r.purpose}&rdquo;</p>}
+                            </div>
+                            <div className="flex shrink-0 flex-col gap-1.5">
+                              <Button size="sm" className="gap-1" disabled={!!acting} onClick={() => decide(r, "approved")}>
+                                {acting === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                                Approve
+                              </Button>
+                              <Button size="sm" variant="outline" className="gap-1" disabled={!!acting}
+                                onClick={() => decide(r, "rejected")}>
+                                <X className="h-3.5 w-3.5" /> Reject
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </section>
+              ))}
             </CardContent>
           </Card>
           )}
@@ -770,7 +787,7 @@ export default function AdminDashboard() {
                       <TableCell className="font-medium">{e.name}</TableCell>
                       <TableCell>{typeLabel(e.facility_type)}</TableCell>
                       <TableCell>
-                        <Input type="number" min={0} defaultValue={e.total_qty} className="w-20"
+                        <Input type="number" min={0} defaultValue={e.total_qty} className="w-20" aria-label={`Total ${e.name}`}
                           onKeyDown={(ev) => ev.key === "Enter" &&
                             saveQty(e, Number((ev.target as HTMLInputElement).value))} />
                       </TableCell>
@@ -780,7 +797,7 @@ export default function AdminDashboard() {
               </Table>
               <div className="grid gap-2 sm:grid-cols-4">
                 <Select value={newEquip.type} onValueChange={(v) => setNewEquip({ ...newEquip, type: v })}>
-                  <SelectTrigger><SelectValue placeholder="Facility type" /></SelectTrigger>
+                  <SelectTrigger aria-label="Facility type"><SelectValue placeholder="Facility type" /></SelectTrigger>
                   <SelectContent>
                     {categories.map((c) => (
                       <SelectItem key={c.id} value={c.slug}>{c.name}</SelectItem>
@@ -789,7 +806,7 @@ export default function AdminDashboard() {
                 </Select>
                 <Input placeholder="Item name" value={newEquip.name}
                   onChange={(e) => setNewEquip({ ...newEquip, name: e.target.value })} />
-                <Input type="number" min={1} value={newEquip.qty}
+                <Input type="number" min={1} aria-label="Quantity" value={newEquip.qty}
                   onChange={(e) => setNewEquip({ ...newEquip, qty: Number(e.target.value) })} />
                 <Button onClick={addEquipment}>Add item</Button>
               </div>

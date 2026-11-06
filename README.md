@@ -1,49 +1,94 @@
 # Campus Reserve
 
-Smart Campus Facility Reservation System with AI-Assisted Recommendations.
-Final Year Project, Asia Pacific University of Technology & Innovation.
+Smart Campus Facility Reservation System with AI-Assisted Recommendations. Final Year Project by Amaan Rashid (TP073098), Asia Pacific University of Technology & Innovation.
 
-Students book campus facilities (discussion rooms, sports courts, meeting rooms, event halls) online. Facility managers approve requests from a queue. Administrators configure booking policy per facility. AI assists twice: a rule-based scoring engine recommends the best free slots (with reasons, personalized over time), and a grounded chatbot answers availability and policy questions from live data.
+One booking system for every kind of campus space: discussion rooms, sports courts, meeting rooms, event halls. Administrators set the rules for each facility type without touching code, and the database refuses anything that breaks them, including double bookings. When the time a student wants is taken, the app suggests the next best options and learns each student's preferences. A chatbot answers questions about availability and rules in English or Bahasa Melayu, using only live records the student is allowed to see.
+
+The smart-room extension adds a keypad door for one library room (an ESP32 simulated in Wokwi). It handles door codes, lights and air-con that follow occupancy, end-of-booking reminders, remote control over MQTT, a live 3D twin and an energy estimate.
+
+Live: https://smart-campus-reservation.vercel.app
+
+## What's in it
+
+| Area | Highlights |
+|---|---|
+| Students | Venue → room → booking flow, AI suggestions when a slot is taken, popular times, door codes, check-in, extend +30 min, cancel, report a room problem, chatbot (EN/MS) |
+| Facility managers | Room cards with today's timeline, approval queue, attendance, room problems, smart-room panel, equipment, lost & found |
+| Admins | Facilities by location with step-by-step wizards, booking rules, who can book (undergraduate / postgraduate / staff), fair-use limits, managers, users, analytics, smart rooms (connect a device, 3D twin, remote control), activity records |
+| Guarantees in the database | No overlapping bookings (exclusion constraint), every booking rule checked by a trigger, private bookings (others only see free/busy), row-level security on every table |
 
 ## Stack
 
-Next.js 16, React 19, TypeScript, Tailwind v4, shadcn/ui, Supabase (Postgres + Auth + RLS). Chatbot works with Gemini, Groq, or OpenAI - or with no key at all (grounded mock mode).
+Next.js 16 (App Router) · React 19 · TypeScript · Tailwind v4 · shadcn/ui · Supabase (Postgres, Auth, row-level security, pg_cron, Realtime) · three.js · MQTT (EMQX Cloud) · ESP32 firmware for Wokwi. The chatbot works with Gemini, Groq or OpenAI, or with no key at all; without a key it uses template answers from the same live data.
 
-## Setup
+## Running it
 
-1. **Database** - create a project at [supabase.com](https://supabase.com), open SQL Editor, paste and run `supabase/setup-full.sql` (creates tables, security policies, the no-double-booking constraint, and seeded facilities).
-2. **Auth** - in Supabase: Authentication -> Providers -> Email. For demos, disable "Confirm email"; with it enabled, users confirm via email before first sign-in (both work).
-3. **Environment** - copy `.env.example` to `.env.local`, fill in the Supabase URL and anon key. Optionally add an AI provider key for LLM-phrased chatbot answers.
-4. **Run** - `npm install`, then `npm run dev` -> http://localhost:3000.
+### 1. Database (Supabase)
 
-Sign up as a student to book; sign up with the Facility Manager or Administrator role to approve requests and edit facility rules (role selection is open for prototype demonstration).
+1. Create a project at [supabase.com](https://supabase.com).
+2. In **SQL Editor**, run `supabase/setup-all.sql`, then the upgrade files in the order listed in `supabase/README.md`. Every file can be re-run safely.
+3. **Authentication → Providers → Email**: turn off "Confirm email" for demos.
+4. **Authentication → URL Configuration → Redirect URLs**: add `<your site>/reset-password` (used by Forgot password).
+5. Sign up in the app, then run `supabase/make-me-admin.sql` to make your account an administrator. Everyone else signs up as a student, and admins assign roles and member types from the Users tab.
 
-## Production deployment (Vercel)
+### 2. Environment
 
-1. Push this repo to GitHub.
-2. Import it at [vercel.com/new](https://vercel.com/new).
-3. Add the environment variables from `.env.local` in Project Settings -> Environment Variables.
-4. Deploy. The stack runs entirely on free tiers (Vercel + Supabase + Gemini/Groq).
+Copy `.env.example` to `.env.local` and fill it in. Only the two Supabase values are needed to run the app. The rest switch on the chatbot model, door codes and remote control. Never commit `.env.local`, and never put a secret in a `NEXT_PUBLIC_` variable.
 
-Before real use beyond demos: restrict signup role selection (map roles from university records), enable email confirmation, and review the RLS policy that lets authenticated users read reservation time ranges (needed for availability; consider a view that hides booker identity).
+### 3. Run
 
-## Project structure
+```bash
+npm install
+npm run dev        # http://localhost:3000
+npm test           # 151 unit tests
+npm run lint
+npm run build
+```
+
+The sign-in page has one-tap demo buttons for a student, a manager and an admin.
+
+### 4. Smart room (optional)
+
+See `firmware/door-wokwi/README.md`. In short: build and start the simulation in VS Code with the Wokwi extension, and the door shows a 6-digit code. In Admin → Smart room → **Connect a room**, pick the room and type that code. The same firmware runs in every room.
+
+### 5. Deploy (Vercel)
+
+Import the repository at [vercel.com/new](https://vercel.com/new) and add the variables from `.env.local` under Project Settings → Environment Variables. Set the Function Region to the one closest to your Supabase project. Everything runs on free tiers.
+
+## Evaluation
+
+Results for objective 5 are in `docs/evaluation/README.md`.
+
+- **Concurrent booking:** 0 overlapping bookings across 2,200 simultaneous requests.
+- **Recommender speed:** p95 of 25 ms in the worst case.
+- **Chatbot:** 87.5% correct on a held-out question set.
+- **Remote control (lab):** median round trip of 48 ms.
+
+The user study and SUS kit are in `docs/evaluation/user-study.md`. To reproduce the results:
+
+```bash
+npx tsx scripts/eval/recommender-latency.ts
+npx tsx scripts/eval/chatbot-eval.ts
+cd scripts/eval && npm install && node concurrency.mjs && cd ../.. && npx tsx scripts/eval/mqtt-rtt.ts
+```
+
+## Where things are
 
 ```
-supabase/setup-full.sql    database schema, RLS, seed data
-src/lib/recommend.ts       slot scoring (eq. 3.1) + adaptive weights
-src/lib/profile.ts         profile bootstrap from auth metadata
-src/app/api/chat/route.ts  grounded chatbot (provider-agnostic)
-src/components/app-shell.tsx  shared branded layout
-src/app/{student,facility-manager,admin}/  role dashboards
-docs/                      project notes, UI design system
-report/                    Phase 1 report + ethics documents
+src/app/            pages for each role, and API routes (chat, bookings, room device + remote control)
+src/components/     shared UI (facility wizards, 3D twin, chatbot, analytics...)
+src/lib/            logic with unit tests: recommender, LinUCB bandit, chatbot parsing, access rules, door codes, energy
+supabase/           schema and migrations (run order in supabase/README.md)
+firmware/door-wokwi ESP32 door controller for Wokwi
+scripts/            recommender simulation, evaluation scripts (scripts/eval)
+docs/               user guide, testing guide, evaluation, UI design, research notes, diagrams
+report/             Phase 1 report and ethics documents
 ```
 
 ## Documentation
 
-- `FYP.md` - project scope, milestones and status log
-- `docs/` - project documentation and diagrams (see `docs/README.md`)
-- `supabase/README.md` - database migrations and the order to run them
-- `report/` - Phase 1 report and ethics documents
-- `CLAUDE.md` - conventions for AI-assisted development
+- `docs/USER-GUIDE.md`: how to use the app as a student, manager or admin
+- `docs/TESTING-GUIDE.txt`: step-by-step manual test plan
+- `docs/evaluation/`: objective 5 results and user study protocol
+- `supabase/README.md`: migrations and run order
+- `FYP.md`: scope, milestones and status log

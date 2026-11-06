@@ -358,6 +358,12 @@ export function withContext(cur: Intent, history: Intent[]): Intent {
   };
 }
 
+/** Is this clear enough to answer without asking the AI to read the question as well? */
+export function understoodLocally(it: Intent): boolean {
+  if (it.intent === "mine" || it.intent === "list") return true;
+  return (it.intent === "availability" || it.intent === "rules") && it.facility !== null;
+}
+
 /** Validate an LLM's JSON so a malformed field can never reach a query. */
 export function sanitiseIntent(raw: unknown): Partial<Intent> {
   if (!raw || typeof raw !== "object") return {};
@@ -444,6 +450,12 @@ export function windowsFrom(windows: Window[], start: Date, minMins: number): Wi
     .filter((w) => w.end.getTime() > start.getTime())
     .map((w) => ({ start: new Date(Math.max(w.start.getTime(), start.getTime())), end: w.end }))
     .filter((w) => w.end.getTime() - w.start.getTime() >= minMins * 60_000);
+}
+
+/** One label per room for a list: the room name, plus its type only when two rooms share a name. */
+export function roomLabels(rooms: Pick<Facility, "name" | "category_name">[]): string[] {
+  return rooms.map((r) =>
+    rooms.filter((o) => o.name === r.name).length > 1 ? `${r.name} (${r.category_name})` : r.name);
 }
 
 export function describeWindows(windows: Window[]): string {

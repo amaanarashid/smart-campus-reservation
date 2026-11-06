@@ -7,52 +7,20 @@ released automatically.
 Parts: ESP32, 4x4 keypad, 128x64 OLED, servo (the lock), slide switch (the
 door), green and red LEDs, and a buzzer. Everything is in `diagram.json`.
 
-## One-time setup
+## Connect a room
 
-Do these in order.
+The same firmware runs in every room. There is nothing to edit per room.
 
-### 1. Database (Supabase SQL editor)
+1. **Start the door.** Build and start it (below). The screen shows a 6-digit code.
+2. **Type the code.** In **Admin, then Smart room, then Connect a room**, pick the
+   room and type the code.
 
-Run `supabase/upgrade-auto-release.sql`, then `supabase/upgrade-room-access.sql`,
-then `supabase/upgrade-room-end.sql` (reminders, extensions, overstay).
+The door connects by itself within a few seconds, and the dialog shows **Online**.
+It remembers this, so later starts connect straight away with no code.
 
-Then register the door on ONE room. Use the room's exact name from the admin
-console, and a long made-up key:
+### Simulated door (Wokwi in VS Code)
 
-```sql
-select public.register_room_device('Discussion Room A', 'library-door-demo-7Qx92kLm4Tz8');
-```
-
-Copy the id it returns. You need it, and the key, in step 3.
-
-### 2. Vercel (Project, then Settings, then Environment Variables)
-
-Add both variables, then **redeploy**. Environment changes only take effect
-on a new deployment.
-
-| Name | Value |
-|---|---|
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase: Settings, then API, then `service_role` (secret, never `NEXT_PUBLIC_`) |
-| `ROOM_CODE_SECRET` | any random string of 32+ characters. Changing it changes every door code. |
-
-Make sure the deployed code is the latest (push to your repo).
-
-### 3. Wokwi
-
-1. Go to wokwi.com, choose **New Project**, then **ESP32**.
-2. Replace `sketch.ino` and `diagram.json` with the files in this folder.
-3. Add a new file called `libraries.txt` and paste this folder's
-   `libraries.txt` into it.
-4. At the top of `sketch.ino`, fill in `API_BASE` (your Vercel URL, with no
-   trailing slash), `DEVICE_ID` and `DEVICE_KEY`.
-5. Press the green play button. The OLED shows `FREE` or `BOOKED - enter code`
-   within a few seconds.
-
-### 3 (alternative) — Wokwi inside VS Code
-
-Use this when the browser version says its servers are busy. Your laptop
-compiles the code and runs the simulation, so you don't depend on Wokwi's
-servers.
+Your laptop compiles the code and runs the simulation.
 
 **One-time install:**
 
@@ -69,25 +37,70 @@ servers.
 1. Go to **File, then Open Folder**, and open **`firmware/door-wokwi`** itself,
    not the whole project. PlatformIO and Wokwi both look for their files in
    the folder you open.
-2. Fill in `API_BASE`, `DEVICE_ID` and `DEVICE_KEY` at the top of
-   `sketch.ino`. This is the same file the browser version uses.
-3. Click the **checkmark (Build)** in the blue bar at the bottom of VS Code.
+2. Click the **checkmark (Build)** in the blue bar at the bottom of VS Code.
    The first build downloads the libraries. Wait for **SUCCESS**.
-4. Open `diagram.json`, press **F1**, and run **Wokwi: Start Simulator**.
+3. Open `diagram.json`, press **F1**, and run **Wokwi: Start Simulator**.
    The circuit opens in a VS Code tab and runs.
-5. After any change to `sketch.ino`, build again (step 3). The simulator
+4. After any change to `sketch.ino`, build again (step 2). The simulator
    always runs the last successful build.
 
 If the build fails, copy the first red `error:` line. Library version
 mismatches are the usual cause, and they're quick to fix.
 
-**Keep the Wokwi project private, or use a demo-only key.** The key sits in
-the sketch in plain text. After the demo, re-run `register_room_device` with a
-new key to retire the old one.
+The first build makes the door's key and saves it in `.device-secret` (not in
+git), so the door stays connected between runs. **To simulate a second room,**
+copy this folder and delete `.device-secret` from the copy.
+
+**Wokwi in the browser** also works: make an ESP32 project and copy in
+`sketch.ino`, `diagram.json` and `libraries.txt`. There is no build step to make
+a key, so if Wokwi starts with empty flash you pair again on each run.
+
+### Real ESP32
+
+Wire the board like `diagram.json`, then install the firmware once:
+
+```bash
+pio run -e board -t upload
+```
+
+On first start the door opens its own Wi-Fi network, **`CampusRoom-Setup`**. Join
+it on a phone, choose the room's Wi-Fi and enter its password. The door saves
+this and then shows its code. If it can't reach the saved Wi-Fi later, the setup
+network opens again for 3 minutes, then it retries.
+
+This path compiles but has not been tried on a physical board yet.
+
+### Moving or replacing a door
+
+| To do this | Do this |
+|---|---|
+| Put a new device on a connected room | Room menu, then **Replace device**, then type the new door's code. The old device stops working. The room keeps its history. |
+| Take a door off a room | Room menu, then **Disconnect**. The door shows a code again and can go on any room. A real board also makes itself a new key. |
+
+## One-time server setup
+
+### Database (Supabase SQL editor)
+
+Run `supabase/upgrade-auto-release.sql`, `supabase/upgrade-room-access.sql`,
+`supabase/upgrade-room-end.sql`, `supabase/upgrade-room-connect.sql`, then
+`supabase/upgrade-room-pairing.sql`.
+
+### Vercel (Project, then Settings, then Environment Variables)
+
+Add both variables, then **redeploy**. Environment changes only take effect
+on a new deployment.
+
+| Name | Value |
+|---|---|
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase: Settings, then API, then `service_role` (secret, never `NEXT_PUBLIC_`) |
+| `ROOM_CODE_SECRET` | any random string of 32+ characters. Changing it changes every door code. |
+
+Make sure the deployed code is the latest (push to your repo). `API_BASE` at the
+top of `sketch.ino` must be this site, with no trailing slash.
 
 ## Try it
 
-1. As a student, book the registered room for **right now**. Discussion rooms
+1. As a student, book the connected room for **right now**. Discussion rooms
    are auto-approved.
 2. In "My bookings" the card says *"Enter your door code by 3:10 pm or this
    booking is released"*. Press **Door code** and a 6-digit code appears.
@@ -213,14 +226,15 @@ set up or is down, the same command arrives with the next status poll
    | `MQTT_USERNAME` | the username from step 2 |
    | `MQTT_PASSWORD` | the password from step 2 |
 
-6. **sketch.ino:** fill `MQTT_HOST` (`abc123.s1.eu.hivemq.cloud`, no
-   `mqtts://`), `MQTT_USER`, `MQTT_PASS`. Rebuild. When connected, the bottom
+6. Nothing to change on the door: when it connects, the server gives it these
+   broker details. To give doors a narrower login than the server's, also set
+   `MQTT_DEVICE_USERNAME` and `MQTT_DEVICE_PASSWORD`. When connected, the bottom
    right of the OLED shows **M**.
 7. In the project folder run `npm install` (adds the `mqtt` package) and commit
    `package-lock.json`.
 
-Keep the sketch private: it contains the broker password. Use a credential
-that only this demo uses.
+The door gets the broker login only after an admin has connected it, and keeps
+it in memory only. Use a credential that only this demo uses.
 
 **Try it:** open the room in Admin -> Smart room, press **Lights: off** with
 PEOPLE on. Within a second: the lights blink for 10 s and go off, the panel
@@ -313,9 +327,17 @@ the app wasn't redeployed after adding it.
   from bed" loophole, so no-show data means something.
 - **Relock logic:** the lock closes after the door has been opened *and*
   closed, or after 8 seconds if nobody goes in.
+- **Pairing, not pasted keys.** The door makes its own random key and the
+  server stores only its SHA-256. The door shows a code, and an admin links it
+  to a room (the same idea as pairing a smart TV, RFC 8628). A code alone is
+  useless: only an admin can claim it, and it only links the door showing it.
+  Codes lapse 10 minutes after the door stops asking, and at most 200 doors can
+  wait at once.
 - **Demo shortcuts to name in the report:** `setInsecure()` skips TLS
-  certificate checking. The device key sits in plain text in the firmware.
-  Lockout is per door, so someone could deliberately lock a room's keypad for
+  certificate checking. A simulated door's key is in `.device-secret` on the
+  laptop, and a real board's is in plain flash (no flash encryption). All doors
+  share one broker login, but commands are signed per device, so that login
+  alone cannot control a room. Lockout is per door, so someone could deliberately lock a room's keypad for
   5 minutes. Fixes for these are future work.
 - **Safety:** a real deployment must always open from the inside and unlock
   on power loss (fail-safe). The servo here only models the lock.
@@ -332,6 +354,3 @@ the app wasn't redeployed after adding it.
   so someone sitting perfectly still can look like an empty room. That's why
   there's a long vacancy timer and a warning blink. An mmWave presence
   sensor, which detects stationary people, is the production choice.
-- **The demo key is public:** the key in this sketch appears in project
-  notes. Re-run `register_room_device` with a new key before sharing the
-  project.

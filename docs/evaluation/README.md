@@ -81,7 +81,7 @@ It never blocks, penalises or auto-cancels anyone, and nothing is overbooked. Th
 ## Limits of these results
 
 - DS1 runs against a local Postgres 17 with the same migrations, not the hosted Supabase project. The guarantee comes from the database (exclusion constraint, trigger, locks), which is identical, but network time to Supabase is not included in the latency.
-- The chatbot score is for the app's own understanding step (the path with no AI key). With an AI key, the model's extraction runs as well and the local parser fills in what the model misses. That path needs a live run with the key.
+- The chatbot score is for the app's own understanding step (the path with no AI key). With an AI key, the model reads the question only when this step could not; that path needs a live run with the key. The model has a short time limit, and the facts are the answer if it fails.
 - The recommender numbers come from simulated students. The live acceptance rate and rank need real use (`live-metrics.sql` §1).
 - Two held-out chatbot questions fail ("reserve" as a booking word, "can staff only book…"). They were left unfixed so the held-out score stays honest.
 

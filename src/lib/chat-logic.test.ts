@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   parseIntent, parseDate, parseHour, parseDuration, parseMinute, parseRange, withContext, matchFacilities,
-  freeWindows, fitsIn, sanitiseIntent, describeWindows, windowsFrom,
+  freeWindows, fitsIn, roomLabels, sanitiseIntent, describeWindows, understoodLocally, windowsFrom,
 } from "./chat-logic";
 import { myAt } from "./time";
 import type { Facility } from "./types";
@@ -21,6 +21,32 @@ const FAC = [
 
 // Friday 2 October 2026, 09:00 in Malaysia
 const NOW = myAt("2026-10-02", "09:00");
+
+describe("chatbot - room lists", () => {
+  it("uses just the room name, adding the type only when names clash", () => {
+    expect(roomLabels([FAC[3], FAC[4]])).toEqual(["Room A", "Room AB"]);
+    expect(roomLabels([FAC[0], FAC[1], FAC[2]])).toEqual(["Court 1 (Badminton Court)", "Court 2", "Court 1 (Futsal Court)"]);
+  });
+});
+
+describe("chatbot - when the AI is not needed", () => {
+  const clear = (q: string, history: string[] = []) =>
+    understoodLocally(withContext(parseIntent(q, FAC, NOW), history.map((h) => parseIntent(h, FAC, NOW))));
+
+  it("answers clear questions without it", () => {
+    expect(clear("is discussion room available on 6th from 3:00pm")).toBe(true);
+    expect(clear("Gelanggang badminton kosong esok?")).toBe(true);
+    expect(clear("when is my next booking")).toBe(true);
+    expect(clear("which facilities can I book?")).toBe(true);
+    expect(clear("what about tomorrow?", ["is court 2 free today?"])).toBe(true);
+  });
+
+  it("asks it when the question was not understood", () => {
+    expect(clear("hmm any place to study quietly tomorrow?")).toBe(false);
+    expect(clear("is anything free tomorrow?")).toBe(false);
+    expect(clear("where do I pay my fine?")).toBe(false);
+  });
+});
 
 describe("chatbot - a date with no month", () => {
   it("reads the reported question: discussion room on 6th from 3:00pm", () => {

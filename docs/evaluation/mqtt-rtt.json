@@ -1,0 +1,36 @@
+{
+  "generated_by": "scripts/eval/mqtt-rtt.ts",
+  "commands": 100,
+  "transport": "MQTT 3.1.1 over TLS (local broker), QoS 1",
+  "ms_from_button_press": {
+    "publish": {
+      "median": 47.67,
+      "p95": 49.69,
+      "max": 63.69
+    },
+    "delivered": {
+      "median": 46.28,
+      "p95": 47.97,
+      "max": 62.36
+    },
+    "confirmed": {
+      "median": 47.48,
+      "p95": 49.47,
+      "max": 63.52
+    }
+  },
+  "security": {
+    "tampered_bad_signature": 2,
+    "replayed": 1,
+    "expired": 1,
+    "note": "sent: 1 tampered, 1 replay, 1 expired, 1 signed with another device's key (counts as bad_signature); none may be acted on"
+  },
+  "http_fallback_model_ms": {
+    "poll_every_s": 5,
+    "median": 2536.14,
+    "p95": 4746.02,
+    "note": "wait for the next status poll (uniform 0-5 s) + request; used when MQTT is unavailable"
+  },
+  "excludes": "internet latency to EMQX Cloud (Singapore) and Vercel; see live-metrics.sql block 4 for the live figure",
+  "pass": true
+}

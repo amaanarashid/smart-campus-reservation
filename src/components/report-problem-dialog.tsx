@@ -110,7 +110,7 @@ export default function ReportProblemDialog({ open, onOpenChange, facilityId, fa
 
           <div>
             <p className="pb-2 text-xs font-medium">What happened?</p>
-            <Textarea value={description} maxLength={MAX_DESCRIPTION} rows={4}
+            <Textarea aria-label="What happened?" value={description} maxLength={MAX_DESCRIPTION} rows={4}
               placeholder="e.g. The air-con is on but blowing warm air"
               onChange={(e) => setDescription(e.target.value)} />
             <p className="pt-1 text-right text-[11px] text-muted-foreground">{description.trim().length}/{MAX_DESCRIPTION}</p>

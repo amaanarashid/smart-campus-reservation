@@ -62,7 +62,7 @@ export default function PopularTimes({ rooms, openHour = 8, closeHour = 22 }: {
           <p className="text-xs text-muted-foreground">From past bookings - pick a quieter time</p>
         </div>
         <Select value={String(shownDay)} onValueChange={(v) => setDay(Number(v))}>
-          <SelectTrigger className="h-8 w-36"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-8 w-36" aria-label="Day of the week"><SelectValue /></SelectTrigger>
           <SelectContent>
             {DAYS.map((d, i) => <SelectItem key={i} value={String(i)}>{d}s</SelectItem>)}
           </SelectContent>

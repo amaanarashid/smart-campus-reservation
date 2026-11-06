@@ -1,3 +1,5 @@
 # PlatformIO build output and downloaded libraries
 .pio/
 .vscode/
+# the simulated door's key
+.device-secret

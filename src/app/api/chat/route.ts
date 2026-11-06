@@ -5,7 +5,7 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import type { BusySlot, Facility, FacilityRule, MemberType, Reservation, RecWeights } from "@/lib/types";
 import {
   fitsIn, freeWindows, Intent, matchFacilities, parseIntent,
-  PART_CENTRE, sanitiseIntent, windowsFrom, withContext,
+  PART_CENTRE, roomLabels, sanitiseIntent, understoodLocally, windowsFrom, withContext,
 } from "@/lib/chat-logic";
 import { recommendAcross, learnPeakHours, DEFAULT_WEIGHTS } from "@/lib/recommend";
 import { initBandit, isBanditState, rankWithBandit } from "@/lib/bandit";
@@ -25,8 +25,14 @@ import {
  * live data, so the demo works offline.
  *
  * Design: the model never free-generates facts. It (1) helps extract the
- * question as JSON, (2) the server queries Supabase under the caller's own RLS
- * context, (3) the model phrases an answer from the returned facts only.
+ * question as JSON, only when the local parser could not, (2) the server queries
+ * Supabase under the caller's own RLS context, (3) the model phrases an answer
+ * from the returned facts only.
+ *
+ * Speed: the facts are already a complete answer, so the model is optional and
+ * must never hold a reply up. Each call has a short time limit, and after a
+ * failure the model is left alone for a minute, so an overloaded provider costs
+ * one wait, not one per message.
  *
  * Languages: English and Bahasa Melayu. The answer is in the language the
  * student writes in (lib/chat-lang.ts); Malay dates, times and facility words
@@ -43,11 +49,21 @@ import {
 interface Msg { role: "user" | "assistant"; content: string }
 
 // ---------- LLM adapter ----------
-async function llm(system: string, user: string): Promise<string | null> {
+const EXTRACT_LIMIT_MS = 4_000;
+const PHRASE_LIMIT_MS = 5_000;
+const AI_REST_MS = 60_000;
+let aiRestUntil = 0;
+
+async function llm(system: string, user: string, limitMs: number): Promise<string | null> {
   const provider = process.env.AI_PROVIDER;
   const key = process.env.AI_API_KEY;
-  if (!provider || !key) return null;
+  if (!provider || !key || Date.now() < aiRestUntil) return null;
+  const reply = await callLlm(provider, key, system, user, limitMs);
+  if (reply === null) aiRestUntil = Date.now() + AI_REST_MS;
+  return reply;
+}
 
+async function callLlm(provider: string, key: string, system: string, user: string, limitMs: number): Promise<string | null> {
   try {
     if (provider === "gemini") {
       const model = process.env.AI_MODEL || "gemini-2.5-flash";
@@ -56,6 +72,7 @@ async function llm(system: string, user: string): Promise<string | null> {
         {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+          signal: AbortSignal.timeout(limitMs),
           body: JSON.stringify({
             system_instruction: { parts: [{ text: system }] },
             contents: [{ role: "user", parts: [{ text: user }] }],
@@ -75,6 +92,7 @@ async function llm(system: string, user: string): Promise<string | null> {
     const r = await fetch(`${base}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(limitMs),
       body: JSON.stringify({
         model,
         messages: [{ role: "system", content: system }, { role: "user", content: user }],
@@ -100,6 +118,10 @@ async function understand(q: string, history: Msg[], facilities: Facility[], now
     .filter((m) => m.role === "user")
     .map((m) => parseIntent(m.content, facilities, now));
 
+  // already understood: no need to wait for the model
+  const resolved = withContext(local, past);
+  if (understoodLocally(resolved) && !hasOtherScript(q)) return resolved;
+
   const names = facilities.map((f) => `${f.name} (${f.category_name})`).join("; ");
   const convo = history.slice(-4).map((m) => `${m.role}: ${m.content}`).join("\n");
   const out = await llm(
@@ -107,7 +129,8 @@ async function understand(q: string, history: Msg[], facilities: Facility[], now
 Known facilities: ${names}.
 Schema: {"intent":"availability"|"rules"|"list"|"mine"|"other","facility":string|null,"date":"YYYY-MM-DD"|null,"part_of_day":"morning"|"afternoon"|"evening"|null,"hour":0-23|null,"duration":minutes|null}
 "mine" means the user asks about their own bookings. Use earlier turns to resolve follow-ups like "what about tomorrow?". Use facility and category names exactly as listed.`,
-    `${convo ? `Earlier:\n${convo}\n\n` : ""}Question: ${q}`
+    `${convo ? `Earlier:\n${convo}\n\n` : ""}Question: ${q}`,
+    EXTRACT_LIMIT_MS
   );
 
   let merged: Intent = local;
@@ -161,6 +184,16 @@ function words(lang: Lang, now: Date) {
     windows: (ws: { start: Date; end: Date }[]) => ws.map((w) => range(w.start, w.end)).join(", "),
     part: (p: "morning" | "afternoon" | "evening") => (ms ? ` pada waktu ${PART_MS[p]}` : ` in the ${p}`),
     from: (at: Date) => (ms ? ` dari ${time(at)}` : ` from ${time(at)}`),
+    // one line per room: "Room A: Free 3:00pm - 5:00pm, 7:00pm - 10:00pm"
+    at: (d: Date) => (ms ? ` pada ${time(d)}` : ` at ${time(d)}`),
+    rowHeader: (d: string, detail: string) => `${d.charAt(0).toUpperCase()}${d.slice(1)}${detail}:`,
+    rowFree: (ws: { start: Date; end: Date }[]) => {
+      const t = (d: Date) => (ms ? time(d) : time(d).replace(" ", ""));
+      return `${ms ? "Kosong" : "Free"} ${ws.map((x) => `${t(x.start)} - ${t(x.end)}`).join(", ")}`;
+    },
+    rowFreeAt: ms ? "Kosong" : "Free",
+    rowNotFree: ms ? "Tidak kosong" : "Not free",
+    rowNone: ms ? "Tiada masa kosong" : "No free time",
     timePassed: (d: string, at: Date) => ms ? `${time(at)} ${d} sudah berlalu.` : `${time(at)} ${d} has already passed.`,
     dayPassed: (d: string) => ms ? `${d} sudah berlalu.` : `${d} has already passed.`,
     reason: (r: string) => (ms ? REASON_MS[r] ?? r : r),
@@ -265,8 +298,12 @@ async function availabilityFacts(
   // an exact slot can be checked; "from 3pm" or a time already gone lists what is left
   const passed = !!startAt && !it.from && startAt.getTime() <= now.getTime();
   const exact = !!startAt && !it.from && !passed;
-  const shown = matched.slice(0, 4);
+  // the list takes one line per room, so it can show more of them
+  const shown = matched.slice(0, 8);
   const ids = shown.map((f) => f.id);
+  const asList = shown.length > 1;
+  const labels = roomLabels(shown);
+  const rows: string[] = [];
 
   // free/busy only: the chatbot learns when a room is taken, never by whom
   const { data: res } = await busyQuery((t) => db
@@ -283,10 +320,24 @@ async function availabilityFacts(
   let askedTimeTaken = false;
   if (passed && startAt) lines.push(w.timePassed(when, startAt));
 
-  for (const f of shown) {
+  for (const [i, f] of shown.entries()) {
     const rule = rules[f.id];
-    if (!rule) { lines.push(w.noRules(f.name)); continue; }
+    if (!rule) { (asList ? rows : lines).push(w.noRules(f.name)); continue; }
     const wins = freeWindows(rule, dayRes.filter((r) => r.facility_id === f.id), date, now, it.part_of_day);
+
+    if (asList) {
+      if (exact && startAt) {
+        const dur = Math.min(rule.max_duration_mins, Math.max(rule.min_duration_mins, it.duration ?? 60));
+        const fits = fitsIn(wins, startAt, dur);
+        if (fits) anyFree = true; else askedTimeTaken = true;
+        rows.push(`${labels[i]}: ${fits ? w.rowFreeAt : w.rowNotFree}`);
+      } else {
+        const free = startAt && it.from ? windowsFrom(wins, startAt, rule.min_duration_mins) : wins;
+        if (free.length > 0) anyFree = true;
+        rows.push(`${labels[i]}: ${free.length > 0 ? w.rowFree(free) : w.rowNone}`);
+      }
+      continue;
+    }
     const label = `${f.name} (${f.category_name})`;
     const partLabel = it.part_of_day ? w.part(it.part_of_day) : "";
 
@@ -315,6 +366,12 @@ async function availabilityFacts(
       if (!exact) lines.push(w.freeList(label, when, partLabel, w.windows(wins)));
     }
   }
+  if (asList) {
+    const detail = exact && startAt ? w.at(startAt)
+      : startAt && it.from ? w.from(startAt)
+      : it.part_of_day ? w.part(it.part_of_day) : "";
+    lines.push(`${w.rowHeader(when, detail)}\n${rows.join("\n")}`);
+  }
   if (matched.length > shown.length) lines.push(w.more(matched.length - shown.length));
 
   // Busy at the time asked, or nothing free at all: ask the recommender.
@@ -325,7 +382,7 @@ async function availabilityFacts(
       if (alt) lines.push(alt);
     }
   }
-  return lines.join(" ");
+  return lines.join(asList ? "\n" : " ");
 }
 
 async function alternatives(
@@ -410,16 +467,16 @@ export async function POST(req: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false } }
   );
-  const { data: userData } = await db.auth.getUser(token);
+  const [{ data: userData }, { data: facs }, { data: ruleRows }] = await Promise.all([
+    db.auth.getUser(token),
+    db.from("facilities_full").select("*").eq("status", "active").order("name"),
+    db.from("effective_facility_rules").select("*"),
+  ]);
   const uid = userData?.user?.id;
   if (!uid) return NextResponse.json({ reply: fixed.expired }, { status: 401 });
 
   const now = new Date();
   const w = words(lang, now);
-  const [{ data: facs }, { data: ruleRows }] = await Promise.all([
-    db.from("facilities_full").select("*").eq("status", "active").order("name"),
-    db.from("effective_facility_rules").select("*"),
-  ]);
   const all = (facs ?? []) as Facility[];
   const rules: Record<string, FacilityRule> = {};
   for (const r of (ruleRows ?? []) as FacilityRule[]) rules[r.facility_id] = r;
@@ -442,16 +499,20 @@ export async function POST(req: NextRequest) {
 
   if (!facts) return NextResponse.json({ reply: fixed.offTopic, lang });
 
+  // a room-by-room list is already clear, and rewording would lose the layout
+  const keepAsIs = facts.includes("\n") && !otherScript;
+
   // phrase the answer (LLM if available, the facts themselves otherwise)
-  const phrased = await llm(
+  const phrased = keepAsIs ? null : await llm(
     "You are a campus facility booking assistant in Malaysia. Answer the user's question using ONLY the facts provided. " +
-      "Be brief and friendly. Keep every time, date and facility name exactly as given. Do not invent any information. " +
+      "Be brief and friendly. Keep every time, date and facility name exactly as given, and keep any list one item per line. Do not invent any information. " +
       "Booking campus facilities costs nothing, so \"free\" or \"available\" means not booked at that time. " +
       "If the facts do not answer the question, say so. " +
       (otherScript
         ? "Reply in the same language as the question; keep facility names as given."
         : lang === "ms" ? "Reply in Bahasa Melayu (Malaysia), in a natural, friendly tone." : "Reply in English."),
-    `Question: ${q}\nFacts: ${facts}`
+    `Question: ${q}\nFacts: ${facts}`,
+    PHRASE_LIMIT_MS
   );
 
   return NextResponse.json({ reply: phrased ?? facts, lang });

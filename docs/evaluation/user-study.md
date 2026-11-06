@@ -1,5 +1,7 @@
 # User study protocol (objective 5: usability, SUS > 68)
 
+Printable kit (consent form, task cards, observation sheet, questionnaire, Google Form layout): https://claude.ai/artifact/NQxVMN4CjzRWRsVak89PJq. Export it to Word or PDF from the doc's menu to print.
+
 ## Before the session
 
 1. Remove test data in Supabase: run `supabase/seed-test-data-remove.sql`.

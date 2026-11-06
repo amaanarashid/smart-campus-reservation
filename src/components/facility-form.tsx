@@ -63,7 +63,7 @@ export function RuleFields({ value, onChange }: { value: RuleDraft; onChange: (v
       </Field>
       <Field label="Approval">
         <Select value={value.auto_approve ? "auto" : "manual"} onValueChange={(v) => set({ auto_approve: v === "auto" })}>
-          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-full" aria-label="Approval"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="manual">Manager approves</SelectItem>
             <SelectItem value="auto">Automatic</SelectItem>

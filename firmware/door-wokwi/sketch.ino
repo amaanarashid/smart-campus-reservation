@@ -1,6 +1,9 @@
 /*
  * Campus Reserve - smart library room (Wokwi simulation, ESP32)
  *
+ * CONNECT   One firmware for every room. Until an admin connects it, the door
+ *           shows a 6-digit code to type into Admin -> Smart room. See pairDevice().
+ *
  * DOOR      Keypad code -> Vercel checks it against the booking running now
  *           -> servo lock opens and the booking is checked in. Relocks once
  *           the door has been opened and shut, or after a few seconds.
@@ -30,8 +33,8 @@
  *             minute. The server says whether an extension is possible.
  *
  * REMOTE     Admins / the room's managers control the room from the web app
- *           (next to its 3D twin). Commands arrive over MQTT (TLS, HiveMQ
- *           Cloud), signed with HMAC-SHA256 using SHA-256(DEVICE_KEY) as the
+ *           (next to its 3D twin). Commands arrive over MQTT (TLS, EMQX
+ *           Cloud), signed with HMAC-SHA256 using SHA-256(device key) as the
  *           key; the device rejects bad signatures, expired and repeated
  *           commands, acts, and confirms over HTTP. If MQTT is down, the same
  *           commands come with the 30 s status poll instead.
@@ -73,23 +76,29 @@
 #include <ESP32Servo.h>
 #include <Adafruit_NeoPixel.h>
 #include <PubSubClient.h>
+#include <Preferences.h>
 #include <time.h>
 #include "mbedtls/md.h"
+#ifdef REAL_BOARD
+#include <WiFiManager.h>
+#endif
 
 // ------------------------------------------------------------------ CONFIG --
-const char *API_BASE   = "https://smart-campus-reservation.vercel.app";  // no trailing slash
-const char *DEVICE_ID  = "f5ea6baa-1b10-46da-b125-cec0f9135f20";        // from register_room_device()
-const char *DEVICE_KEY = "library-door-demo-7Qx92kLm4Tz8";
+// The same firmware runs in every room: there is nothing to fill in per room.
+// A door that is not connected makes its own key and shows a 6-digit code. An
+// admin types the code in Admin -> Smart room -> Connect a room, and the server
+// then tells the door its device id and the MQTT broker login.
+const char *API_BASE = "https://smart-campus-reservation.vercel.app";  // no trailing slash
+const unsigned long PAIR_POLL_MS = 4000;  // how often an unconnected door asks
 
-// MQTT broker for remote control (HiveMQ Cloud -> your cluster -> Overview /
-// Access Management). Leave MQTT_HOST empty to use only the HTTP fallback.
-const char *MQTT_HOST = "f16c11e6.ala.asia-southeast1.emqxsl.com";   // EMQX Cloud Serverless
-const int   MQTT_PORT = 8883;            // TLS
-const char *MQTT_USER = "campus-room";
-const char *MQTT_PASS = "campus-room123";
-
-const char *WIFI_SSID = "Wokwi-GUEST";   // Wokwi's simulated internet access
-const char *WIFI_PASS = "";
+#ifdef REAL_BOARD                         // pio run -e board (see platformio.ini)
+const char *CONNECTION = "mqtt";          // stored as "Physical"
+const char *SETUP_WIFI = "CampusRoom-Setup";  // the door's own Wi-Fi setup network
+const int SETUP_TIMEOUT_S = 180;          // then retry, in case the router was just down
+#else
+const char *CONNECTION = "wokwi";         // stored as "Simulated"
+const char *WIFI_SSID = "Wokwi-GUEST";    // Wokwi's simulated internet access
+#endif
 
 // -------------------------------------------------------------------- pins --
 // Door
@@ -149,6 +158,12 @@ WiFiClientSecure mqttNet;
 PubSubClient mqtt(mqttNet);
 
 // -------------------------------------------------------------------- state --
+// identity: the key stays on this device; the rest comes from the server
+Preferences prefs;
+String deviceKey = "", deviceId = "";
+String mqttHost = "", mqttUser = "", mqttPass = "";
+int mqttPort = 8883;
+int authFails = 0;                       // status polls refused in a row
 // door + screen
 String code = "";
 String statusLine1 = "Connecting...", statusLine2 = "";
@@ -312,7 +327,7 @@ int request(const char *method, const String &path, const String &body, JsonDocu
     apiReady = true;
   }
   if (!http.begin(apiNet, String(API_BASE) + path)) return -2;
-  http.addHeader("x-device-key", DEVICE_KEY);
+  http.addHeader("x-device-key", deviceKey);
   http.addHeader("Content-Type", "application/json");
   int status = strcmp(method, "POST") == 0 ? http.POST(body) : http.GET();
   if (status > 0) {
@@ -328,7 +343,7 @@ int request(const char *method, const String &path, const String &body, JsonDocu
 
 // Tell the server what happened in the room. detailJson must be valid JSON.
 int report(const char *kind, const String &detailJson, JsonDocument &out) {
-  String body = String("{\"device_id\":\"") + DEVICE_ID + "\",\"kind\":\"" + kind +
+  String body = String("{\"device_id\":\"") + deviceId + "\",\"kind\":\"" + kind +
                 "\",\"detail\":" + detailJson + "}";
   int status = request("POST", "/api/room/event", body, out);
   Serial.printf("event %s -> %d\n", kind, status);
@@ -341,8 +356,9 @@ void report(const char *kind, const String &detailJson = "null") {
 
 void refreshStatus() {
   JsonDocument doc;
-  int status = request("GET", String("/api/room/status?device_id=") + DEVICE_ID, "", doc);
+  int status = request("GET", String("/api/room/status?device_id=") + deviceId, "", doc);
   if (status == 200 && doc["ok"].as<bool>()) {
+    authFails = 0;
     statusLine1 = doc["display"]["line1"].as<String>();
     statusLine2 = doc["display"]["line2"].as<String>();
     bookingState = doc["state"].as<String>();
@@ -358,13 +374,126 @@ void refreshStatus() {
     if (ld != lockdown) { lockdown = ld; code = ""; extendMode = false; }
     for (JsonVariant c : doc["commands"].as<JsonArray>())
       handleCommand(c["cmd"].as<String>(), c["sig"].as<String>(), "http");
-  } else if (status == 401) {
-    statusLine1 = "Device not registered"; statusLine2 = "check ID / key";
+  } else if (status == 401 || status == 403) {
+    // disconnected or replaced in the admin console. Ask a few times first, so
+    // a passing server fault does not restart a door that is in use.
+    statusLine1 = "Reconnecting..."; statusLine2 = "";
+    if (++authFails >= 3) { draw(); delay(1000); ESP.restart(); }
   } else {
+    authFails = 0;
     statusLine1 = "Server unreachable"; statusLine2 = "HTTP " + String(status);
   }
   lastStatus = millis();
   draw();
+}
+
+// ================================================================ pairing ==
+void drawSetup(const String &line1, const String &line2, const String &big = "") {
+  oled.clearDisplay();
+  oled.setTextColor(SSD1306_WHITE);
+  oled.setTextSize(1);
+  oled.setCursor(0, 0);
+  oled.println(line1);
+  oled.setCursor(0, 11);
+  oled.println(line2);
+  if (big.length()) {
+    oled.drawLine(0, 22, 127, 22, SSD1306_WHITE);
+    oled.setTextSize(2);
+    oled.setCursor((128 - (int)big.length() * 12) / 2, 34);
+    oled.println(big);
+  }
+  oled.display();
+}
+
+#ifndef BUILD_SECRET
+String newKey() {
+  uint8_t bytes[24];
+  esp_fill_random(bytes, sizeof(bytes));   // true random once Wi-Fi is running
+  String key = toHex(bytes, sizeof(bytes));
+  prefs.putString("key", key);
+  return key;
+}
+#endif
+
+// A real board keeps a random key in its flash. A simulated build gets a stable
+// one from device_secret.py, because a simulator may start with empty flash.
+String loadKey() {
+#ifdef BUILD_SECRET
+  return String(BUILD_SECRET);
+#else
+  String key = prefs.getString("key", "");
+  return key.length() >= 32 ? key : newKey();
+#endif
+}
+
+// Waits here until an admin has connected this door to a room. The door stays
+// locked, and the key is never printed.
+void pairDevice() {
+  String shown = "";
+  while (true) {
+    JsonDocument doc;
+    int status = request("POST", "/api/room/pair", String("{\"connection\":\"") + CONNECTION + "\"}", doc);
+    if (status == 200 && doc["ok"].as<bool>()) {
+      if (doc["paired"].as<bool>()) {
+        deviceId = doc["device_id"].as<String>();
+        mqttHost = doc["mqtt"]["host"] | "";
+        mqttPort = doc["mqtt"]["port"] | 8883;
+        mqttUser = doc["mqtt"]["user"] | "";
+        mqttPass = doc["mqtt"]["pass"] | "";
+#ifndef BUILD_SECRET
+        prefs.putBool("paired", true);
+#endif
+        if (shown.length()) {              // it was waiting: tell whoever is at the door
+          drawSetup("Connected!", doc["room"].as<String>());
+          beep(2, 1400);
+          delay(1500);
+        }
+        Serial.println("Connected as " + doc["room"].as<String>());
+        return;
+      }
+#ifndef BUILD_SECRET
+      // It was connected before and has been disconnected or replaced. Its old
+      // key is finished with, so start again with a new one.
+      if (prefs.getBool("paired", false)) {
+        prefs.putBool("paired", false);
+        deviceKey = newKey();
+        apiNet.stop();
+        continue;
+      }
+#endif
+      String pairCode = doc["code"] | "";
+      if (pairCode.length() == 6) {
+        if (pairCode != shown) {
+          shown = pairCode;
+          Serial.println("Pairing code: " + pairCode);
+          drawSetup("Connect this room", "Admin > Smart room", pairCode.substring(0, 3) + " " + pairCode.substring(3));
+        }
+      } else {
+        shown = "";
+        drawSetup("Too many doors waiting", "Trying again...");
+      }
+    } else {
+      shown = "";
+      drawSetup("Server unreachable", status > 0 ? "HTTP " + String(status) + ", retrying" : "Retrying...");
+    }
+    delay(PAIR_POLL_MS);
+  }
+}
+
+// Simulated: Wokwi's network. Real board: saved Wi-Fi, or if that fails the door
+// opens its own setup network, where a phone picks the Wi-Fi and enters the password.
+void connectWifi() {
+  drawSetup("Connecting to Wi-Fi", "");
+#ifdef REAL_BOARD
+  WiFiManager wm;
+  wm.setConfigPortalTimeout(SETUP_TIMEOUT_S);
+  wm.setAPCallback([](WiFiManager *) { drawSetup("On a phone, join Wi-Fi", SETUP_WIFI); });
+  if (!wm.autoConnect(SETUP_WIFI)) ESP.restart();
+#else
+  WiFi.begin(WIFI_SSID, "", 6);
+  while (WiFi.status() != WL_CONNECTED) { delay(250); Serial.print("."); }
+#endif
+  Serial.println("WiFi connected");
 }
 
 // ================================================================== door ==
@@ -388,7 +517,7 @@ void submitCode() {
   if (code.length() != 6) { showMessage("Enter 6 digits", "then press #"); beep(1, 400); return; }
   showMessage("Checking...", "");
   JsonDocument doc;
-  String body = String("{\"device_id\":\"") + DEVICE_ID + "\",\"code\":\"" + code + "\"}";
+  String body = String("{\"device_id\":\"") + deviceId + "\",\"code\":\"" + code + "\"}";
   int status = request("POST", "/api/room/unlock", body, doc);
   code = "";
 
@@ -415,7 +544,7 @@ void submitExtend() {
   if (code.length() != 6) { code = ""; showMessage("Enter 6 digits", "Press A to retry"); beep(1, 400); return; }
   showMessage("Extending...", "");
   JsonDocument doc;
-  String body = String("{\"device_id\":\"") + DEVICE_ID + "\",\"code\":\"" + code + "\"}";
+  String body = String("{\"device_id\":\"") + deviceId + "\",\"code\":\"" + code + "\"}";
   int status = request("POST", "/api/room/extend", body, doc);
   code = "";
   if (status == 200 && doc["ok"].as<bool>()) {
@@ -660,7 +789,7 @@ bool sameHex(const String &a, const String &b) {     // constant-time compare
 
 void ack(const String &id, bool ok, const char *via, const String &detailJson) {
   JsonDocument ignored;
-  String body = String("{\"device_id\":\"") + DEVICE_ID + "\",\"command_id\":\"" + id +
+  String body = String("{\"device_id\":\"") + deviceId + "\",\"command_id\":\"" + id +
                 "\",\"ok\":" + (ok ? "true" : "false") + ",\"via\":\"" + via + "\",\"detail\":" + detailJson + "}";
   int st = request("POST", "/api/room/ack", body, ignored);
   Serial.printf("ack %s -> %d\n", id.c_str(), st);
@@ -731,11 +860,11 @@ void onMqtt(char *topic, byte *payload, unsigned int len) {
 
 // Keep the MQTT link up without blocking the room: one attempt every 5 s.
 void ensureMqtt() {
-  if (strlen(MQTT_HOST) == 0 || WiFi.status() != WL_CONNECTED || mqtt.connected()) return;
+  if (mqttHost.length() == 0 || WiFi.status() != WL_CONNECTED || mqtt.connected()) return;
   if (millis() - lastMqttTry < 5000) return;
   lastMqttTry = millis();
-  String clientId = String("room-") + String(DEVICE_ID).substring(0, 8) + "-" + String(esp_random() & 0xffff, HEX);
-  if (mqtt.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)) {
+  String clientId = String("room-") + deviceId.substring(0, 8) + "-" + String(esp_random() & 0xffff, HEX);
+  if (mqtt.connect(clientId.c_str(), mqttUser.c_str(), mqttPass.c_str())) {
     mqtt.subscribe(cmdTopic.c_str(), 1);
     Serial.println("MQTT connected, listening on " + cmdTopic);
   } else {
@@ -764,18 +893,19 @@ void setup() {
   lockServo.write(LOCKED_DEG);
 
   if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) Serial.println("OLED not found");
-  draw();
 
-  WiFi.begin(WIFI_SSID, WIFI_PASS, 6);
-  Serial.print("WiFi");
-  while (WiFi.status() != WL_CONNECTED) { delay(250); Serial.print("."); }
-  Serial.println(" connected");
-
+  connectWifi();
   configTime(0, 0, "pool.ntp.org", "time.google.com");   // real time, to reject expired commands
-  keyHash = sha256Hex(DEVICE_KEY);
-  cmdTopic = String("campus/rooms/") + DEVICE_ID + "/cmd";
+
+  prefs.begin("campus", false);
+  deviceKey = loadKey();
+  drawSetup("Connecting...", "");
+  pairDevice();                          // returns once an admin has connected this door
+
+  keyHash = sha256Hex(deviceKey);
+  cmdTopic = String("campus/rooms/") + deviceId + "/cmd";
   mqttNet.setInsecure();                 // demo shortcut, as for HTTPS (see README)
-  mqtt.setServer(MQTT_HOST, MQTT_PORT);
+  if (mqttHost.length()) mqtt.setServer(mqttHost.c_str(), mqttPort);
   mqtt.setBufferSize(1024);
   mqtt.setCallback(onMqtt);
 

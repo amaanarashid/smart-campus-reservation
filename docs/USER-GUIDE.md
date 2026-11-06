@@ -75,7 +75,7 @@ The admin console has tabs along the top.
 - **Users**: set each person's **member type** (undergraduate, postgraduate, staff) and **role** (student, facility manager, administrator).
 - **Approvals**: requests for facilities that have no manager.
 - **Feedback**: every room problem on campus.
-- **Smart room**: rooms with a connected device. **Connect a room** links an existing room to a simulated (Wokwi) or physical ESP32 and shows the device ID and key once, to paste into the firmware. Each room has a live view (3D twin, readings, remote control, energy chart), plus **New device key** and **Disconnect** in its menu.
+- **Smart room**: rooms with a connected device. To connect a room, turn on its door device (simulated in Wokwi or a real ESP32), then in **Connect a room** pick the room and type the 6-digit code on the door's screen. The door connects by itself. Each room has a live view (3D twin, readings, remote control, energy chart), plus **Replace device** and **Disconnect** in its menu.
 - **Equipment** and **Records** (the full activity log, with filters).
 
 ## Smart room door (library demo)
