@@ -25,6 +25,7 @@ import VenueArt from "@/components/venue-art";
 import { Field, RuleFields, type RuleDraft } from "@/components/facility-form";
 import { AddRoomWizard, NewFacilityWizard } from "@/components/facility-wizards";
 import { accessLabel, limitsLabel } from "@/lib/access";
+import { useConfirm } from "@/components/confirm-dialog";
 
 /**
  * Admin -> Facilities. Overview grouped by location (venue card with a 2D
@@ -69,6 +70,7 @@ export default function AdminFacilities({ categories, facilities, rules, fmRows,
   reload: () => Promise<void>;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const [confirmDialog, confirm] = useConfirm();
   const [search, setSearch] = useState("");
   const [draft, setDraft] = useState<RuleDraft | null>(null);
   const [saving, setSaving] = useState(false);
@@ -108,7 +110,11 @@ export default function AdminFacilities({ categories, facilities, rules, fmRows,
 
   async function deleteType(c: FacilityCategory) {
     const n = roomsOf(c.id).length;
-    if (!window.confirm(`Delete "${c.name}"${n ? ` and its ${n} room(s)` : ""}? Their bookings are removed too.`)) return;
+    if (!(await confirm({
+      title: `Delete "${c.name}"?`,
+      body: `${n ? `Its ${n} room${n === 1 ? "" : "s"} and their` : "Its"} bookings are removed too.`,
+      action: "Delete", destructive: true,
+    }))) return;
     const { error } = await supabase.from("facility_categories").delete().eq("id", c.id);
     if (error) { toast.error(error.message); return; }
     toast.success(`${c.name} deleted`);
@@ -117,7 +123,7 @@ export default function AdminFacilities({ categories, facilities, rules, fmRows,
   }
 
   async function deleteRoom(f: Facility) {
-    if (!window.confirm(`Delete "${f.name}"? Its bookings are removed too.`)) return;
+    if (!(await confirm({ title: `Delete "${f.name}"?`, body: "Its bookings are removed too.", action: "Delete", destructive: true }))) return;
     const { error } = await supabase.from("facilities").delete().eq("id", f.id);
     if (error) { toast.error(error.message); return; }
     toast.success(`${f.name} deleted`);
@@ -180,6 +186,7 @@ export default function AdminFacilities({ categories, facilities, rules, fmRows,
   // ---------- dialogs (shared by both views) ----------
   const dialogs = (
     <>
+      {confirmDialog}
       {wizard?.kind === "facility" && (
         <NewFacilityWizard open startVenue={wizard.venue} categories={categories} facilities={facilities}
           onClose={() => setWizard(null)}

@@ -28,6 +28,7 @@ import {
 import FacilityIso from "@/components/facility-iso";
 import SmartRoomConnect, { DEVICE_KIND, type SmartDevice } from "@/components/smart-room-connect";
 import { BOARDS, isBoard } from "@/lib/room-config";
+import { useConfirm } from "@/components/confirm-dialog";
 import { fmtRelativeDay, fmtTime, myAt, myDateKey } from "@/lib/time";
 
 // heavy tabs (charts, 3D twin, editors) download only when opened
@@ -94,6 +95,7 @@ export default function AdminDashboard() {
   const [devices, setDevices] = useState<SmartDevice[]>([]);       // smart-room devices (Wokwi / MQTT)
   const [connectOpen, setConnectOpen] = useState(false);
   const [replacing, setReplacing] = useState<SmartDevice | null>(null);
+  const [confirmDialog, confirm] = useConfirm();
 
   // the live parts: approvals, stats, today's bookings, devices, feedback, log.
   // Everything runs at once - one round trip of waiting instead of ten in a row.
@@ -277,7 +279,11 @@ export default function AdminDashboard() {
       (!q || f.name.toLowerCase().includes(q) || f.venue.toLowerCase().includes(q));
   });
   async function disconnect(d: SmartDevice) {
-    if (!window.confirm(`Disconnect ${d.label}? The device stops working and shows a pairing code again. The room's history is kept.`)) return;
+    if (!(await confirm({
+      title: `Disconnect ${d.label}?`,
+      body: "The device stops working and shows a pairing code again. The room's history is kept.",
+      action: "Disconnect", destructive: true,
+    }))) return;
     // through the API, which also removes the device's own broker login
     const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch("/api/room/disconnect", {
@@ -310,6 +316,7 @@ export default function AdminDashboard() {
     >
       {/* top-center: on phones a bottom toast covered the suggestion cards it was announcing */}
       <Toaster richColors position="top-center" />
+      {confirmDialog}
       {loading ? (
         <AdminSkeleton />
       ) : (
