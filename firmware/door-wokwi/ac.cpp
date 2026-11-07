@@ -35,7 +35,7 @@ static unsigned long learnUntil = 0;
 static const uint16_t RAW_MAX = 1000;               // entries; AC frames are a few hundred
 
 static bool rawStored(const char *slot) {
-  irStore.begin("ir", true);
+  irStore.begin("ir", false);       // read-write: creates it on a first start (no NOT_FOUND error)
   size_t n = irStore.getBytesLength(slot);
   irStore.end();
   return n > 0;
@@ -56,7 +56,7 @@ void acBegin() {
 }
 
 static bool sendRaw(const char *slot) {
-  irStore.begin("ir", true);
+  irStore.begin("ir", false);       // read-write: creates it on a first start (no NOT_FOUND error)
   size_t bytes = irStore.getBytesLength(slot);
   if (bytes == 0 || bytes > RAW_MAX * 2) { irStore.end(); return false; }
   uint16_t *buf = new uint16_t[bytes / 2];

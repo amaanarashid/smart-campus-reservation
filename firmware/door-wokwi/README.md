@@ -384,8 +384,9 @@ lights go off and 2 minutes empty before early release keep it watchable.
 Realistic values are about 10 and 15 minutes. They're constants at the top of
 `sketch.ino`, so say which ones you'd use in deployment.
 
-**Capturing the signal for the report.** The serial monitor prints a CSV line
-every 200 ms:
+**Capturing the signal for the report.** Set `LOG_SIGNAL = true` at the top of
+`room.cpp` and rebuild (`esp32` env); the serial monitor then prints a CSV line
+every 200 ms (off by default so the monitor stays readable):
 
 ```
 sig,ms,occupied,x,y,state

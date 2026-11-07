@@ -19,7 +19,9 @@ static const float ALPHA = 0.10f;               // tau = -T/ln(1-a) = 1.9 s
 const float TH_ON  = 0.35f;                     // EMPTY -> OCCUPIED
 const float TH_OFF = 0.08f;                     // below this counts as "no one moving"
 static const float P_MOVE = 0.60f;              // simulated occupant shows motion in a sample
-static const bool LOG_SIGNAL = true;            // CSV for the report: sig,ms,occupied,x,y,state
+// CSV for the report (sig,ms,occupied,x,y,state, five lines a second). Off so the
+// serial monitor stays readable; set true to capture the filter for a plot.
+static const bool LOG_SIGNAL = false;
 
 // --------------------------------------------- timings (demo vs real values) --
 static const unsigned long VACANCY_MS       = 60000UL;   // demo 1 min   | real 10 min

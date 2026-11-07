@@ -135,7 +135,7 @@ void saveConfig(JsonVariantConst j, int version) {
 }
 
 bool loadSavedConfig(RoomConfig &out) {
-  store.begin("roomcfg", true);
+  store.begin("roomcfg", false);   // read-write: creates it on a first start (no NOT_FOUND error)
   String s = store.getString("json", "");
   int v = store.getInt("v", 0);
   store.end();
@@ -160,7 +160,7 @@ bool useBakedConfig(RoomConfig &out) {
   String baked = bakedConfigJson();
   if (baked.length() == 0) return false;
   uint32_t h = hashText(baked);
-  store.begin("roomcfg", true);
+  store.begin("roomcfg", false);   // read-write: creates it on a first start (no NOT_FOUND error)
   uint32_t seen = store.getUInt("baked", 0);
   store.end();
   if (seen == h) return false;              // already taken over on an earlier start
