@@ -38,10 +38,15 @@ const clickText = (text, ...also) => async (page) => {
       const s = e.textContent?.trim().replace(/\s+/g, " ") ?? "";
       return s.startsWith(t) && more.every((m) => s.includes(m));
     });
-    if (el) { el.click(); return true; }
-    return false;
+    if (!el) return false;
+    document.querySelectorAll("[data-audit-target]").forEach((x) => x.removeAttribute("data-audit-target"));
+    el.setAttribute("data-audit-target", "1");
+    el.scrollIntoView({ block: "center" });
+    return true;
   }, text, also);
   if (!ok) throw new Error(`no clickable "${text}"`);
+  // a real mouse click: Radix tabs switch on pointer-down, which el.click() does not send
+  await page.click("[data-audit-target]");
   await new Promise((r) => setTimeout(r, 900));
 };
 const wait = (ms) => async () => new Promise((r) => setTimeout(r, ms));
@@ -63,6 +68,7 @@ const VIEWS = [
   ["student-booking-form", "student", "/student", [clickText("Sports Complex"), clickText("Court 1", "up to 4 people")]],
   ["student-suggestions", "student", "/student", [clickText("Sports Complex"), clickText("Court 1", "up to 4 people"), clickText("Tomorrow"), chooseOption("Start time", "3:00 pm"), clickText("Request this time"), wait(1500)]],
   ["student-report-problem", "student", "/student", [clickText("Report a problem")]],
+  ["student-cancel-confirm", "student", "/student", [clickText("My bookings"), clickText("Cancel")]],
   ["student-chatbot", "student", "/student", [async (p) => { await p.evaluate(() => document.querySelector("[aria-label*='chat' i], [aria-label*='assistant' i]")?.click()); await wait(900)(); }]],
   ["manager-home", "manager", "/facility-manager", []],
   ["admin-overview", "admin", "/admin", []],
@@ -110,7 +116,6 @@ for (const [name, role, url, steps] of VIEWS) {
     } catch (e) { error = e.message; }
     await page.addScriptTag({ content: AXE });
     const axe = await page.evaluate(async () => {
-      // eslint-disable-next-line no-undef
       const r = await axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"] }, resultTypes: ["violations"] });
       return r.violations.map((v) => ({ id: v.id, impact: v.impact, help: v.help, tags: v.tags.filter((t) => t.startsWith("wcag")), nodes: v.nodes.length, examples: v.nodes.slice(0, 3).map((n) => ({ target: n.target.join(" "), summary: n.failureSummary?.split("\n").slice(0, 3).join(" ") })) }));
     });

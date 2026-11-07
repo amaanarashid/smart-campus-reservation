@@ -5,12 +5,16 @@
   "description": "Objective 5 evaluation harness: a throwaway local Postgres 17 with every Supabase migration applied.",
   "scripts": {
     "concurrency": "node concurrency.mjs",
-    "mqtt": "cd ../.. && npx tsx scripts/eval/mqtt-rtt.ts"
+    "mqtt": "cd ../.. && npx tsx scripts/eval/mqtt-rtt.ts",
+    "audit": "node ui/audit.mjs --shots",
+    "klm": "cd ../.. && npx tsx scripts/eval/klm.ts"
   },
   "dependencies": {
     "embedded-postgres": "17.5.0-beta.15",
     "pg": "^8.13.0",
     "aedes": "0.51.3",
-    "mqtt": "^5.16.1"
+    "mqtt": "^5.16.1",
+    "puppeteer-core": "^23.11.1",
+    "axe-core": "^4.14.0"
   }
 }

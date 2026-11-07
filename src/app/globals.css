@@ -63,7 +63,7 @@
   --secondary: oklch(0.955 0.008 70);
   --secondary-foreground: oklch(0.32 0.02 260);
   --muted: oklch(0.955 0.008 70);
-  --muted-foreground: oklch(0.5 0.02 260);
+  --muted-foreground: oklch(0.47 0.02 260); /* AA (4.5:1) even on the muted/tinted fills, e.g. inactive tabs */
   --accent: oklch(0.94 0.02 25);
   --accent-foreground: oklch(0.4 0.15 25);
   --destructive: oklch(0.53 0.22 27); /* darker than the shadcn default: small red text on red/10 tints passes WCAG AA (5.4:1) */
@@ -253,7 +253,7 @@
 
 /* Toast colours (sonner richColors): the library's light-theme text colours are
    just under AA on their tinted backgrounds (success 4.25:1). Darker text, same hues. */
-html [data-sonner-toaster][data-theme="light"] {
+html [data-sonner-toaster][data-sonner-theme="light"] {
   --success-text: hsl(140, 100%, 22%);
   --info-text: hsl(210, 92%, 36%);
   --warning-text: hsl(31, 92%, 28%);

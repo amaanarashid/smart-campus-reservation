@@ -6,3 +6,6 @@ ESP32Servo
 ArduinoJson
 Adafruit NeoPixel
 PubSubClient
+IRremoteESP8266
+DHT sensor library
+Adafruit Unified Sensor

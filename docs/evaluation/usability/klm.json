@@ -1,0 +1,766 @@
+{
+  "generated": "2026-11-06T18:42:25.364Z",
+  "method": "KLM-GOMS (Card, Moran & Newell 1983; Kieras 2001). Predictions for a practised user, desktop + mouse. No participants.",
+  "operators": {
+    "K": 0.28,
+    "P": 1.1,
+    "B": 0.1,
+    "H": 0.4,
+    "M": 1.35
+  },
+  "assumed_system_s": {
+    "booking_request": 0.5,
+    "chatbot_answer": 1.5
+  },
+  "variants": [
+    {
+      "name": "standard",
+      "t": {
+        "K": 0.28,
+        "P": 1.1,
+        "B": 0.1,
+        "H": 0.4,
+        "M": 1.35
+      }
+    },
+    {
+      "name": "expert (K 0.12, M 1.2)",
+      "t": {
+        "K": 0.12,
+        "P": 1.1,
+        "B": 0.1,
+        "H": 0.4,
+        "M": 1.2
+      }
+    },
+    {
+      "name": "novice-ish (K 0.5, P 1.5)",
+      "t": {
+        "K": 0.5,
+        "P": 1.5,
+        "B": 0.1,
+        "H": 0.4,
+        "M": 1.35
+      }
+    }
+  ],
+  "tasks": [
+    {
+      "id": "T1",
+      "name": "Book a badminton court tomorrow 5-6 pm for 4 people",
+      "note": null,
+      "user": 20.1,
+      "system": 0.5,
+      "total": 20.6,
+      "counts": {
+        "K": 0,
+        "P": 7,
+        "B": 16,
+        "H": 0,
+        "M": 8
+      },
+      "steps": [
+        {
+          "ops": "M P B B",
+          "note": "Pick the place: 'Sports Complex' card"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Pick the room: 'Court 2' card"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Day: 'Tomorrow' chip"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Open the 'Start time' list"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Choose '5:00 pm'"
+        },
+        {
+          "ops": "M P B B",
+          "note": "People: '+' (2 -> 3)"
+        },
+        {
+          "ops": "B B",
+          "note": "People: '+' again (3 -> 4)"
+        },
+        {
+          "ops": "M P B B",
+          "note": "'Request this time'",
+          "wait": 0.5
+        },
+        {
+          "ops": "M",
+          "note": "Read the confirmation"
+        }
+      ],
+      "variants": {
+        "standard": 20.6,
+        "expert (K 0.12, M 1.2)": 19.4,
+        "novice-ish (K 0.5, P 1.5)": 23.4
+      }
+    },
+    {
+      "id": "T1-form",
+      "name": "Same booking on a typical free-text form (comparison design)",
+      "note": "A conventional form: facility drop-down, typed date and times, typed group size. Clashes are only found after submitting.",
+      "user": 34.38,
+      "system": 0.5,
+      "total": 34.88,
+      "counts": {
+        "K": 21,
+        "P": 7,
+        "B": 14,
+        "H": 8,
+        "M": 12
+      },
+      "steps": [
+        {
+          "ops": "M P B B",
+          "note": "Open the facility drop-down"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Choose 'Badminton Court 2'"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Click the date field"
+        },
+        {
+          "ops": "H M K*10",
+          "note": "Type the date"
+        },
+        {
+          "ops": "H M P B B",
+          "note": "Hand to mouse, click the start-time field"
+        },
+        {
+          "ops": "H M K*5",
+          "note": "Type the start time"
+        },
+        {
+          "ops": "H M P B B",
+          "note": "Click the end-time field"
+        },
+        {
+          "ops": "H M K*5",
+          "note": "Type the end time"
+        },
+        {
+          "ops": "H M P B B",
+          "note": "Click the group-size field"
+        },
+        {
+          "ops": "H M K*1 H",
+          "note": "Type the group size"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Submit",
+          "wait": 0.5
+        },
+        {
+          "ops": "M",
+          "note": "Read the result"
+        }
+      ],
+      "variants": {
+        "standard": 34.88,
+        "expert (K 0.12, M 1.2)": 29.72,
+        "novice-ish (K 0.5, P 1.5)": 42.3
+      }
+    },
+    {
+      "id": "T2-suggest",
+      "name": "Time is taken: book an AI suggestion",
+      "note": "Starts after the failed request in T1. The suggestion cards appear in place.",
+      "user": 5.35,
+      "system": 0.5,
+      "total": 5.85,
+      "counts": {
+        "K": 0,
+        "P": 1,
+        "B": 2,
+        "H": 0,
+        "M": 3
+      },
+      "steps": [
+        {
+          "ops": "M",
+          "note": "Read why it failed and scan the ranked alternatives"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Click the best suggestion card (books it)",
+          "wait": 0.5
+        },
+        {
+          "ops": "M",
+          "note": "Read the confirmation"
+        }
+      ],
+      "variants": {
+        "standard": 5.85,
+        "expert (K 0.12, M 1.2)": 5.4,
+        "novice-ish (K 0.5, P 1.5)": 6.25
+      }
+    },
+    {
+      "id": "T2-manual-1",
+      "name": "Time is taken: retry by hand, success on try 1",
+      "note": "Without suggestions the student guesses a new time and asks again; each failed try repeats the steps.",
+      "user": 10.65,
+      "system": 0.5,
+      "total": 11.15,
+      "counts": {
+        "K": 0,
+        "P": 3,
+        "B": 6,
+        "H": 0,
+        "M": 5
+      },
+      "steps": [
+        {
+          "ops": "M",
+          "note": "Try 1: decide on another time"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Open the 'Start time' list"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Choose another time"
+        },
+        {
+          "ops": "M P B B",
+          "note": "'Request this time'",
+          "wait": 0.5
+        },
+        {
+          "ops": "M",
+          "note": "Read the result"
+        }
+      ],
+      "variants": {
+        "standard": 11.15,
+        "expert (K 0.12, M 1.2)": 10.4,
+        "novice-ish (K 0.5, P 1.5)": 12.35
+      }
+    },
+    {
+      "id": "T2-manual-2",
+      "name": "Time is taken: retry by hand, success on try 2",
+      "note": "Without suggestions the student guesses a new time and asks again; each failed try repeats the steps.",
+      "user": 21.3,
+      "system": 1,
+      "total": 22.3,
+      "counts": {
+        "K": 0,
+        "P": 6,
+        "B": 12,
+        "H": 0,
+        "M": 10
+      },
+      "steps": [
+        {
+          "ops": "M",
+          "note": "Try 1: decide on another time"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Open the 'Start time' list"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Choose another time"
+        },
+        {
+          "ops": "M P B B",
+          "note": "'Request this time'",
+          "wait": 0.5
+        },
+        {
+          "ops": "M",
+          "note": "Read the result"
+        },
+        {
+          "ops": "M",
+          "note": "Try 2: decide on another time"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Open the 'Start time' list"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Choose another time"
+        },
+        {
+          "ops": "M P B B",
+          "note": "'Request this time'",
+          "wait": 0.5
+        },
+        {
+          "ops": "M",
+          "note": "Read the result"
+        }
+      ],
+      "variants": {
+        "standard": 22.3,
+        "expert (K 0.12, M 1.2)": 20.8,
+        "novice-ish (K 0.5, P 1.5)": 24.7
+      }
+    },
+    {
+      "id": "T2-manual-3",
+      "name": "Time is taken: retry by hand, success on try 3",
+      "note": "Without suggestions the student guesses a new time and asks again; each failed try repeats the steps.",
+      "user": 31.95,
+      "system": 1.5,
+      "total": 33.45,
+      "counts": {
+        "K": 0,
+        "P": 9,
+        "B": 18,
+        "H": 0,
+        "M": 15
+      },
+      "steps": [
+        {
+          "ops": "M",
+          "note": "Try 1: decide on another time"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Open the 'Start time' list"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Choose another time"
+        },
+        {
+          "ops": "M P B B",
+          "note": "'Request this time'",
+          "wait": 0.5
+        },
+        {
+          "ops": "M",
+          "note": "Read the result"
+        },
+        {
+          "ops": "M",
+          "note": "Try 2: decide on another time"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Open the 'Start time' list"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Choose another time"
+        },
+        {
+          "ops": "M P B B",
+          "note": "'Request this time'",
+          "wait": 0.5
+        },
+        {
+          "ops": "M",
+          "note": "Read the result"
+        },
+        {
+          "ops": "M",
+          "note": "Try 3: decide on another time"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Open the 'Start time' list"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Choose another time"
+        },
+        {
+          "ops": "M P B B",
+          "note": "'Request this time'",
+          "wait": 0.5
+        },
+        {
+          "ops": "M",
+          "note": "Read the result"
+        }
+      ],
+      "variants": {
+        "standard": 33.45,
+        "expert (K 0.12, M 1.2)": 31.2,
+        "novice-ish (K 0.5, P 1.5)": 37.05
+      }
+    },
+    {
+      "id": "T3-chat",
+      "name": "Is a discussion room free this evening? (chatbot)",
+      "note": null,
+      "user": 16.95,
+      "system": 1.5,
+      "total": 18.45,
+      "counts": {
+        "K": 40,
+        "P": 1,
+        "B": 2,
+        "H": 1,
+        "M": 3
+      },
+      "steps": [
+        {
+          "ops": "M P B B",
+          "note": "Open 'Ask the assistant'"
+        },
+        {
+          "ops": "H M K*39 K",
+          "note": "Type the question + Enter",
+          "wait": 1.5
+        },
+        {
+          "ops": "M",
+          "note": "Read the answer (covers every room)"
+        }
+      ],
+      "variants": {
+        "standard": 18.45,
+        "expert (K 0.12, M 1.2)": 11.6,
+        "novice-ish (K 0.5, P 1.5)": 27.65
+      }
+    },
+    {
+      "id": "T3-browse",
+      "name": "Is a discussion room free this evening? (checking rooms by hand, 3 rooms)",
+      "note": "Pick the Library, then for each of the 3 rooms: open it, choose 7 pm, check, go back.",
+      "user": 46.45,
+      "system": 1.5,
+      "total": 47.95,
+      "counts": {
+        "K": 0,
+        "P": 16,
+        "B": 32,
+        "H": 0,
+        "M": 19
+      },
+      "steps": [
+        {
+          "ops": "M P B B",
+          "note": "Pick the place: 'Library'"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Open Room A"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Open the 'Start time' list"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Choose '7:00 pm'"
+        },
+        {
+          "ops": "M P B B",
+          "note": "'Request this time' (to see if it is free)",
+          "wait": 0.5
+        },
+        {
+          "ops": "M",
+          "note": "Read the result"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Back to the rooms"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Open Room B"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Open the 'Start time' list"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Choose '7:00 pm'"
+        },
+        {
+          "ops": "M P B B",
+          "note": "'Request this time' (to see if it is free)",
+          "wait": 0.5
+        },
+        {
+          "ops": "M",
+          "note": "Read the result"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Back to the rooms"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Open Room C"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Open the 'Start time' list"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Choose '7:00 pm'"
+        },
+        {
+          "ops": "M P B B",
+          "note": "'Request this time' (to see if it is free)",
+          "wait": 0.5
+        },
+        {
+          "ops": "M",
+          "note": "Read the result"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Back to the rooms"
+        }
+      ],
+      "variants": {
+        "standard": 47.95,
+        "expert (K 0.12, M 1.2)": 45.1,
+        "novice-ish (K 0.5, P 1.5)": 54.35
+      }
+    },
+    {
+      "id": "T4",
+      "name": "Cancel a booking",
+      "note": null,
+      "user": 9.3,
+      "system": 0.5,
+      "total": 9.8,
+      "counts": {
+        "K": 0,
+        "P": 3,
+        "B": 6,
+        "H": 0,
+        "M": 4
+      },
+      "steps": [
+        {
+          "ops": "M P B B",
+          "note": "'My bookings' tab"
+        },
+        {
+          "ops": "M P B B",
+          "note": "'Cancel' on the booking"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Confirm 'Yes, cancel'",
+          "wait": 0.5
+        },
+        {
+          "ops": "M",
+          "note": "Read the confirmation"
+        }
+      ],
+      "variants": {
+        "standard": 9.8,
+        "expert (K 0.12, M 1.2)": 9.2,
+        "novice-ish (K 0.5, P 1.5)": 11
+      }
+    },
+    {
+      "id": "T5",
+      "name": "Get the door code for a booking",
+      "note": null,
+      "user": 6.65,
+      "system": 0.5,
+      "total": 7.15,
+      "counts": {
+        "K": 0,
+        "P": 2,
+        "B": 4,
+        "H": 0,
+        "M": 3
+      },
+      "steps": [
+        {
+          "ops": "M P B B",
+          "note": "'My bookings' tab"
+        },
+        {
+          "ops": "M P B B",
+          "note": "'Door code'",
+          "wait": 0.5
+        },
+        {
+          "ops": "M",
+          "note": "Read the 6-digit code"
+        }
+      ],
+      "variants": {
+        "standard": 7.15,
+        "expert (K 0.12, M 1.2)": 6.7,
+        "novice-ish (K 0.5, P 1.5)": 7.95
+      }
+    },
+    {
+      "id": "T6",
+      "name": "Manager: approve a pending request",
+      "note": null,
+      "user": 5.35,
+      "system": 0.5,
+      "total": 5.85,
+      "counts": {
+        "K": 0,
+        "P": 1,
+        "B": 2,
+        "H": 0,
+        "M": 3
+      },
+      "steps": [
+        {
+          "ops": "M",
+          "note": "Find the request in the approval queue"
+        },
+        {
+          "ops": "M P B B",
+          "note": "'Approve'",
+          "wait": 0.5
+        },
+        {
+          "ops": "M",
+          "note": "See it move to the schedule"
+        }
+      ],
+      "variants": {
+        "standard": 5.85,
+        "expert (K 0.12, M 1.2)": 5.4,
+        "novice-ish (K 0.5, P 1.5)": 6.25
+      }
+    },
+    {
+      "id": "T7",
+      "name": "Admin: new facility type with 2 rooms (wizard)",
+      "note": null,
+      "user": 23.9,
+      "system": 0.5,
+      "total": 24.4,
+      "counts": {
+        "K": 0,
+        "P": 8,
+        "B": 16,
+        "H": 0,
+        "M": 10
+      },
+      "steps": [
+        {
+          "ops": "M P B B",
+          "note": "'Facilities' tab"
+        },
+        {
+          "ops": "M P B B",
+          "note": "'New facility'"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Step 1: pick the location card"
+        },
+        {
+          "ops": "M P B B",
+          "note": "'Next'"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Step 2: pick a preset (e.g. 'Meeting Room')"
+        },
+        {
+          "ops": "M P B B",
+          "note": "'Next'"
+        },
+        {
+          "ops": "M",
+          "note": "Step 3: check the preset rules"
+        },
+        {
+          "ops": "M P B B",
+          "note": "Rooms: '+' (1 -> 2)"
+        },
+        {
+          "ops": "M P B B",
+          "note": "'Create facility + 2 rooms'",
+          "wait": 0.5
+        },
+        {
+          "ops": "M",
+          "note": "Read the confirmation"
+        }
+      ],
+      "variants": {
+        "standard": 24.4,
+        "expert (K 0.12, M 1.2)": 22.9,
+        "novice-ish (K 0.5, P 1.5)": 27.6
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "label": "Booking form: chips/presets vs free-text form",
+      "ours": "T1",
+      "other": "T1-form",
+      "ours_s": 20.6,
+      "other_s": 34.88,
+      "saved_s": 14.28,
+      "saved_pct": 40.9,
+      "holds_in_all_variants": true
+    },
+    {
+      "label": "Clash recovery: suggestion vs 1 manual retry",
+      "ours": "T2-suggest",
+      "other": "T2-manual-1",
+      "ours_s": 5.85,
+      "other_s": 11.15,
+      "saved_s": 5.3,
+      "saved_pct": 47.5,
+      "holds_in_all_variants": true
+    },
+    {
+      "label": "Clash recovery: suggestion vs 2 manual retries",
+      "ours": "T2-suggest",
+      "other": "T2-manual-2",
+      "ours_s": 5.85,
+      "other_s": 22.3,
+      "saved_s": 16.45,
+      "saved_pct": 73.8,
+      "holds_in_all_variants": true
+    },
+    {
+      "label": "Clash recovery: suggestion vs 3 manual retries",
+      "ours": "T2-suggest",
+      "other": "T2-manual-3",
+      "ours_s": 5.85,
+      "other_s": 33.45,
+      "saved_s": 27.6,
+      "saved_pct": 82.5,
+      "holds_in_all_variants": true
+    },
+    {
+      "label": "Free-room question: chatbot vs checking 3 rooms",
+      "ours": "T3-chat",
+      "other": "T3-browse",
+      "ours_s": 18.45,
+      "other_s": 47.95,
+      "saved_s": 29.5,
+      "saved_pct": 61.5,
+      "holds_in_all_variants": true
+    }
+  ]
+}

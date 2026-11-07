@@ -27,6 +27,15 @@ describe("validateCommand", () => {
   });
 });
 
+describe("ir_learn", () => {
+  it("listens 30 s for ON by default, OFF only when asked", () => {
+    expect(validateCommand("ir_learn", {})).toEqual({ ok: true, value: { kind: "ir_learn", args: { slot: "on", secs: 30 } } });
+    expect(validateCommand("ir_learn", { slot: "off", secs: 5 })).toMatchObject({ value: { args: { slot: "off", secs: 10 } } });
+    expect(validateCommand("ir_learn", { slot: "dim" })).toMatchObject({ value: { args: { slot: "on" } } });
+    expect(describeCommand("ir_learn", { slot: "off" })).toMatch(/press OFF/);
+  });
+});
+
 describe("sign and verify", () => {
   const c = validateCommand("lights", { state: "off", mins: 15 });
   if (!c.ok) throw new Error("setup");

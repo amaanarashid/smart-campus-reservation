@@ -44,3 +44,10 @@ report/
 
 # evaluation harness dependencies (scripts/eval: npm install)
 scripts/eval/node_modules
+
+.vercel
+.env*
+
+# downloaded Wokwi simulations hold a device key: never commit them
+campus-*.zip
+firmware/campus-*/

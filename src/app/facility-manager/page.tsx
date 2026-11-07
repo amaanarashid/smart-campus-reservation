@@ -334,7 +334,8 @@ export default function ManagerDashboard() {
       role="facility_manager"
       userName={profile?.full_name}
     >
-      <Toaster richColors />
+      {/* top-center: on phones a bottom toast covered the suggestion cards it was announcing */}
+      <Toaster richColors position="top-center" />
       {loading ? (
         <ManagerSkeleton />
       ) : assignedIds.length === 0 ? (
@@ -351,7 +352,8 @@ export default function ManagerDashboard() {
       ) : (
       <>
         {/* summary strip */}
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {/* 2 x 2 on phones so the queue is not pushed below four full-width cards */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
           {([
             ["Waiting for approval", pending.length, Inbox],
             ["Bookings today", todayApproved.length, CalendarDays],
@@ -359,8 +361,8 @@ export default function ManagerDashboard() {
             ["Attendance to mark", awaitingAttendance, Clock],
           ] as const).map(([label, value, Icon], i) => (
             <Card key={label} className="animate-reveal stagger transition-shadow hover:shadow-md" style={stagger(i)}>
-              <CardContent className="flex items-center gap-4 py-5">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+              <CardContent className="flex items-center gap-4 py-4 sm:py-5">
+                <span className="hidden h-11 w-11 shrink-0 sm:flex items-center justify-center rounded-xl bg-accent text-accent-foreground">
                   <Icon className="h-5 w-5" />
                 </span>
                 <div>
@@ -542,7 +544,7 @@ export default function ManagerDashboard() {
               </CardTitle>
               <CardDescription>Approved bookings. Mark attendance once a session has started.</CardDescription>
             </CardHeader>
-            <CardContent className="xl:max-h-[38rem] xl:overflow-y-auto">
+            <CardContent className="xl:max-h-[38rem] xl:overflow-y-auto" tabIndex={0} role="region" aria-label="Today and upcoming bookings">
               {days.length === 0 ? (
                 <div className="flex flex-col items-center gap-2 py-12 text-center">
                   <CalendarDays className="h-9 w-9 text-muted-foreground/50" />
@@ -657,8 +659,9 @@ export default function ManagerDashboard() {
                     <TableCell>{typeLabel(e.facility_type)}</TableCell>
                     <TableCell>
                       <Input type="number" min={0} defaultValue={e.total_qty} className="w-20" aria-label={`Total ${e.name}`}
-                        onKeyDown={(ev) => ev.key === "Enter" &&
-                          saveQty(e, Number((ev.target as HTMLInputElement).value))} />
+                        title="Saves when you press Enter or leave the box"
+                        onKeyDown={(ev) => ev.key === "Enter" && (ev.target as HTMLInputElement).blur()}
+                        onBlur={(ev) => { const q = Number(ev.target.value); if (Number.isFinite(q) && q >= 0 && q !== e.total_qty) saveQty(e, q); }} />
                     </TableCell>
                   </TableRow>
                 ))}

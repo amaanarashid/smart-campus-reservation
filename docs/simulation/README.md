@@ -4,7 +4,11 @@ Offline evaluation of the slot recommender. No participants were involved.
 Everything here can be regenerated:
 
 ```
-npx tsx scripts/simulate-recommender.ts
+npx tsx scripts/simulate-recommender.ts            # everything (~3 min)
+# or one section at a time, merged into summary.json:
+npx tsx scripts/simulate-recommender.ts --part=main      # headline + ablations + latency (~50 s)
+npx tsx scripts/simulate-recommender.ts --part=seeds     # 10 random seeds (~85 s)
+npx tsx scripts/simulate-recommender.ts --part=context   # demand + student behaviour (~60 s)
 python scripts/plot-simulation.py
 ```
 
@@ -88,6 +92,38 @@ Figures: `learning-curves.png` and `by-student-type.png`.
   follow the linear model LinUCB assumes, and it still gains 19 points over
   fixed weights.
 
+## Sensitivity: does the result depend on the assumptions?
+
+The headline result rests on choices made by the author: one random seed, 35 % of court-hours busy, and students who read all four cards and never change their minds. Each of these was varied, with 120 students per run (30 of each type) and the same paired comparison. The gain shown is LinUCB minus fixed weights over the last 20 attempts, with its 95 % confidence interval. Figure: `sensitivity.png` and `seeds.png`.
+
+| What was changed | Fixed | LinUCB | Gain | LinUCB better for |
+|---|---|---|---|---|
+| **10 random seeds** | | | +8.9 pts on average (SD 0.4, range +8.1 to +9.4) | best strategy in 10 of 10 seeds |
+| Demand: 15 % of court-hours booked | 73.1 % | 82.1 % | +9.0 [+7.0, +11.0] | 77 / 120 students |
+| Demand: 35 % (headline setting) | 70.3 % | 79.2 % | +8.9 [+7.4, +10.5] | 109 / 120 |
+| Demand: 55 % | 67.8 % | 73.6 % | +5.9 [+5.1, +6.7] | 118 / 120 |
+| Demand: 75 % | 58.5 % | 61.2 % | +2.7 [+2.2, +3.3] | 93 / 120 |
+| Behaviour: reads all four cards | 70.7 % | 79.6 % | +8.9 [+7.4, +10.4] | 110 / 120 |
+| Behaviour: skims (70 % chance of reading the next card) | 57.1 % | 68.1 % | +10.9 [+9.1, +12.8] | 87 / 120 |
+| Behaviour: changes preference at attempt 40 | 70.9 % | 75.0 % | +4.1 [+2.9, +5.3] | 80 / 120 |
+| ...the 10 attempts right after the change | | | **−2.2 [−4.1, −0.3]** | 48 / 120 |
+
+Two variants of LinUCB were also run on the headline requests (ablations):
+
+| Variant | Books a suggestion | vs deployed LinUCB |
+|---|---|---|
+| Deployed: re-ranks the baseline's top 6 | 79.6 % | - |
+| Re-ranks the top 12 instead | 83.4 % | +3.7 pts |
+| Also learns from "booked none of the four" | 79.8 % | +0.2 pts (+1.2 pts in the first 20 attempts) |
+
+What this shows:
+
+- **The advantage is not a lucky seed.** Across 10 seeds the gain stays between +8.1 and +9.4 points, and LinUCB is the best strategy every time.
+- **It holds in every condition tested, but shrinks when the campus is full.** At 75 % booked there are few good alternatives left to rank, so ordering them better helps less (+2.7 points). The confidence interval still excludes zero.
+- **Skimming students benefit most** (+10.9 points), because putting the right card first matters more when the student may not read the rest.
+- **The real weakness is a change of preference.** For about 10 attempts after a student's taste changes, LinUCB is *worse* than fixed weights (−2.2 points), because it keeps recommending what the student used to like. It recovers, and is ahead again by the end. A forgetting factor (down-weighting old feedback) is the standard fix and is listed as future work.
+- **A wider candidate pool is the cheapest improvement.** Re-ranking 12 candidates instead of 6 adds 3.7 points at negligible cost, since latency stays under 30 ms (DS4). Learning from "booked nothing" adds almost nothing once the model has learned, so it was not adopted.
+
 ## Limitations
 
 State these plainly in the report.
@@ -103,12 +139,11 @@ State these plainly in the report.
    an occasional one.
 3. **The candidate pool limits the result.** The app takes the baseline's top
    six candidates before LinUCB re-ranks them, so LinUCB can never show a slot
-   the baseline filtered out. Part of the remaining 5.8% regret comes from
-   that filter. Widening the pool is a one-parameter change worth testing.
+   the baseline filtered out. The ablation above shows a pool of 12 would add
+   3.7 points; the deployed app still uses 6.
 4. **Rejections are not learned from.** When a student books none of the four
-   cards, the app records nothing, so the bandit does not learn from it.
-   Under the cascade model that outcome says "all four were wrong", and using
-   it would likely speed up learning.
+   cards, the app records nothing. The ablation shows learning from it adds
+   only 0.2 points (1.2 early on), so this was left out.
 5. **Only badminton was simulated**, with three identical courts.
 
 These results show the mechanism works as designed. They do not replace

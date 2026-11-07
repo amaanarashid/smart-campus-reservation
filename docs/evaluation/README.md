@@ -6,13 +6,16 @@ Objective 5: *evaluate against stated criteria: zero overlapping reservations un
 |---|---|---|---|
 | **Zero overlapping reservations under concurrent load** (DS1) | `scripts/eval/concurrency.mjs`: 50 students on 50 separate connections, all migrations applied, the same path the app uses (row-level security + booking trigger). 2,200 simultaneous requests in three scenarios. | **0 overlapping bookings.** Same slot: exactly 1 winner in 20/20 rounds. Staggered overlaps: 44 of 1,000 requests accepted, 0 overlaps. Fair-use limit: exactly 1 accepted in 20/20 rounds. p95 72 ms per request. | ✅ Met (local Postgres 17) |
 | Fair use and access hold under the same load | Same script, scenario C, plus `outputs/pgtest-access.mjs` (16 checks) | One student firing 10 bookings at once on a "1 upcoming" type: exactly 1 accepted every round | ✅ Met |
-| **Recommender quality** (acceptance rate and rank) | `scripts/simulate-recommender.ts`: 240 simulated students with hidden preferences, paired comparison against an oracle | P(student books a suggestion), last 20 attempts: LinUCB **79.6%** vs fixed weights 71.1%, adaptive 72.6%, random 68.4% | ✅ Simulated. **Live** acceptance and rank: `live-metrics.sql` §1 after the study |
+| **Recommender quality** (acceptance rate and rank) | `scripts/simulate-recommender.ts`: 240 simulated students with hidden preferences, paired comparison against an oracle | P(student books a suggestion), last 20 attempts: LinUCB **79.6%** vs fixed weights 71.1%, adaptive 72.6%, random 68.4% | ✅ Simulated. Robust: +8.1 to +9.4 pts over 10 seeds; gain holds at 15-75 % demand (+2.7 to +9.0) and for skimming students; −2.2 pts for ~10 attempts after a preference change (`docs/simulation/README.md`). **Live** acceptance and rank: `live-metrics.sql` §1 |
 | Recommender response time (DS4, < 1 s) | `scripts/eval/recommender-latency.ts`: full suggestion path, one-week window, 500 runs per case | Worst case (30 rooms, 7 days searched): p95 **24.9 ms**. Typical: p95 under 3 ms | ✅ Met |
 | **Assistant accuracy against a known-answer set** | `scripts/eval/chatbot-eval.ts`: 38 questions (20 EN, 18 MS) checked for question type, facility, day, time and reply language; plus 16 held-out questions | First run 31/38 (81.6%: EN 90%, MS 72%). After fixing Malay sport words, "this evening" and "who can book": 38/38. **Held-out: 14/16 (87.5%)**: EN 6/8, MS 8/8 | ✅ Measured. See `chatbot.md` for the 2 held-out misses |
 | **No-show rate before vs after check-in** | `live-metrics.sql` §3 (compares before vs after check-in grace is switched on; counts room-hours given back) | Needs real bookings over time | ⏳ After the user study |
 | No-show prediction (see below) | `scripts/eval/noshow-simulate.ts`: synthetic campus with a known no-show process; time-based split | **SIMULATED** test AUC **0.715** vs 0.651 for the student's own rate, ceiling 0.760 | ✅ Simulated. Live accuracy: pending live data |
 | No-show rate before vs after reminders | Admin → Analytics → No-show prediction (from `booking_risk.reminded_at` + reservations) | Needs reminders to run for a while | ⏳ Pending live data |
-| **SUS above 68** | `user-study.md` protocol, scored by `scripts/eval/sus.ts` (`src/lib/sus.ts`, unit-tested) | Needs participants | ⏳ User study |
+| **SUS above 68** | `user-study.md` protocol, scored by `scripts/eval/sus.ts` (`src/lib/sus.ts`, unit-tested) | Needs participants. Human participants could not be involved in this project | ❌ Not tested. Replaced by the four methods below |
+| Usability without participants: accessibility | `scripts/eval/ui/audit.mjs` (axe-core, WCAG 2.1 A + AA): 22 screens × light, dark, phone = 66 checks | First run: violations on 29 of 45 checks. After fixes: **0 violations in 66 checks** | ✅ Met (automated rules only) |
+| Usability without participants: heuristic review + cognitive walkthrough | Nielsen's 10 heuristics with severity ratings; walkthrough of 5 main tasks (`usability/README.md`) | 6 problems fixed (worst: cancel had no confirmation, severity 3), 4 minor ones open, no severity-4 problems | ✅ Done (single evaluator) |
+| Usability without participants: task times | KLM-GOMS (`src/lib/klm.ts`, `scripts/eval/klm.ts`) | Booking 20.6 s; suggestion after a clash 5.9 s vs 11.2-33.5 s retrying by hand; chatbot 18.5 s vs 48 s checking rooms one by one. Holds for faster and slower users | ✅ Predicted |
 | Remote control round trip (MQTT), lab | `scripts/eval/mqtt-rtt.ts`: real signing/verify/publish code, local TLS broker, simulated ESP32 that verifies and confirms over HTTP; 100 commands | Button press → device confirms: median **48 ms**, p95 49 ms (mostly the per-command TLS connection). Tampered, replayed, expired and wrong-key commands: **all rejected**. HTTP fallback (5 s poll), modelled: median 2.5 s, p95 4.7 s | ✅ Lab. Excludes internet time |
 | Remote control round trip, live | `live-metrics.sql` §4 (MQTT push vs 5 s HTTP poll, on EMQX Cloud + Vercel + Wokwi) | Needs the live Wokwi device | ⏳ Live run |
 
@@ -82,8 +85,13 @@ It never blocks, penalises or auto-cancels anyone, and nothing is overbooked. Th
 
 - DS1 runs against a local Postgres 17 with the same migrations, not the hosted Supabase project. The guarantee comes from the database (exclusion constraint, trigger, locks), which is identical, but network time to Supabase is not included in the latency.
 - The chatbot score is for the app's own understanding step (the path with no AI key). With an AI key, the model reads the question only when this step could not; that path needs a live run with the key. The model has a short time limit, and the facts are the answer if it fails.
+- The usability results come from automated rules, a single evaluator and a predictive model, not from users. Nielsen's estimate is that one evaluator finds about a third of the problems.
 - The recommender numbers come from simulated students. The live acceptance rate and rank need real use (`live-metrics.sql` §1).
 - Two held-out chatbot questions fail ("reserve" as a booking word, "can staff only book…"). They were left unfixed so the held-out score stays honest.
+
+## Usability without participants
+
+The SUS target could not be tested, because this project could not involve human participants. Four methods that need no participants cover the same ground from different angles; details, fixes and limits are in [`usability/README.md`](usability/README.md). None of them measures satisfaction, so they support the usability claim but do not replace a SUS score.
 
 ## Re-running
 
@@ -95,6 +103,8 @@ npx tsx scripts/eval/mqtt-rtt.ts                      # remote control, lab (nee
 npx tsx scripts/eval/noshow-db.ts                     # no-show DB checks + TS/SQL parity -> noshow-db.json
 npx tsx scripts/eval/noshow-simulate.ts && python scripts/plot-noshow.py   # SIMULATED -> noshow-sim.json + png
 npx tsx scripts/eval/noshow-train.ts --dry-run        # live data (service role from .env.local) -> noshow.json
-npx tsx scripts/eval/sus.ts docs/evaluation/sus-responses.csv   # after the study
+npx tsx scripts/eval/klm.ts                           # KLM task times -> usability/klm.json + klm.md
+cd scripts/eval && npm run audit                      # accessibility audit (see usability/README.md for setup) -> usability/axe.json
+npx tsx scripts/eval/sus.ts docs/evaluation/sus-responses.csv   # if a SUS study is run later
 # scripts/eval/live-metrics.sql -> Supabase SQL editor, after the study
 ```

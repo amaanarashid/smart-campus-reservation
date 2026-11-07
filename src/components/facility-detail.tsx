@@ -17,6 +17,8 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from "recharts";
 import RoomControls from "@/components/room-controls";
+import RoomSetup from "@/components/room-setup";
+import { capabilities, parseConfig } from "@/lib/room-config";
 import { twinReading, type TwinBooking, type TwinEvent } from "@/lib/twin-state";
 import { AC_KW, LIGHT_KW, energyReport, lastWeek, type EnergyBooking, type EnergyEvent, type EnergyReport } from "@/lib/energy";
 import { fmtDay, fmtRelativeDay, fmtTime, myAt, myDateKey } from "@/lib/time";
@@ -27,7 +29,10 @@ const RoomTwin = dynamic(() => import("@/components/room-twin"), {
   loading: () => <div className="skeleton h-full w-full" />,
 });
 
-interface DeviceRow { id: string; label: string; last_seen_at: string | null }
+interface DeviceRow {
+  id: string; facility_id: string; label: string; last_seen_at: string | null;
+  board?: string | null; config?: unknown; config_version?: number | null; report?: unknown; reported_at?: string | null;
+}
 interface Ev extends TwinEvent, EnergyEvent { id: number; detail?: unknown; reservation_id: string | null }
 interface Bk extends TwinBooking, EnergyBooking { id: string; participants: number; profiles: { full_name: string } | null }
 
@@ -36,9 +41,14 @@ interface Bk extends TwinBooking, EnergyBooking { id: string; participants: numb
  * rooms' devices; if it is not there yet, admins can still read the table.
  */
 async function findDevice(facilityId: string): Promise<{ data: DeviceRow | null }> {
-  const v = await supabase.from("room_devices_visible").select("id, label, last_seen_at").eq("facility_id", facilityId).maybeSingle();
+  const full = await supabase.from("room_devices_visible")
+    .select("id, facility_id, label, last_seen_at, board, config, config_version, report, reported_at")
+    .eq("facility_id", facilityId).maybeSingle();
+  if (!full.error) return { data: full.data as DeviceRow | null };
+  // before upgrade-room-config.sql
+  const v = await supabase.from("room_devices_visible").select("id, facility_id, label, last_seen_at").eq("facility_id", facilityId).maybeSingle();
   if (!v.error) return { data: v.data as DeviceRow | null };
-  const t = await supabase.from("room_devices").select("id, label, last_seen_at").eq("facility_id", facilityId).maybeSingle();
+  const t = await supabase.from("room_devices").select("id, facility_id, label, last_seen_at").eq("facility_id", facilityId).maybeSingle();
   return { data: t.error ? null : (t.data as DeviceRow | null) };
 }
 
@@ -52,8 +62,9 @@ const EVENT_LABEL: Record<string, string> = {
   lights_on: "Lights on", lights_off: "Lights off", ac_on: "Air-con on", ac_off: "Air-con off",
   reminder: "End-of-booking reminder", booking_ended: "Booking ended", overstay: "Still occupied after the end",
   extended: "Booking extended", extend_denied: "Extension refused", released_early: "Early release check",
+  temperature: "Temperature reading", ir_learned: "Air-con remote learned", ac_no_response: "Air-con not cooling",
 };
-const WARN = new Set(["unlock_denied", "overstay", "extend_denied"]);
+const WARN = new Set(["unlock_denied", "overstay", "extend_denied", "ac_no_response"]);
 
 function Live({ label, on, onText, offText, Icon }: {
   label: string; on: boolean; onText: string; offText: string; Icon: ComponentType<{ className?: string }>;
@@ -313,8 +324,7 @@ export default function FacilityDetail({ facility, rule, onBack }: {
           <CardContent className="max-h-[22rem] overflow-y-auto">
             {!device ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                Register a device for this room to get live readings:
-                <code className="mt-2 block rounded bg-muted px-2 py-1 text-xs">select public.register_room_device(&apos;{facility.name}&apos;, &apos;a-long-random-key&apos;);</code>
+                Connect a device to this room to get live readings: Smart room, then Connect a room.
               </p>
             ) : events.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">Nothing yet - start the Wokwi simulation.</p>
@@ -336,7 +346,10 @@ export default function FacilityDetail({ facility, rule, onBack }: {
       </div>
 
       {/* remote control over MQTT: only for rooms with a device */}
-      {device && <RoomControls facilityId={facility.id} />}
+      {device && <RoomControls facilityId={facility.id} caps={capabilities(parseConfig(device.config))} />}
+
+      {/* what is wired to the device (admins change it; the device restarts with it) */}
+      {device && <RoomSetup key={`${device.id}-${device.config_version ?? 0}`} device={device} onSaved={loadLive} />}
 
       {/* energy chart */}
       {energy && (

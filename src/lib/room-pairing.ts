@@ -26,8 +26,8 @@ export function deviceMqtt(env: Record<string, string | undefined>): DeviceMqtt 
   let url: URL;
   try { url = new URL(env.MQTT_URL); } catch { return null; }
   if (url.protocol !== "mqtts:" || !url.hostname) return null;
-  const user = env.MQTT_DEVICE_USERNAME ?? env.MQTT_USERNAME;
-  const pass = env.MQTT_DEVICE_PASSWORD ?? env.MQTT_PASSWORD;
+  const user = env.MQTT_DEVICE_USERNAME || env.MQTT_USERNAME;
+  const pass = env.MQTT_DEVICE_PASSWORD || env.MQTT_PASSWORD;
   if (!user || !pass) return null;
   return { host: url.hostname, port: Number(url.port) || 8883, user, pass };
 }

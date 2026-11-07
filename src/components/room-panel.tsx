@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import FacilityIso from "@/components/facility-iso";
 import RoomControls from "@/components/room-controls";
+import { capabilities, parseConfig } from "@/lib/room-config";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from "recharts";
@@ -22,7 +23,7 @@ import {
 import { fmtDay, fmtRelativeDay, fmtTime, myAt, myDateKey } from "@/lib/time";
 
 interface DeviceRow {
-  id: string; facility_id: string; label: string; active: boolean; last_seen_at: string | null;
+  id: string; facility_id: string; label: string; active: boolean; last_seen_at: string | null; config?: unknown;
 }
 interface RoomEvent extends EnergyEvent { id: number; device_id: string; facility_id: string }
 
@@ -111,8 +112,13 @@ export default function RoomPanel({ hideWhenEmpty = false, heading }: { hideWhen
     const { fromDay } = lastWeek(now);
     const since = new Date(myAt(fromDay, "00:00").getTime() - 86_400_000).toISOString();
     // the view exposes devices to their managers without the key hash
-    let { data: devs, error } = await supabase.from("room_devices_visible")
-      .select("id, facility_id, label, active, last_seen_at").order("label");
+    let { data: devs, error }: { data: unknown[] | null; error: { message: string } | null } = await supabase.from("room_devices_visible")
+      .select("id, facility_id, label, active, last_seen_at, config").order("label");
+    if (error) {
+      // before upgrade-room-config.sql: no setup stored, every room is a door kit
+      ({ data: devs, error } = await supabase.from("room_devices_visible")
+        .select("id, facility_id, label, active, last_seen_at").order("label"));
+    }
     if (error) {
       // before upgrade-room-end.sql: admins can still read the table itself
       ({ data: devs, error } = await supabase.from("room_devices")
@@ -283,7 +289,7 @@ export default function RoomPanel({ hideWhenEmpty = false, heading }: { hideWhen
       </Card>
 
       {/* remote control (the API lets only admins and this room's managers use it) */}
-      <RoomControls facilityId={device.facility_id} />
+      <RoomControls facilityId={device.facility_id} caps={capabilities(parseConfig(device.config))} />
 
       {/* energy */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

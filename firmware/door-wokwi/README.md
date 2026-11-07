@@ -1,89 +1,154 @@
-# Smart room door (Wokwi)
+# Smart room device (Wokwi, ESP32 DevKit, ESP32-CAM)
 
-An ESP32 at a library room's door: enter your booking's code on the keypad
-and the lock opens and checks you in. If nobody checks in, the booking is
-released automatically.
+One firmware for every room. A door kit at a library room checks people in
+with a keypad code, runs the lights and air-con from a motion sensor, and
+lights a ring at the end of a booking. A room without a door (say an ESP32-CAM
+by the air-con) runs only the lights and air-con, and students check in from
+the app. Which parts a room has, and on which pins, is set in the app, not in
+the code.
 
-Parts: ESP32, 4x4 keypad, 128x64 OLED, servo (the lock), slide switch (the
-door), green and red LEDs, and a buzzer. Everything is in `diagram.json`.
+| Board | Build | What it usually runs |
+|---|---|---|
+| Wokwi simulation | `esp32` (local), `wokwi-web` (the app's download) | the full door kit in `diagram.json` |
+| ESP32 DevKit | `board` | the door kit wired like `diagram.json`, or a room controller |
+| ESP32-CAM (AI-Thinker) | `cam` | room controller: motion sensor, lights, IR air-con |
 
-## Connect a room
+## How it works
 
-The same firmware runs in every room. There is nothing to edit per room.
+**Connect a room** (Admin, then Smart room) asks first and builds second:
 
-1. **Start the door.** Build and start it (below). The screen shows a 6-digit code.
-2. **Type the code.** In **Admin, then Smart room, then Connect a room**, pick the
-   room and type the code.
+1. **Room.** Pick it.
+2. **Board.** Wokwi simulation, ESP32 DevKit or ESP32-CAM.
+3. **Parts.** Tick what is wired and pick the pins (sensible defaults, a
+   "what goes on which pin" list, and the same checks as Room setup: camera
+   pins on the ESP32-CAM, outputs on input-only pins and so on are refused).
+4. **Firmware made for the room.**
+   - Wokwi: **Download simulation** gives a zip with the firmware and a circuit
+     drawn for exactly those parts. Open it in VS Code, start the simulator.
+   - Real board: **Make firmware**, then **Install** from the browser over USB,
+     then set its Wi-Fi from a phone (`CampusRoom-Setup`).
 
-The door connects by itself within a few seconds, and the dialog shows **Online**.
-It remembers this, so later starts connect straight away with no code.
+The device comes up already connected to the room, with those parts working
+from the first start. No code to type.
 
-### Simulated door (Wokwi in VS Code)
+**How "made for the room" works without compiling.** There is one compiled
+firmware per board. It has two blank slots: 64 bytes for the device key
+(`CAMPUS-KEY-SLOT:`) and 1 KB for the room's setup as JSON
+(`CAMPUS-CFG-SLOT:`), both in `pair.cpp`. When you download or install, the
+server makes a new key, links it to the room, writes the key and the setup
+into the slots and redoes the firmware's checksum and SHA-256
+(`src/lib/esp-image.ts`). That takes milliseconds, so there is no build server
+and no limit on combinations.
 
-Your laptop compiles the code and runs the simulation.
+**On the device.** The first start after an install uses the setup in the
+firmware, so the screen, lights and sensors work before the network does.
+Once connected, the server's copy is in charge: change parts later in **Smart
+room, then the room, then Room setup**, and the device picks it up on its next
+status poll (5 s), saves it and restarts. No reinstall.
 
-**One-time install:**
+**Install links.** The browser installer (ESP Web Tools) fetches files without
+a login, so the admin gets a signed link valid for 15 minutes
+(`/api/room/firmware/<token>/...`). The device key is derived from the link,
+so it is never stored or put in a URL; only its SHA-256 is saved on the room.
+Making new firmware for a room replaces the key, and older links and older
+downloads stop working.
 
-1. In VS Code, open the Extensions panel (Ctrl+Shift+X). Install
-   **Wokwi Simulator** and **PlatformIO IDE**. PlatformIO downloads the ESP32
-   toolchain on first use, which is a few hundred MB, so allow 10 to 20
-   minutes. Restart VS Code if it asks.
-2. Press **F1**, run **Wokwi: Request a New License**, and accept the free
-   licence in the browser that opens. It lasts 30 days, and you repeat this
-   step to renew it.
+**Wokwi circuit.** `src/lib/wokwi-diagram.ts` draws one part per tick, each in
+its own spot, wired to the chosen pins. The door kit gives back
+`diagram.json` exactly (a test checks this). Wokwi has no air-con or IR LED,
+so LEDs stand in; an IR receiver and Wokwi's IR remote are added for Learn
+(that remote is not an AC remote, so Learn records it instead of finding a make).
 
-**Each time:**
+**Plain firmware still works.** Built from PlatformIO, or a board moved to
+another room without reinstalling, it shows a 6-digit code (screen or USB).
+In Connect a room choose *Already have a device showing a code?*, type it (or
+**Read over USB**), pick the parts, connect.
 
-1. Go to **File, then Open Folder**, and open **`firmware/door-wokwi`** itself,
-   not the whole project. PlatformIO and Wokwi both look for their files in
-   the folder you open.
-2. Click the **checkmark (Build)** in the blue bar at the bottom of VS Code.
-   The first build downloads the libraries. Wait for **SUCCESS**.
-3. Open `diagram.json`, press **F1**, and run **Wokwi: Start Simulator**.
-   The circuit opens in a VS Code tab and runs.
-4. After any change to `sketch.ino`, build again (step 2). The simulator
-   always runs the last successful build.
+Code layout: `sketch.ino` (setup and loop), `room.h` (shared), `board.cpp`
+(free pins per board), `config.cpp` (setup, pin checks, the setup slot),
+`pair.cpp` (key and setup slots, connecting), `net.cpp`, `display.cpp`,
+`door.cpp`, `room.cpp` (presence, lights, air-con rules, reminders, ring),
+`ac.cpp` (relay or IR), `sensors.cpp`, `remote.cpp`.
 
-If the build fails, copy the first red `error:` line. Library version
-mismatches are the usual cause, and they're quick to fix.
+### Simulated door from source (to change the firmware)
 
-The first build makes the door's key and saves it in `.device-secret` (not in
-git), so the door stays connected between runs. **To simulate a second room,**
-copy this folder and delete `.device-secret` from the copy.
+1. In VS Code install **Wokwi Simulator** and **PlatformIO IDE** (the first
+   build downloads the ESP32 toolchain, a few hundred MB).
+2. **File, then Open Folder**, open **`firmware/door-wokwi`** itself.
+3. Build with the **checkmark** in the blue bar (env `esp32`), then open
+   `diagram.json`, **F1**, **Wokwi: Start Simulator**.
+4. The screen shows a code: type it in Connect a room (Real device tab works
+   for it too). It stays connected between runs: the first build makes its
+   key in `.device-secret` (not in git). For a second room, copy the folder
+   and delete `.device-secret` from the copy.
 
-**Wokwi in the browser** also works: make an ESP32 project and copy in
-`sketch.ino`, `diagram.json` and `libraries.txt`. There is no build step to make
-a key, so if Wokwi starts with empty flash you pair again on each run.
+After changing the firmware, `pio run -e wokwi-web` refreshes the download in
+`public/firmware/wokwi/` (commit it and deploy).
 
-### Real ESP32
+## Real boards
 
-Wire the board like `diagram.json`, then install the firmware once:
+**Install from the browser (Chrome or Edge on a computer):** Connect a room,
+pick the room, the board and the parts, **Make firmware**, then **Install** and
+pick the board's USB port (choose to erase it if it ran other firmware). An
+ESP32-CAM needs its ESP32-CAM-MB USB board.
 
-```bash
-pio run -e board -t upload
-```
+On first start the device opens its own Wi-Fi network, **`CampusRoom-Setup`**.
+Join it on a phone, choose the room's Wi-Fi and enter its password. It then
+connects to its room by itself.
 
-On first start the door opens its own Wi-Fi network, **`CampusRoom-Setup`**. Join
-it on a phone, choose the room's Wi-Fi and enter its password. The door saves
-this and then shows its code. If it can't reach the saved Wi-Fi later, the setup
-network opens again for 3 minutes, then it retries.
+Plain firmware from VS Code (`pio run -e board -t upload` / `pio run -e cam
+-t upload`) asks for a code instead: on the screen, or for an ESP32-CAM over
+USB (**Read over USB**; its red LED blinks twice while it waits, and the
+serial monitor shows `pair-code:123456`).
 
-This path compiles but has not been tried on a physical board yet.
+`pio run -e board` and `pio run -e cam` refresh `public/firmware/esp32-devkit/`
+and `public/firmware/esp32-cam/`, which the browser installer uses. The builds
+use the 1.9 MB app partitions (`min_spiffs`), because IR support makes the
+firmware about 1.3 MB.
 
-### Moving or replacing a door
+The real-board builds compile, but have not been run on hardware yet.
+
+### Wiring an ESP32-CAM room controller (default pins)
+
+| Part | Pin | Notes |
+|---|---|---|
+| PIR motion sensor (AM312) | GPIO 13 | 3.3 V, output low when idle |
+| Lights (an LED for the demo) | GPIO 12 | must be low at start-up: an LED to ground is fine |
+| IR LED (940 nm) | GPIO 14 | through an S8050/2N2222 transistor and ~100 Ω, for range |
+| IR receiver (VS1838B / TSOP38238) | GPIO 15 | for learning the AC remote |
+| Temperature (DHT22, optional) | GPIO 2 | unplug it if installing firmware fails |
+| Status LED | GPIO 33 | the board's red LED |
+
+The camera, PSRAM and SD card use the other pins; the app refuses them.
+
+### Air-con by IR
+
+Pick **IR, like its remote** for the room's air-con in Room setup. Either pick
+the make, or press **Learn from its remote**, point the AC's own remote at the
+IR receiver and press ON within 30 s. A make IRremoteESP8266 knows (Daikin,
+Panasonic, Mitsubishi, Midea, Gree, LG, Samsung, ...) is recognised from one
+press and saved, and the room then sends full commands (on/off, temperature,
+mode, fan). An unknown make is recorded as it is: record ON, then OFF, and
+the room replays those two.
+
+IR is one-way, so the device can't know if the AC obeyed. With a temperature
+sensor it checks: if the room isn't cooling 6 minutes after "on", it sends
+again; after 12 minutes staff get an "Air-con not responding" notification.
+
+### Moving or replacing a device
 
 | To do this | Do this |
 |---|---|
-| Put a new device on a connected room | Room menu, then **Replace device**, then type the new door's code. The old device stops working. The room keeps its history. |
-| Take a door off a room | Room menu, then **Disconnect**. The door shows a code again and can go on any room. A real board also makes itself a new key. |
+| Put a new device on a connected room | Room menu, then **Replace device**, then the new device's code (or download a new simulation). Choose *Keep this room's current setup* if it is wired the same. The old device stops working; the room keeps its history. |
+| Take a device off a room | Room menu, then **Disconnect**. It shows a code again and can go on any room. A real board also makes itself a new key. |
 
 ## One-time server setup
 
 ### Database (Supabase SQL editor)
 
 Run `supabase/upgrade-auto-release.sql`, `supabase/upgrade-room-access.sql`,
-`supabase/upgrade-room-end.sql`, `supabase/upgrade-room-connect.sql`, then
-`supabase/upgrade-room-pairing.sql`.
+`supabase/upgrade-room-end.sql`, `supabase/upgrade-room-connect.sql`,
+`supabase/upgrade-room-pairing.sql`, then `supabase/upgrade-room-config.sql`.
 
 ### Vercel (Project, then Settings, then Environment Variables)
 
@@ -211,30 +276,64 @@ The panel shows "waiting for room" until then, then "done". If MQTT is not
 set up or is down, the same command arrives with the next status poll
 (about 5 s) - so it always gets there.
 
-### One-time setup (HiveMQ Cloud, free)
+### One-time setup (EMQX Cloud Serverless, free)
 
-1. console.hivemq.cloud -> sign up -> create a **Serverless (free)** cluster.
-2. **Access Management** -> add a credential, e.g. username `campus-room`,
-   a long password. Permission: publish and subscribe.
-3. Copy the cluster URL from **Overview**, e.g. `abc123.s1.eu.hivemq.cloud`.
+Two logins: the server can only **send** commands, devices can only **listen**.
+Rooms stay apart because each device listens on its own topic and every
+command is signed with that device's own key.
+
+1. EMQX Cloud: create a **Serverless** deployment. From its overview page,
+   copy the MQTT address (ends in `emqxsl.com`, TLS port 8883).
+2. **Access Control, Authentication**: add two users with long random passwords:
+   `campus-server` and `campus-device`.
+3. **Access Control, Authorization**: add two rules:
+
+   | Username | Action | Topic | Permission |
+   |---|---|---|---|
+   | `campus-server` | Publish | `campus/rooms/#` | Allow |
+   | `campus-device` | Subscribe | `campus/rooms/#` | Allow |
+
 4. **Supabase SQL editor:** run `supabase/upgrade-room-commands.sql`.
-5. **Vercel -> Settings -> Environment Variables** (then redeploy):
+5. **Vercel, Settings, Environment Variables** (then redeploy):
 
    | Name | Value |
    |---|---|
-   | `MQTT_URL` | `mqtts://abc123.s1.eu.hivemq.cloud:8883` |
-   | `MQTT_USERNAME` | the username from step 2 |
-   | `MQTT_PASSWORD` | the password from step 2 |
+   | `MQTT_URL` | `mqtts://<address from step 1>:8883` |
+   | `MQTT_USERNAME` / `MQTT_PASSWORD` | `campus-server` and its password |
+   | `MQTT_DEVICE_USERNAME` / `MQTT_DEVICE_PASSWORD` | `campus-device` and its password |
 
-6. Nothing to change on the door: when it connects, the server gives it these
-   broker details. To give doors a narrower login than the server's, also set
-   `MQTT_DEVICE_USERNAME` and `MQTT_DEVICE_PASSWORD`. When connected, the bottom
-   right of the OLED shows **M**.
-7. In the project folder run `npm install` (adds the `mqtt` package) and commit
-   `package-lock.json`.
+6. Nothing to change on the device: when it connects, the server gives it the
+   broker address and the **device** login. Restart running devices once.
+   When connected, the bottom right of the OLED shows **M**, and in EMQX the
+   client `room-...` appears with username `campus-device`.
+7. Check it: in the app press **Lights, auto**. The command should end
+   "MQTT done". If the broker refuses or nobody is listening, the app now says
+   why (the server publishes with MQTT 5), and the command still arrives over
+   HTTP within 5 s.
 
 The door gets the broker login only after an admin has connected it, and keeps
 it in memory only. Use a credential that only this demo uses.
+
+### One broker login per device (EMQX, optional)
+
+With the EMQX API set up, every device gets its own broker login instead of
+the shared one: username `room-<device id>`, allowed to subscribe to its own
+topic only (everything else denied). The password is derived from the device
+key and `ROOM_CODE_SECRET`, so nothing is stored; a replaced device's old
+login stops working with its key, and **Disconnect** deletes the login. If the
+broker refuses the server's own publish ("not authorized"), the server gives
+its login publish rights on `campus/rooms/#` through the same API and retries.
+
+1. EMQX deployment overview page, **Deployment API Key**, **+ New API Key**.
+   Copy the **App ID** and **App Secret** (shown once) and the API endpoint.
+2. Vercel, Environment Variables (then redeploy): `EMQX_API_URL` (the endpoint,
+   e.g. `https://<id>.ala.<region>.emqxsl.com:8443/api/v5`), `EMQX_APP_ID`,
+   `EMQX_APP_SECRET`.
+3. Restart each device once: it gets its own login when it connects. In EMQX,
+   Clients shows `room-<device id>` as the username.
+
+Without these, or if an API call fails (logged in Vercel as "Per-device MQTT
+login failed"), devices use the shared login as before.
 
 **Try it:** open the room in Admin -> Smart room, press **Lights: off** with
 PEOPLE on. Within a second: the lights blink for 10 s and go off, the panel

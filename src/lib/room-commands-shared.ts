@@ -4,7 +4,7 @@
  * components can import it. Signing lives in room-commands.ts.
  */
 
-export const COMMAND_KINDS = ["unlock", "lights", "ac", "message", "lockdown"] as const;
+export const COMMAND_KINDS = ["unlock", "lights", "ac", "message", "lockdown", "ir_learn"] as const;
 export type CommandKind = (typeof COMMAND_KINDS)[number];
 export type OverrideState = "on" | "off" | "auto";
 
@@ -22,13 +22,15 @@ export const COMMAND_LABEL: Record<CommandKind, string> = {
   ac: "Air-con",
   message: "Door message",
   lockdown: "Lockdown",
+  ir_learn: "Learn the air-con remote",
 };
 
 export type CommandArgs =
   | { kind: "unlock"; args: { secs: number } }
   | { kind: "lights" | "ac"; args: { state: OverrideState; mins: number } }
   | { kind: "message"; args: { text: string; secs: number } }
-  | { kind: "lockdown"; args: { on: boolean } };
+  | { kind: "lockdown"; args: { on: boolean } }
+  | { kind: "ir_learn"; args: { slot: "on" | "off"; secs: number } };
 
 const clampInt = (v: unknown, lo: number, hi: number, dflt: number) => {
   const n = Math.round(Number(v));
@@ -57,10 +59,27 @@ export function validateCommand(kind: unknown, raw: unknown):
     case "lockdown":
       if (typeof a.on !== "boolean") return { ok: false, error: "Lockdown needs on: true or false." };
       return { ok: true, value: { kind, args: { on: a.on } } };
+    case "ir_learn":
+      // the device listens this long for the AC's own remote; "off" only matters
+      // for a make it does not know, where on and off are recorded separately
+      return { ok: true, value: { kind, args: { slot: a.slot === "off" ? "off" : "on", secs: clampInt(a.secs, 10, 60, 30) } } };
     default:
       return { ok: false, error: "Unknown command." };
   }
 }
+
+/** Which part of the room a command needs, as named in capabilities() (room-config.ts). */
+export const COMMAND_NEEDS: Record<CommandKind, "door" | "checkIn" | "message" | "lights" | "ac" | "irLearn"> = {
+  unlock: "door", lockdown: "checkIn", message: "message", lights: "lights", ac: "ac", ir_learn: "irLearn",
+};
+export const COMMAND_MISSING: Record<CommandKind, string> = {
+  unlock: "This room has no door lock.",
+  lockdown: "This room has no keypad to lock down.",
+  message: "This room has no screen.",
+  lights: "This room's lights are not connected.",
+  ac: "This room's air-con is not connected.",
+  ir_learn: "This room has no IR receiver to learn from.",
+};
 
 export const commandTopic = (deviceId: string) => `campus/rooms/${deviceId}/cmd`;
 
@@ -76,6 +95,7 @@ export function describeCommand(kind: string, args: Record<string, unknown> | nu
     }
     case "message": return `Door screen: "${a.text}"`;
     case "lockdown": return a.on ? "Keypad locked down" : "Lockdown lifted";
+    case "ir_learn": return `Listening for the air-con remote (press ${a.slot === "off" ? "OFF" : "ON"})`;
     default: return kind;
   }
 }

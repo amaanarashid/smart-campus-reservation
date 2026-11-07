@@ -125,6 +125,8 @@ export default function StudentDashboard() {
   const [bookingKey, setBookingKey] = useState<string | null>(null);
   const [showPast, setShowPast] = useState(false);
   const [extendingId, setExtendingId] = useState<string | null>(null);
+  /** two-step cancel: the booking waiting for "Yes, cancel" (heuristic review: no undo for a cancel) */
+  const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
   // room feedback
   const [myReports, setMyReports] = useState<RoomReport[]>([]);
   const [openIssues, setOpenIssues] = useState<{ facility_id: string; category: ReportCategory; urgency: ReportUrgency }[]>([]);
@@ -606,6 +608,8 @@ export default function StudentDashboard() {
     const code = codes[b.id];
     const canCancel = (b.status === "pending" || b.status === "approved") &&
       start.getTime() > now && !b.checked_in_at;
+    const noticeH = rules[b.facility_id]?.cancellation_hours ?? 0;
+    const cancelOpen = start.getTime() - now >= noticeH * 3_600_000;
     const grace = rules[b.facility_id]?.checkin_grace_mins;
     const checkInBy = grace ? new Date(start.getTime() + grace * 60000) : null;
     const showDeadline = !!checkInBy && b.status === "approved" && !b.checked_in_at &&
@@ -698,9 +702,18 @@ export default function StudentDashboard() {
               +30 min
             </Button>
           )}
-          {canCancel && (
-            <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => cancel(b)}>Cancel</Button>
+          {canCancel && !cancelOpen && (
+            <span className="self-center text-[11px] text-muted-foreground">Too late to cancel ({noticeH} h notice)</span>
           )}
+          {canCancel && cancelOpen && (confirmCancel === b.id ? (
+            <span className="animate-pop-in flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Cancel this booking?</span>
+              <Button size="sm" variant="destructive" onClick={() => { setConfirmCancel(null); cancel(b); }}>Yes, cancel</Button>
+              <Button size="sm" variant="ghost" onClick={() => setConfirmCancel(null)}>Keep it</Button>
+            </span>
+          ) : (
+            <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => setConfirmCancel(b.id)}>Cancel</Button>
+          ))}
           {reportable && (
             <Button size="sm" variant="ghost" className="gap-1.5 text-muted-foreground" onClick={() => setReportFor(b)}
               title="Something wrong in the room? Tell the facility team">
@@ -745,7 +758,8 @@ export default function StudentDashboard() {
       userName={profile?.full_name}
       focused
     >
-      <Toaster richColors />
+      {/* top-center: on phones a bottom toast covered the suggestion cards it was announcing */}
+      <Toaster richColors position="top-center" />
       {loading ? (
         <DashboardSkeleton />
       ) : (

@@ -91,6 +91,7 @@ export const DEVICE_EVENTS = [
   "presence_on", "presence_off", "lights_on", "lights_off", "ac_on", "ac_off",
   "door_open", "door_closed", "reminder", "released_early", "heartbeat",
   "booking_ended", "overstay",
+  "ir_learned", "ac_no_response", "temperature",
 ] as const;
 export type DeviceEvent = (typeof DEVICE_EVENTS)[number];
 export const isDeviceEvent = (k: unknown): k is DeviceEvent =>

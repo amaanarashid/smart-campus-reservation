@@ -44,6 +44,8 @@ Each file is safe to re-run. Order matters: later migrations depend on functions
 | 21 | `upgrade-booking-rules.sql` | Every booking rule enforced by a database trigger |
 | 22 | `upgrade-access-limits.sql` | Member types, who can book, fair-use limits |
 | 23 | `upgrade-noshow.sql` | No-show prediction: `noshow_model`, `booking_risk`, `score_upcoming_bookings()` every 10 min (pg_cron), one "Still coming?" reminder for high-risk bookings |
+| 24 | `upgrade-room-pairing.sql` | Connect a device by pairing code: `room_pairings`, `room_pair_poll()`, `claim_room_pairing()` |
+| 25 | `upgrade-room-config.sql` | What is wired to each device (board, parts, pins, IR air-con), `set_room_config()`, device reports; door check-in only for rooms with a keypad |
 
 Test data: `seed-test-data.sql` and `seed-room-energy.sql` add tagged demo users and bookings, and `seed-test-data-remove.sql` removes them. Remove them before a real user study.
 

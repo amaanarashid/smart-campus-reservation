@@ -41,6 +41,7 @@ describe("broker details for a door", () => {
     expect(deviceMqtt({ ...base, MQTT_URL: "mqtts://abc.emqxsl.com" })?.port).toBe(8883);
   });
   it("prefers a door-only login", () => {
+    expect(deviceMqtt({ ...base, MQTT_DEVICE_USERNAME: "", MQTT_DEVICE_PASSWORD: "" })).toMatchObject({ user: "server", pass: "pw" });
     const m = deviceMqtt({ ...base, MQTT_DEVICE_USERNAME: "door", MQTT_DEVICE_PASSWORD: "doorpw" });
     expect(m).toMatchObject({ user: "door", pass: "doorpw" });
   });

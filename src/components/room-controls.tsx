@@ -16,6 +16,7 @@ import {
   type CommandKind, type OverrideState,
 } from "@/lib/room-commands-shared";
 import { fmtTime } from "@/lib/time";
+import { capabilities, type Capabilities } from "@/lib/room-config";
 
 interface CommandRow {
   id: string; kind: CommandKind; args: Record<string, unknown>; status: "sent" | "done" | "failed" | "expired";
@@ -34,8 +35,9 @@ const DURATIONS = [15, 30, 60, 120];
  * Remote control for one smart room, next to its 3D twin: unlock, lights and
  * air-con overrides, a door-screen message, lockdown. Admins and the room's
  * managers only (the API checks). Shows each command until the room confirms it.
+ * Only the controls the room's setup has (`caps`, from room-config.ts).
  */
-export default function RoomControls({ facilityId }: { facilityId: string }) {
+export default function RoomControls({ facilityId, caps = capabilities(null) }: { facilityId: string; caps?: Capabilities }) {
   const [rows, setRows] = useState<CommandRow[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [mins, setMins] = useState(DEFAULT_OVERRIDE_MINS);
@@ -76,6 +78,8 @@ export default function RoomControls({ facilityId }: { facilityId: string }) {
       if (!res.ok || !j.ok) { toast.error(j.error ?? "Could not send the command"); return; }
       setLastDelivery(j.delivery);
       toast.success(j.message);
+      // MQTT was set up but the broker did not deliver: say why (the command still arrives over HTTP)
+      if (j.mqtt_error) toast.warning(`MQTT: ${j.mqtt_error}`, { duration: 12_000 });
       if (kind === "message") setText("");
       await load();
     } finally {
@@ -119,18 +123,25 @@ export default function RoomControls({ facilityId }: { facilityId: string }) {
           <p className="text-sm text-muted-foreground">Remote control is not set up yet - run supabase/upgrade-room-commands.sql.</p>
         ) : (
           <>
+            {(caps.door || caps.checkIn) && (
             <div className="flex flex-wrap gap-2">
+              {caps.door && (
               <Button size="sm" className="gap-1.5" disabled={!!busy} onClick={() => send("unlock", { secs: 8 }, "unlock")}>
                 {busy === "unlock" ? <Loader2 className="h-4 w-4 animate-spin" /> : <DoorOpen className="h-4 w-4" />} Unlock door (8 s)
               </Button>
+              )}
+              {caps.checkIn && (
               <Button size="sm" variant={lockedDown ? "default" : "outline"}
                 className={`gap-1.5 ${lockedDown ? "" : "text-destructive"}`} disabled={!!busy}
                 onClick={() => send("lockdown", { on: !lockedDown }, "lockdown")}>
                 {busy === "lockdown" ? <Loader2 className="h-4 w-4 animate-spin" /> : lockedDown ? <LockOpen className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
                 {lockedDown ? "Lift lockdown" : "Lock down keypad"}
               </Button>
+              )}
             </div>
+            )}
 
+            {(caps.lights || caps.ac) && (
             <div className="space-y-2 rounded-xl border bg-muted/30 p-3">
               <div className="flex flex-wrap items-center gap-2 pb-1 text-xs text-muted-foreground">
                 Override for
@@ -142,10 +153,15 @@ export default function RoomControls({ facilityId }: { facilityId: string }) {
                 ))}
                 <span>then back to automatic</span>
               </div>
-              {override("lights", "Lights", Lightbulb)}
-              {override("ac", "Air-con", Snowflake)}
+              {caps.lights && override("lights", "Lights", Lightbulb)}
+              {caps.ac && override("ac", "Air-con", Snowflake)}
+              {caps.ac === "ir" && !caps.acReady && (
+                <p className="text-xs text-muted-foreground">The air-con make is not set yet, so the room can&apos;t send it commands. An admin can set it in Room setup.</p>
+              )}
             </div>
+            )}
 
+            {caps.message && (
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <MessageSquareText className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -157,6 +173,7 @@ export default function RoomControls({ facilityId }: { facilityId: string }) {
                 {busy === "message" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Show 5 min
               </Button>
             </div>
+            )}
 
             {rows.length > 0 && (
               <ol className="space-y-1.5 border-t pt-3">
@@ -165,6 +182,10 @@ export default function RoomControls({ facilityId }: { facilityId: string }) {
                     <span className="text-xs tabular-nums text-muted-foreground">{fmtTime(new Date(r.issued_at))}</span>
                     <span className="min-w-0 flex-1 truncate">{describeCommand(r.kind, r.args)}</span>
                     {r.result?.warned_occupants === true && <span className="text-xs text-muted-foreground">people warned first</span>}
+                    {typeof r.result?.error === "string" && <span className="text-xs text-muted-foreground">{r.result.error}</span>}
+                    {r.kind === "ir_learn" && typeof r.result?.protocol === "string" && (
+                      <span className="text-xs text-muted-foreground">heard {r.result.protocol === "RAW" ? "an unknown make (recorded)" : r.result.protocol}</span>
+                    )}
                     {r.via && <span className="text-[11px] uppercase text-muted-foreground">{r.via}</span>}
                     <Badge variant={STATUS[r.status].variant} className="h-5 px-1.5 text-[10px]">
                       {r.status === "sent" && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}{STATUS[r.status].label}

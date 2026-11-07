@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import FacilityIso from "@/components/facility-iso";
 import SmartRoomConnect, { DEVICE_KIND, type SmartDevice } from "@/components/smart-room-connect";
+import { BOARDS, isBoard } from "@/lib/room-config";
 import { fmtRelativeDay, fmtTime, myAt, myDateKey } from "@/lib/time";
 
 // heavy tabs (charts, 3D twin, editors) download only when opened
@@ -277,8 +278,18 @@ export default function AdminDashboard() {
   });
   async function disconnect(d: SmartDevice) {
     if (!window.confirm(`Disconnect ${d.label}? The device stops working and shows a pairing code again. The room's history is kept.`)) return;
-    const { error } = await supabase.from("room_devices").update({ active: false }).eq("id", d.id);
-    if (error) { toast.error(error.message); return; }
+    // through the API, which also removes the device's own broker login
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch("/api/room/disconnect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+      body: JSON.stringify({ device_id: d.id }),
+    }).catch(() => null);
+    if (!res?.ok) {
+      // server not set up for it: switch the device off directly, as before
+      const { error } = await supabase.from("room_devices").update({ active: false }).eq("id", d.id);
+      if (error) { toast.error(error.message); return; }
+    }
     toast.success(`${d.label} disconnected`);
     await load();
   }
@@ -297,7 +308,8 @@ export default function AdminDashboard() {
       role="admin"
       userName={profile?.full_name}
     >
-      <Toaster richColors />
+      {/* top-center: on phones a bottom toast covered the suggestion cards it was announcing */}
+      <Toaster richColors position="top-center" />
       {loading ? (
         <AdminSkeleton />
       ) : (
@@ -315,7 +327,7 @@ export default function AdminDashboard() {
               ["equipment", "Equipment", Package, 0],
               ["records", "Records", ScrollText, 0],
             ] as const).map(([key, label, Icon, count]) => (
-              <button key={key} onClick={() => { setTab(key); if (key === "rooms") setOpenFac(null); }}
+              <button key={key} aria-current={tab === key ? "page" : undefined} onClick={() => { setTab(key); if (key === "rooms") setOpenFac(null); }}
                 className={`flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors ${
                   tab === key ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted"
                 }`}>
@@ -332,7 +344,7 @@ export default function AdminDashboard() {
 
           {tab === "overview" && (
           <div key="ov" className="space-y-6">
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
               {([
                 ["Registered users", stats.users, Users, "users"],
                 ["Total bookings", stats.bookings, CalendarRange, "analytics"],
@@ -342,8 +354,8 @@ export default function AdminDashboard() {
                 <button key={label} onClick={() => setTab(go)}
                   className="animate-reveal stagger group rounded-xl border bg-card text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary hover:shadow-md"
                   style={stagger(i)}>
-                  <div className="flex items-center gap-4 p-5">
-                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                  <div className="flex items-center gap-4 p-4 sm:p-5">
+                    <span className="hidden h-12 w-12 shrink-0 sm:flex items-center justify-center rounded-xl bg-accent text-accent-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
                       <Icon className="h-6 w-6" />
                     </span>
                     <div className="flex-1">
@@ -540,7 +552,7 @@ export default function AdminDashboard() {
                           </span>
                           <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-card/90 px-2 py-0.5 text-[11px] font-medium shadow">
                             {d.connection === "mqtt" ? <CircuitBoard className="h-3 w-3 text-primary" /> : <Laptop className="h-3 w-3 text-primary" />}
-                            {DEVICE_KIND[d.connection === "mqtt" ? "mqtt" : "wokwi"].title}
+                            {isBoard(d.board) ? BOARDS[d.board].label : DEVICE_KIND[d.connection === "mqtt" ? "mqtt" : "wokwi"].title}
                           </span>
                         </button>
                         <div className="flex flex-1 flex-col gap-3 p-4">
@@ -788,8 +800,9 @@ export default function AdminDashboard() {
                       <TableCell>{typeLabel(e.facility_type)}</TableCell>
                       <TableCell>
                         <Input type="number" min={0} defaultValue={e.total_qty} className="w-20" aria-label={`Total ${e.name}`}
-                          onKeyDown={(ev) => ev.key === "Enter" &&
-                            saveQty(e, Number((ev.target as HTMLInputElement).value))} />
+                          title="Saves when you press Enter or leave the box"
+                          onKeyDown={(ev) => ev.key === "Enter" && (ev.target as HTMLInputElement).blur()}
+                          onBlur={(ev) => { const q = Number(ev.target.value); if (Number.isFinite(q) && q >= 0 && q !== e.total_qty) saveQty(e, q); }} />
                       </TableCell>
                     </TableRow>
                   ))}

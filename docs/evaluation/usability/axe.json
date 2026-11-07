@@ -1,0 +1,534 @@
+{
+  "generated": "2026-11-06T18:58:22.716Z",
+  "standard": "WCAG 2.1 A + AA (axe-core)",
+  "results": [
+    {
+      "view": "login",
+      "variant": "desktop-light",
+      "url": "/login",
+      "error": null,
+      "ms": 2580,
+      "violations": []
+    },
+    {
+      "view": "login",
+      "variant": "desktop-dark",
+      "url": "/login",
+      "error": null,
+      "ms": 2341,
+      "violations": []
+    },
+    {
+      "view": "login",
+      "variant": "phone-light",
+      "url": "/login",
+      "error": null,
+      "ms": 2130,
+      "violations": []
+    },
+    {
+      "view": "student-home",
+      "variant": "desktop-light",
+      "url": "/student",
+      "error": null,
+      "ms": 2418,
+      "violations": []
+    },
+    {
+      "view": "student-home",
+      "variant": "desktop-dark",
+      "url": "/student",
+      "error": null,
+      "ms": 2418,
+      "violations": []
+    },
+    {
+      "view": "student-home",
+      "variant": "phone-light",
+      "url": "/student",
+      "error": null,
+      "ms": 2385,
+      "violations": []
+    },
+    {
+      "view": "student-venue",
+      "variant": "desktop-light",
+      "url": "/student",
+      "error": null,
+      "ms": 3354,
+      "violations": []
+    },
+    {
+      "view": "student-venue",
+      "variant": "desktop-dark",
+      "url": "/student",
+      "error": null,
+      "ms": 3332,
+      "violations": []
+    },
+    {
+      "view": "student-venue",
+      "variant": "phone-light",
+      "url": "/student",
+      "error": null,
+      "ms": 3338,
+      "violations": []
+    },
+    {
+      "view": "student-booking-form",
+      "variant": "desktop-light",
+      "url": "/student",
+      "error": null,
+      "ms": 4360,
+      "violations": []
+    },
+    {
+      "view": "student-booking-form",
+      "variant": "desktop-dark",
+      "url": "/student",
+      "error": null,
+      "ms": 4530,
+      "violations": []
+    },
+    {
+      "view": "student-booking-form",
+      "variant": "phone-light",
+      "url": "/student",
+      "error": null,
+      "ms": 4389,
+      "violations": []
+    },
+    {
+      "view": "student-suggestions",
+      "variant": "desktop-light",
+      "url": "/student",
+      "error": null,
+      "ms": 8634,
+      "violations": []
+    },
+    {
+      "view": "student-suggestions",
+      "variant": "desktop-dark",
+      "url": "/student",
+      "error": null,
+      "ms": 8732,
+      "violations": []
+    },
+    {
+      "view": "student-suggestions",
+      "variant": "phone-light",
+      "url": "/student",
+      "error": null,
+      "ms": 8574,
+      "violations": []
+    },
+    {
+      "view": "student-report-problem",
+      "variant": "desktop-light",
+      "url": "/student",
+      "error": null,
+      "ms": 3639,
+      "violations": []
+    },
+    {
+      "view": "student-report-problem",
+      "variant": "desktop-dark",
+      "url": "/student",
+      "error": null,
+      "ms": 3768,
+      "violations": []
+    },
+    {
+      "view": "student-report-problem",
+      "variant": "phone-light",
+      "url": "/student",
+      "error": null,
+      "ms": 3781,
+      "violations": []
+    },
+    {
+      "view": "student-cancel-confirm",
+      "variant": "desktop-light",
+      "url": "/student",
+      "error": null,
+      "ms": 4354,
+      "violations": []
+    },
+    {
+      "view": "student-cancel-confirm",
+      "variant": "desktop-dark",
+      "url": "/student",
+      "error": null,
+      "ms": 4321,
+      "violations": []
+    },
+    {
+      "view": "student-cancel-confirm",
+      "variant": "phone-light",
+      "url": "/student",
+      "error": null,
+      "ms": 4348,
+      "violations": []
+    },
+    {
+      "view": "student-chatbot",
+      "variant": "desktop-light",
+      "url": "/student",
+      "error": null,
+      "ms": 4027,
+      "violations": []
+    },
+    {
+      "view": "student-chatbot",
+      "variant": "desktop-dark",
+      "url": "/student",
+      "error": null,
+      "ms": 5093,
+      "violations": []
+    },
+    {
+      "view": "student-chatbot",
+      "variant": "phone-light",
+      "url": "/student",
+      "error": null,
+      "ms": 3842,
+      "violations": []
+    },
+    {
+      "view": "manager-home",
+      "variant": "desktop-light",
+      "url": "/facility-manager",
+      "error": null,
+      "ms": 6729,
+      "violations": []
+    },
+    {
+      "view": "manager-home",
+      "variant": "desktop-dark",
+      "url": "/facility-manager",
+      "error": null,
+      "ms": 6595,
+      "violations": []
+    },
+    {
+      "view": "manager-home",
+      "variant": "phone-light",
+      "url": "/facility-manager",
+      "error": null,
+      "ms": 4355,
+      "violations": []
+    },
+    {
+      "view": "admin-overview",
+      "variant": "desktop-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 2875,
+      "violations": []
+    },
+    {
+      "view": "admin-overview",
+      "variant": "desktop-dark",
+      "url": "/admin",
+      "error": null,
+      "ms": 2630,
+      "violations": []
+    },
+    {
+      "view": "admin-overview",
+      "variant": "phone-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 2632,
+      "violations": []
+    },
+    {
+      "view": "admin-analytics",
+      "variant": "desktop-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 5430,
+      "violations": []
+    },
+    {
+      "view": "admin-analytics",
+      "variant": "desktop-dark",
+      "url": "/admin",
+      "error": null,
+      "ms": 5374,
+      "violations": []
+    },
+    {
+      "view": "admin-analytics",
+      "variant": "phone-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 5094,
+      "violations": []
+    },
+    {
+      "view": "admin-smart-room",
+      "variant": "desktop-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 3595,
+      "violations": []
+    },
+    {
+      "view": "admin-smart-room",
+      "variant": "desktop-dark",
+      "url": "/admin",
+      "error": null,
+      "ms": 3524,
+      "violations": []
+    },
+    {
+      "view": "admin-smart-room",
+      "variant": "phone-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 3562,
+      "violations": []
+    },
+    {
+      "view": "admin-room-detail",
+      "variant": "desktop-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 8328,
+      "violations": []
+    },
+    {
+      "view": "admin-room-detail",
+      "variant": "desktop-dark",
+      "url": "/admin",
+      "error": null,
+      "ms": 8728,
+      "violations": []
+    },
+    {
+      "view": "admin-room-detail",
+      "variant": "phone-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 8863,
+      "violations": []
+    },
+    {
+      "view": "admin-connect-room",
+      "variant": "desktop-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 4707,
+      "violations": []
+    },
+    {
+      "view": "admin-connect-room",
+      "variant": "desktop-dark",
+      "url": "/admin",
+      "error": null,
+      "ms": 4590,
+      "violations": []
+    },
+    {
+      "view": "admin-connect-room",
+      "variant": "phone-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 4597,
+      "violations": []
+    },
+    {
+      "view": "admin-users",
+      "variant": "desktop-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 3615,
+      "violations": []
+    },
+    {
+      "view": "admin-users",
+      "variant": "desktop-dark",
+      "url": "/admin",
+      "error": null,
+      "ms": 3588,
+      "violations": []
+    },
+    {
+      "view": "admin-users",
+      "variant": "phone-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 3596,
+      "violations": []
+    },
+    {
+      "view": "admin-facilities",
+      "variant": "desktop-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 4073,
+      "violations": []
+    },
+    {
+      "view": "admin-facilities",
+      "variant": "desktop-dark",
+      "url": "/admin",
+      "error": null,
+      "ms": 3951,
+      "violations": []
+    },
+    {
+      "view": "admin-facilities",
+      "variant": "phone-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 3655,
+      "violations": []
+    },
+    {
+      "view": "admin-facility-detail",
+      "variant": "desktop-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 4632,
+      "violations": []
+    },
+    {
+      "view": "admin-facility-detail",
+      "variant": "desktop-dark",
+      "url": "/admin",
+      "error": null,
+      "ms": 4744,
+      "violations": []
+    },
+    {
+      "view": "admin-facility-detail",
+      "variant": "phone-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 4559,
+      "violations": []
+    },
+    {
+      "view": "admin-new-facility",
+      "variant": "desktop-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 4955,
+      "violations": []
+    },
+    {
+      "view": "admin-new-facility",
+      "variant": "desktop-dark",
+      "url": "/admin",
+      "error": null,
+      "ms": 4882,
+      "violations": []
+    },
+    {
+      "view": "admin-new-facility",
+      "variant": "phone-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 4797,
+      "violations": []
+    },
+    {
+      "view": "admin-approvals",
+      "variant": "desktop-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 3432,
+      "violations": []
+    },
+    {
+      "view": "admin-approvals",
+      "variant": "desktop-dark",
+      "url": "/admin",
+      "error": null,
+      "ms": 3497,
+      "violations": []
+    },
+    {
+      "view": "admin-approvals",
+      "variant": "phone-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 3602,
+      "violations": []
+    },
+    {
+      "view": "admin-feedback",
+      "variant": "desktop-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 3399,
+      "violations": []
+    },
+    {
+      "view": "admin-feedback",
+      "variant": "desktop-dark",
+      "url": "/admin",
+      "error": null,
+      "ms": 3416,
+      "violations": []
+    },
+    {
+      "view": "admin-feedback",
+      "variant": "phone-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 3490,
+      "violations": []
+    },
+    {
+      "view": "admin-equipment",
+      "variant": "desktop-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 3602,
+      "violations": []
+    },
+    {
+      "view": "admin-equipment",
+      "variant": "desktop-dark",
+      "url": "/admin",
+      "error": null,
+      "ms": 3612,
+      "violations": []
+    },
+    {
+      "view": "admin-equipment",
+      "variant": "phone-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 3560,
+      "violations": []
+    },
+    {
+      "view": "admin-records",
+      "variant": "desktop-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 3513,
+      "violations": []
+    },
+    {
+      "view": "admin-records",
+      "variant": "desktop-dark",
+      "url": "/admin",
+      "error": null,
+      "ms": 3494,
+      "violations": []
+    },
+    {
+      "view": "admin-records",
+      "variant": "phone-light",
+      "url": "/admin",
+      "error": null,
+      "ms": 3613,
+      "violations": []
+    }
+  ]
+}

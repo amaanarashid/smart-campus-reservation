@@ -1,5 +1,6 @@
 "use client";
 
+import { Children, cloneElement, isValidElement, useId } from "react";
 import type { FacilityCategory, MemberType } from "@/lib/types";
 import { MEMBER_LABEL, MEMBER_TYPES } from "@/lib/access";
 import { Input } from "@/components/ui/input";
@@ -16,11 +17,19 @@ export type RuleDraft = Pick<FacilityCategory,
     max_hours_week?: number | null;
   };
 
+/**
+ * A labelled form field. When the child is a single element (an Input), the
+ * label is linked to it (htmlFor/id) so screen readers announce it; fields with
+ * two inputs label each input themselves (aria-label).
+ */
 export function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  const autoId = useId();
+  const only = Children.count(children) === 1 && isValidElement<{ id?: string }>(children) ? children : null;
+  const id = only?.props.id ?? autoId;
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-medium">{label}</label>
-      {children}
+      <label className="text-xs font-medium" htmlFor={only ? id : undefined}>{label}</label>
+      {only ? cloneElement(only, { id }) : children}
       {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
     </div>
   );
@@ -34,18 +43,18 @@ export function RuleFields({ value, onChange }: { value: RuleDraft; onChange: (v
       <div className="sm:col-span-2">
       <Field label="Opening hours">
         <div className="flex items-center gap-2">
-          <Input type="time" value={value.open_time} onChange={(e) => set({ open_time: e.target.value })} />
+          <Input type="time" aria-label="Opens at" value={value.open_time} onChange={(e) => set({ open_time: e.target.value })} />
           <span className="text-xs text-muted-foreground">to</span>
-          <Input type="time" value={value.close_time} onChange={(e) => set({ close_time: e.target.value })} />
+          <Input type="time" aria-label="Closes at" value={value.close_time} onChange={(e) => set({ close_time: e.target.value })} />
         </div>
       </Field>
       </div>
       <Field label="Booking length (minutes)">
         <div className="flex items-center gap-2">
-          <Input type="number" min={15} step={15} value={value.min_duration_mins}
+          <Input type="number" aria-label="Shortest booking (minutes)" min={15} step={15} value={value.min_duration_mins}
             onChange={(e) => set({ min_duration_mins: Number(e.target.value) })} />
           <span className="text-xs text-muted-foreground">to</span>
-          <Input type="number" min={15} step={15} value={value.max_duration_mins}
+          <Input type="number" aria-label="Longest booking (minutes)" min={15} step={15} value={value.max_duration_mins}
             onChange={(e) => set({ max_duration_mins: Number(e.target.value) })} />
         </div>
       </Field>

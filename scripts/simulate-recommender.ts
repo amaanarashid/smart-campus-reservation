@@ -36,7 +36,7 @@
  * Measured against an ORACLE that knows the student's preference and picks
  * the best 4 of ALL feasible slots.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import {
   recommendAcross, updateWeights, DEFAULT_WEIGHTS, DEFAULT_PEAKS, type ScoredSlot,
@@ -46,6 +46,12 @@ import { addDays, myAt } from "../src/lib/time";
 import type { Facility, FacilityRule, Reservation, RecWeights } from "../src/lib/types";
 
 const QUICK = process.argv.includes("--quick");
+/**
+ * --part=main | seeds | context runs one section and merges it into summary.json,
+ * so each run stays short (main ~30 s, seeds ~100 s, context ~70 s). Default: all.
+ */
+const PART = (process.argv.find((a) => a.startsWith("--part="))?.slice(7) ?? "all") as "all" | "main" | "seeds" | "context";
+const want = (p: "main" | "seeds" | "context") => PART === "all" || PART === p;
 const OUT = "docs/simulation";
 const SEED = 20261001;
 const SHOWN = 4;                       // cards the app shows
@@ -283,94 +289,102 @@ const ATT = MAIN.attempts;
 const LATE: [number, number] = [ATT - 20, ATT];
 
 // 1 + 2. main comparison and ablations ------------------------------------
-log(`[1/6] main comparison: ${MAIN.studentsPerType * 4} students x ${ATT} attempts x ${MAIN.policies.length} strategies`);
-const rows = runScenario(MAIN);
+function mainPart() {
+  log(`[1/6] main comparison: ${MAIN.studentsPerType * 4} students x ${ATT} attempts x ${MAIN.policies.length} strategies`);
+  const rows = runScenario(MAIN);
 
-const curve: string[] = ["attempt,type,policy,value,accepted,top,regret"];
-for (const type of ["all", ...TYPE_NAMES]) for (const p of MAIN.policies) for (let a = 0; a < ATT; a++) {
-  const rs = rows.filter((r) => r.policy === p && r.attempt === a && (type === "all" || r.type === type));
-  curve.push([a + 1, type, p, mean(rs.map((r) => r.value)).toFixed(4), mean(rs.map((r) => r.accepted)).toFixed(4),
-    mean(rs.map((r) => r.top)).toFixed(4), mean(rs.map((r) => r.regret)).toFixed(4)].join(","));
+  const curve: string[] = ["attempt,type,policy,value,accepted,top,regret"];
+  for (const type of ["all", ...TYPE_NAMES]) for (const p of MAIN.policies) for (let a = 0; a < ATT; a++) {
+    const rs = rows.filter((r) => r.policy === p && r.attempt === a && (type === "all" || r.type === type));
+    curve.push([a + 1, type, p, mean(rs.map((r) => r.value)).toFixed(4), mean(rs.map((r) => r.accepted)).toFixed(4),
+      mean(rs.map((r) => r.top)).toFixed(4), mean(rs.map((r) => r.regret)).toFixed(4)].join(","));
+  }
+  writeFileSync(`${OUT}/learning-curves.csv`, curve.join("\n"));
+
+  const overall = Object.fromEntries(MAIN.policies.map((p) => [p, {
+    value_first5: window(rows, p, "value", 0, 5),
+    value_first10: window(rows, p, "value", 0, 10),
+    value_last20: window(rows, p, "value", ...LATE),
+    top_card_last20: window(rows, p, "top", ...LATE),
+    regret_last20: window(rows, p, "regret", ...LATE),
+  }]));
+  const byType = Object.fromEntries(TYPE_NAMES.map((t) => [t, Object.fromEntries(
+    MAIN.policies.map((p) => [p, { value: window(rows, p, "value", ...LATE, t), top: window(rows, p, "top", ...LATE, t) }]),
+  )]));
+  // how soon does LinUCB pull ahead? (occasional users)
+  const milestones = [1, 5, 10, 20, 40, 80].map((n) => ({
+    attempts: n,
+    gain: paired(rows, "linucb", "fixed", "value", Math.max(0, n - 5), n),
+  }));
+  const pairedMain = {
+    linucb_vs_fixed: paired(rows, "linucb", "fixed", "value", ...LATE),
+    linucb_vs_adaptive: paired(rows, "linucb", "adaptive", "value", ...LATE),
+    adaptive_vs_fixed: paired(rows, "adaptive", "fixed", "value", ...LATE),
+    wide_vs_linucb: paired(rows, "linucb_wide", "linucb", "value", ...LATE),
+    reject_vs_linucb: paired(rows, "linucb_reject", "linucb", "value", ...LATE),
+    reject_vs_linucb_first20: paired(rows, "linucb_reject", "linucb", "value", 0, 20),
+  };
+  return { overall, byType, milestones, pairedMain };
 }
-writeFileSync(`${OUT}/learning-curves.csv`, curve.join("\n"));
-
-const overall = Object.fromEntries(MAIN.policies.map((p) => [p, {
-  value_first5: window(rows, p, "value", 0, 5),
-  value_first10: window(rows, p, "value", 0, 10),
-  value_last20: window(rows, p, "value", ...LATE),
-  top_card_last20: window(rows, p, "top", ...LATE),
-  regret_last20: window(rows, p, "regret", ...LATE),
-}]));
-const byType = Object.fromEntries(TYPE_NAMES.map((t) => [t, Object.fromEntries(
-  MAIN.policies.map((p) => [p, { value: window(rows, p, "value", ...LATE, t), top: window(rows, p, "top", ...LATE, t) }]),
-)]));
-// how soon does LinUCB pull ahead? (occasional users)
-const milestones = [1, 5, 10, 20, 40, 80].map((n) => ({
-  attempts: n,
-  gain: paired(rows, "linucb", "fixed", "value", Math.max(0, n - 5), n),
-}));
-const pairedMain = {
-  linucb_vs_fixed: paired(rows, "linucb", "fixed", "value", ...LATE),
-  linucb_vs_adaptive: paired(rows, "linucb", "adaptive", "value", ...LATE),
-  adaptive_vs_fixed: paired(rows, "adaptive", "fixed", "value", ...LATE),
-  wide_vs_linucb: paired(rows, "linucb_wide", "linucb", "value", ...LATE),
-  reject_vs_linucb: paired(rows, "linucb_reject", "linucb", "value", ...LATE),
-  reject_vs_linucb_first20: paired(rows, "linucb_reject", "linucb", "value", 0, 20),
-};
 
 // 3. seeds -----------------------------------------------------------------
 const SEEDS = QUICK ? 3 : 10;
-log(`[2/6] ${SEEDS} random seeds`);
-const seedRuns = Array.from({ length: SEEDS }, (_, i) => {
-  const r = runScenario({ ...MAIN, name: `seed${i}`, seed: SEED + 1000 * (i + 1), studentsPerType: SMALL, policies: CORE });
-  return {
-    seed: SEED + 1000 * (i + 1),
-    ...Object.fromEntries(CORE.map((p) => [p, window(r, p, "value", ...LATE).mean])),
-    gain: paired(r, "linucb", "fixed", "value", ...LATE).mean,
-  } as Record<string, number>;
-});
-const gains = seedRuns.map((s) => s.gain);
-const seedSummary = {
-  runs: seedRuns,
-  gain_mean: mean(gains), gain_sd: sd(gains), gain_min: Math.min(...gains), gain_max: Math.max(...gains),
-  linucb_best_in: seedRuns.filter((s) => CORE.every((p) => s.linucb >= s[p])).length,
-};
-
-// 4. demand ----------------------------------------------------------------
-const DEMAND = [0.15, 0.35, 0.55, 0.75];
-log(`[3/6] demand levels ${DEMAND.join(", ")}`);
-const demand = DEMAND.map((busy, i) => {
-  const r = runScenario({ ...MAIN, name: `busy${busy}`, seed: SEED + 77 * (i + 1), studentsPerType: SMALL, busyProb: busy, policies: CORE });
-  return { busy, ...Object.fromEntries(CORE.map((p) => [p, window(r, p, "value", ...LATE)])),
-    gain: paired(r, "linucb", "fixed", "value", ...LATE) };
-});
-
-// 5. behaviour -------------------------------------------------------------
-log("[4/6] student behaviour: skimming and changing preferences");
-const behaviourDefs = [
-  { key: "reads_all", label: "Reads all four cards", examine: 1, driftAt: null },
-  { key: "skims", label: "Skims: 70% chance of reading the next card", examine: 0.7, driftAt: null },
-  { key: "drift", label: "Changes preference at attempt 40", examine: 1, driftAt: 40 },
-] as const;
-const behaviourRows: Record<string, Row[]> = {};
-const behaviour = behaviourDefs.map((b, i) => {
-  const r = runScenario({ ...MAIN, name: b.key, seed: SEED + 555 * (i + 1), studentsPerType: SMALL,
-    examine: b.examine, driftAt: b.driftAt, policies: CORE });
-  behaviourRows[b.key] = r;
-  return { ...b, ...Object.fromEntries(CORE.map((p) => [p, window(r, p, "value", ...LATE)])),
-    gain: paired(r, "linucb", "fixed", "value", ...LATE),
-    // right after the change: does LinUCB recover, or stay stuck on the old preference?
-    gain_just_after_drift: b.driftAt ? paired(r, "linucb", "fixed", "value", b.driftAt, b.driftAt + 10) : null };
-});
-const driftCurve: string[] = ["attempt,policy,value"];
-for (const p of CORE) for (let a = 0; a < ATT; a++) {
-  const rs = behaviourRows.drift.filter((r) => r.policy === p && r.attempt === a);
-  driftCurve.push([a + 1, p, mean(rs.map((r) => r.value)).toFixed(4)].join(","));
+function seedsPart() {
+  log(`[2/6] ${SEEDS} random seeds`);
+  const seedRuns = Array.from({ length: SEEDS }, (_, i) => {
+    const r = runScenario({ ...MAIN, name: `seed${i}`, seed: SEED + 1000 * (i + 1), studentsPerType: SMALL, policies: CORE });
+    return {
+      seed: SEED + 1000 * (i + 1),
+      ...Object.fromEntries(CORE.map((p) => [p, window(r, p, "value", ...LATE).mean])),
+      gain: paired(r, "linucb", "fixed", "value", ...LATE).mean,
+    } as Record<string, number>;
+  });
+  const gains = seedRuns.map((s) => s.gain);
+  const seedSummary = {
+    runs: seedRuns,
+    gain_mean: mean(gains), gain_sd: sd(gains), gain_min: Math.min(...gains), gain_max: Math.max(...gains),
+    linucb_best_in: seedRuns.filter((s) => CORE.every((p) => s.linucb >= s[p])).length,
+  };
+  return seedSummary;
 }
-writeFileSync(`${OUT}/drift-curve.csv`, driftCurve.join("\n"));
+
+function contextPart() {
+  // 4. demand ----------------------------------------------------------------
+  const DEMAND = [0.15, 0.35, 0.55, 0.75];
+  log(`[3/6] demand levels ${DEMAND.join(", ")}`);
+  const demand = DEMAND.map((busy, i) => {
+    const r = runScenario({ ...MAIN, name: `busy${busy}`, seed: SEED + 77 * (i + 1), studentsPerType: SMALL, busyProb: busy, policies: CORE });
+    return { busy, ...Object.fromEntries(CORE.map((p) => [p, window(r, p, "value", ...LATE)])),
+      gain: paired(r, "linucb", "fixed", "value", ...LATE) };
+  });
+
+  // 5. behaviour -------------------------------------------------------------
+  log("[4/6] student behaviour: skimming and changing preferences");
+  const behaviourDefs = [
+    { key: "reads_all", label: "Reads all four cards", examine: 1, driftAt: null },
+    { key: "skims", label: "Skims: 70% chance of reading the next card", examine: 0.7, driftAt: null },
+    { key: "drift", label: "Changes preference at attempt 40", examine: 1, driftAt: 40 },
+  ] as const;
+  const behaviourRows: Record<string, Row[]> = {};
+  const behaviour = behaviourDefs.map((b, i) => {
+    const r = runScenario({ ...MAIN, name: b.key, seed: SEED + 555 * (i + 1), studentsPerType: SMALL,
+      examine: b.examine, driftAt: b.driftAt, policies: CORE });
+    behaviourRows[b.key] = r;
+    return { ...b, ...Object.fromEntries(CORE.map((p) => [p, window(r, p, "value", ...LATE)])),
+      gain: paired(r, "linucb", "fixed", "value", ...LATE),
+      // right after the change: does LinUCB recover, or stay stuck on the old preference?
+      gain_just_after_drift: b.driftAt ? paired(r, "linucb", "fixed", "value", b.driftAt, b.driftAt + 10) : null };
+  });
+  const driftCurve: string[] = ["attempt,policy,value"];
+  for (const p of CORE) for (let a = 0; a < ATT; a++) {
+    const rs = behaviourRows.drift.filter((r) => r.policy === p && r.attempt === a);
+    driftCurve.push([a + 1, p, mean(rs.map((r) => r.value)).toFixed(4)].join(","));
+  }
+  writeFileSync(`${OUT}/drift-curve.csv`, driftCurve.join("\n"));
+  return { demand, behaviour };
+}
 
 // 6. latency (design spec DS4: under 1 second for a one-week window) -------
-log("[5/6] latency");
 function latency(nFacilities: number, worst: boolean, reps: number) {
   const rng = mulberry32(SEED + nFacilities);
   const facs: Facility[] = Array.from({ length: nFacilities }, (_, i) => ({
@@ -404,36 +418,57 @@ function latency(nFacilities: number, worst: boolean, reps: number) {
   return { facilities: nFacilities, case: worst ? "worst (7 days searched)" : "typical (1 day)",
     bookings: res.length, median_ms: q(0.5), p95_ms: q(0.95), max_ms: ms[ms.length - 1] };
 }
-const latencies = [3, 10, 30].flatMap((n) => [latency(n, false, QUICK ? 100 : 500), latency(n, true, QUICK ? 100 : 500)]);
+
+// ------------------------------------------------------------ run --
+const main = want("main") ? mainPart() : null;
+const seedSummary = want("seeds") ? seedsPart() : null;
+const ctx = want("context") ? contextPart() : null;
+let latencies: ReturnType<typeof latency>[] | null = null;
+if (want("main")) {
+  log("[5/6] latency");
+  latencies = [3, 10, 30].flatMap((n) => [latency(n, false, QUICK ? 100 : 500), latency(n, true, QUICK ? 100 : 500)]);
+}
 
 // ------------------------------------------------------------ write out --
 log("[6/6] writing results");
+const previous = PART !== "all" && existsSync(`${OUT}/summary.json`)
+  ? JSON.parse(readFileSync(`${OUT}/summary.json`, "utf8")) as Record<string, unknown> : {};
 const summary = {
+  ...previous,
   generated_by: "scripts/simulate-recommender.ts",
   quick: QUICK,
   settings: { SEED, SHOWN, main: MAIN, side_experiments_students_per_type: SMALL, types: TYPES },
   note: "value = probability the student books one of the shown cards; regret = oracle value - policy value; " +
         "ranges are 95% confidence intervals across students; paired = same students, same requests.",
-  overall, by_type_last20: byType, paired_last20: pairedMain, milestones,
-  seeds: seedSummary, demand, behaviour, latency_ms: latencies,
-  runtime_s: (performance.now() - t0) / 1000,
+  ...(main ? { overall: main.overall, by_type_last20: main.byType, paired_last20: main.pairedMain, milestones: main.milestones, latency_ms: latencies } : {}),
+  ...(seedSummary ? { seeds: seedSummary } : {}),
+  ...(ctx ? { demand: ctx.demand, behaviour: ctx.behaviour } : {}),
+  [`runtime_s_${PART}`]: (performance.now() - t0) / 1000,
 };
 writeFileSync(`${OUT}/summary.json`, JSON.stringify(summary, null, 2));
 
 // ------------------------------------------------------------ console --
-log(`\nP(student books a suggestion) - last 20 attempts, 95% CI across students`);
-for (const p of MAIN.policies)
-  log(`  ${p.padEnd(14)} ${fmt(overall[p].value_last20)}   first 10: ${pct(overall[p].value_first10.mean)}   regret: ${pct(overall[p].regret_last20.mean)}`);
-const g = pairedMain.linucb_vs_fixed;
-log(`\nPaired: linucb - fixed = ${pp(g.mean)} [${pp(g.lo)} .. ${pp(g.hi)}], better for ${g.better}/${g.students} students`);
-log(`Ablation: wider pool ${pp(pairedMain.wide_vs_linucb.mean)}, learning from rejections ${pp(pairedMain.reject_vs_linucb.mean)} (first 20: ${pp(pairedMain.reject_vs_linucb_first20.mean)})`);
-log(`\nGain over fixed by number of attempts: ` + milestones.map((m) => `${m.attempts}: ${pp(m.gain.mean)}`).join(", "));
-log(`\nSeeds (${SEEDS}): gain ${pp(seedSummary.gain_mean)} +/- ${pp(seedSummary.gain_sd)} (min ${pp(seedSummary.gain_min)}, max ${pp(seedSummary.gain_max)}); linucb best in ${seedSummary.linucb_best_in}/${SEEDS}`);
+if (main) {
+  const { overall, pairedMain, milestones } = main;
+  log(`\nP(student books a suggestion) - last 20 attempts, 95% CI across students`);
+  for (const p of MAIN.policies)
+    log(`  ${p.padEnd(14)} ${fmt(overall[p].value_last20)}   first 10: ${pct(overall[p].value_first10.mean)}   regret: ${pct(overall[p].regret_last20.mean)}`);
+  const g = pairedMain.linucb_vs_fixed;
+  log(`\nPaired: linucb - fixed = ${pp(g.mean)} [${pp(g.lo)} .. ${pp(g.hi)}], better for ${g.better}/${g.students} students`);
+  log(`Ablation: wider pool ${pp(pairedMain.wide_vs_linucb.mean)}, learning from rejections ${pp(pairedMain.reject_vs_linucb.mean)} (first 20: ${pp(pairedMain.reject_vs_linucb_first20.mean)})`);
+  log(`\nGain over fixed by number of attempts: ` + milestones.map((m) => `${m.attempts}: ${pp(m.gain.mean)}`).join(", "));
+}
+if (seedSummary) log(`\nSeeds (${SEEDS}): gain ${pp(seedSummary.gain_mean)} +/- ${pp(seedSummary.gain_sd)} (min ${pp(seedSummary.gain_min)}, max ${pp(seedSummary.gain_max)}); linucb best in ${seedSummary.linucb_best_in}/${SEEDS}`);
+if (ctx) {
+const { demand, behaviour } = ctx;
 log(`\nDemand:`);
 for (const d of demand) log(`  ${(d.busy * 100).toFixed(0).padStart(3)}% busy   fixed ${pct((d as unknown as Record<string, CI>).fixed.mean)}  linucb ${pct((d as unknown as Record<string, CI>).linucb.mean)}  gain ${pp(d.gain.mean)}`);
 log(`\nBehaviour:`);
 for (const b of behaviour) log(`  ${b.key.padEnd(10)} fixed ${pct((b as unknown as Record<string, CI>).fixed.mean)}  linucb ${pct((b as unknown as Record<string, CI>).linucb.mean)}  gain ${pp(b.gain.mean)}` +
   (b.gain_just_after_drift ? `  (10 attempts after the change: ${pp(b.gain_just_after_drift.mean)})` : ""));
+}
+if (latencies) {
 log(`\nLatency (DS4 target < 1000 ms):`);
 for (const l of latencies) log(`  ${String(l.facilities).padStart(2)} rooms, ${l.case.padEnd(24)} median ${l.median_ms.toFixed(2)} ms, p95 ${l.p95_ms.toFixed(2)} ms, max ${l.max_ms.toFixed(2)} ms`);
-log(`\nwrote ${OUT}/summary.json, learning-curves.csv, drift-curve.csv in ${summary.runtime_s.toFixed(0)} s`);
+}
+log(`\nwrote ${OUT}/summary.json (part: ${PART}) in ${((performance.now() - t0) / 1000).toFixed(0)} s`);

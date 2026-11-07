@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { safeEqual, sha256hex } from "./room-logic";
+import { capabilities, parseConfig, type Capabilities, type RoomConfig } from "./room-config";
 
 /**
  * Server-only helpers for the smart-room endpoints. Device endpoints use the
@@ -57,4 +58,48 @@ export async function logEvent(
   await db.from("room_events").insert({
     device_id: device.id, facility_id: device.facility_id, reservation_id: reservationId, kind, detail,
   });
+}
+
+export interface RoomDevice {
+  id: string; key_hash: string; active: boolean;
+  config: RoomConfig | null; config_version: number; caps: Capabilities;
+}
+
+/**
+ * A room's device with its setup and what it can do. Works before
+ * upgrade-room-config.sql has run (no setup stored = the door kit).
+ */
+export async function roomDevice(db: SupabaseClient, facilityId: string, activeOnly = false): Promise<RoomDevice | null> {
+  type Row = { id: string; key_hash: string; active: boolean; config?: unknown; config_version?: number };
+  const read = async (cols: string) => {
+    let q = db.from("room_devices").select(cols).eq("facility_id", facilityId);
+    if (activeOnly) q = q.eq("active", true);
+    const { data, error } = await q.maybeSingle();
+    return { row: data as unknown as Row | null, error };
+  };
+  const first = await read("id, key_hash, active, config, config_version");
+  const row = first.error ? (await read("id, key_hash, active")).row : first.row;
+  if (!row) return null;
+  const config = parseConfig(row.config);
+  return {
+    id: row.id, key_hash: row.key_hash, active: row.active, config,
+    config_version: row.config_version ?? 1, caps: capabilities(config),
+  };
+}
+
+/**
+ * The signed-in admin making this request (Authorization: Bearer <access
+ * token>), or an HTTP status and message.
+ */
+export async function requireAdmin(db: SupabaseClient, authHeader: string | null):
+  Promise<{ ok: true; uid: string } | { ok: false; status: number; error: string }> {
+  const token = authHeader?.replace("Bearer ", "");
+  if (!token) return { ok: false, status: 401, error: "Please sign in." };
+  const userDb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false } });
+  const { data: u } = await userDb.auth.getUser(token);
+  if (!u?.user) return { ok: false, status: 401, error: "Session expired - sign in again." };
+  const { data: prof } = await db.from("profiles").select("role").eq("id", u.user.id).maybeSingle();
+  if (prof?.role !== "admin") return { ok: false, status: 403, error: "Only admins can connect rooms." };
+  return { ok: true, uid: u.user.id };
 }

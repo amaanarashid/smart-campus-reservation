@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { codeWindow, doorCode } from "@/lib/room-logic";
-import { config } from "@/lib/room-server";
+import { config, roomDevice } from "@/lib/room-server";
 import { fmtTime } from "@/lib/time";
 
 /**
@@ -38,8 +38,9 @@ export async function GET(req: NextRequest) {
   if (b.status !== "approved") return NextResponse.json({ error: "Codes are issued once a booking is approved." }, { status: 409 });
   if (new Date(b.end_time) <= new Date()) return NextResponse.json({ error: "This booking has ended." }, { status: 410 });
 
-  const { data: door } = await cfg.db.from("room_devices").select("id").eq("facility_id", b.facility_id).eq("active", true).maybeSingle();
-  if (!door) return NextResponse.json({ error: "This room has no smart door." }, { status: 404 });
+  // only rooms whose device has a lock and keypad check in at the door
+  const door = await roomDevice(cfg.db, b.facility_id, true);
+  if (!door?.caps.checkIn) return NextResponse.json({ error: "This room has no smart door." }, { status: 404 });
 
   const { from, until } = codeWindow(b);
   return NextResponse.json({

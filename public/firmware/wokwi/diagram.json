@@ -1,0 +1,401 @@
+{
+  "version": 1,
+  "author": "Amaan Rashid",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-devkit-c-v4",
+      "id": "esp",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "board-ssd1306",
+      "id": "oled",
+      "top": -130,
+      "left": 10,
+      "attrs": {
+        "i2cAddress": "0x3c"
+      }
+    },
+    {
+      "type": "wokwi-membrane-keypad",
+      "id": "keypad",
+      "top": -60,
+      "left": -380,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-servo",
+      "id": "lock",
+      "top": 410,
+      "left": -10,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-slide-switch",
+      "id": "door",
+      "top": 430,
+      "left": 200,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledOk",
+      "top": -60,
+      "left": 230,
+      "attrs": {
+        "color": "green",
+        "label": "OPEN"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledNo",
+      "top": -60,
+      "left": 270,
+      "attrs": {
+        "color": "red",
+        "label": "DENIED"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rOk",
+      "top": 10,
+      "left": 225,
+      "attrs": {
+        "value": "220"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rNo",
+      "top": 50,
+      "left": 265,
+      "attrs": {
+        "value": "220"
+      }
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "buzzer",
+      "top": -70,
+      "left": 320,
+      "attrs": {
+        "volume": "0.1"
+      }
+    },
+    {
+      "type": "wokwi-pir-motion-sensor",
+      "id": "pir",
+      "top": 310,
+      "left": -330,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-slide-switch",
+      "id": "people",
+      "top": 100,
+      "left": 320,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-led",
+      "id": "lights",
+      "top": 100,
+      "left": 230,
+      "attrs": {
+        "color": "yellow",
+        "label": "LIGHTS"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ac",
+      "top": 100,
+      "left": 270,
+      "attrs": {
+        "color": "blue",
+        "label": "AIR-CON"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rL",
+      "top": 170,
+      "left": 225,
+      "attrs": {
+        "value": "220"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rA",
+      "top": 210,
+      "left": 265,
+      "attrs": {
+        "value": "220"
+      }
+    },
+    {
+      "type": "wokwi-led-ring",
+      "id": "ring",
+      "top": 300,
+      "left": -215,
+      "attrs": {
+        "pixels": "16"
+      }
+    }
+  ],
+  "connections": [
+    [
+      "esp:TX",
+      "$serialMonitor:RX",
+      "",
+      []
+    ],
+    [
+      "esp:RX",
+      "$serialMonitor:TX",
+      "",
+      []
+    ],
+    [
+      "oled:VCC",
+      "esp:3V3",
+      "red",
+      []
+    ],
+    [
+      "oled:GND",
+      "esp:GND.1",
+      "black",
+      []
+    ],
+    [
+      "oled:SDA",
+      "esp:21",
+      "blue",
+      []
+    ],
+    [
+      "oled:SCL",
+      "esp:22",
+      "purple",
+      []
+    ],
+    [
+      "keypad:R1",
+      "esp:13",
+      "gold",
+      []
+    ],
+    [
+      "keypad:R2",
+      "esp:16",
+      "gold",
+      []
+    ],
+    [
+      "keypad:R3",
+      "esp:14",
+      "gold",
+      []
+    ],
+    [
+      "keypad:R4",
+      "esp:27",
+      "gold",
+      []
+    ],
+    [
+      "keypad:C1",
+      "esp:26",
+      "orange",
+      []
+    ],
+    [
+      "keypad:C2",
+      "esp:25",
+      "orange",
+      []
+    ],
+    [
+      "keypad:C3",
+      "esp:33",
+      "orange",
+      []
+    ],
+    [
+      "keypad:C4",
+      "esp:32",
+      "orange",
+      []
+    ],
+    [
+      "lock:GND",
+      "esp:GND.1",
+      "black",
+      []
+    ],
+    [
+      "lock:V+",
+      "esp:5V",
+      "red",
+      []
+    ],
+    [
+      "lock:PWM",
+      "esp:18",
+      "green",
+      []
+    ],
+    [
+      "door:2",
+      "esp:4",
+      "cyan",
+      []
+    ],
+    [
+      "door:1",
+      "esp:GND.1",
+      "black",
+      []
+    ],
+    [
+      "esp:23",
+      "rOk:1",
+      "green",
+      []
+    ],
+    [
+      "rOk:2",
+      "ledOk:A",
+      "green",
+      []
+    ],
+    [
+      "ledOk:C",
+      "esp:GND.1",
+      "black",
+      []
+    ],
+    [
+      "esp:19",
+      "rNo:1",
+      "red",
+      []
+    ],
+    [
+      "rNo:2",
+      "ledNo:A",
+      "red",
+      []
+    ],
+    [
+      "ledNo:C",
+      "esp:GND.1",
+      "black",
+      []
+    ],
+    [
+      "buzzer:2",
+      "esp:5",
+      "magenta",
+      []
+    ],
+    [
+      "buzzer:1",
+      "esp:GND.1",
+      "black",
+      []
+    ],
+    [
+      "pir:VCC",
+      "esp:3V3",
+      "red",
+      []
+    ],
+    [
+      "pir:GND",
+      "esp:GND.1",
+      "black",
+      []
+    ],
+    [
+      "pir:OUT",
+      "esp:34",
+      "violet",
+      []
+    ],
+    [
+      "people:2",
+      "esp:2",
+      "cyan",
+      []
+    ],
+    [
+      "people:1",
+      "esp:GND.1",
+      "black",
+      []
+    ],
+    [
+      "esp:17",
+      "rL:1",
+      "yellow",
+      []
+    ],
+    [
+      "rL:2",
+      "lights:A",
+      "yellow",
+      []
+    ],
+    [
+      "lights:C",
+      "esp:GND.1",
+      "black",
+      []
+    ],
+    [
+      "esp:15",
+      "rA:1",
+      "blue",
+      []
+    ],
+    [
+      "rA:2",
+      "ac:A",
+      "blue",
+      []
+    ],
+    [
+      "ac:C",
+      "esp:GND.1",
+      "black",
+      []
+    ],
+    [
+      "ring:GND",
+      "esp:GND.1",
+      "black",
+      []
+    ],
+    [
+      "ring:VCC",
+      "esp:5V",
+      "red",
+      []
+    ],
+    [
+      "ring:DIN",
+      "esp:12",
+      "violet",
+      []
+    ]
+  ],
+  "dependencies": {}
+}

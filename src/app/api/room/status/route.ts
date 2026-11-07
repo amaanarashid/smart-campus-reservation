@@ -5,7 +5,7 @@ import { extensionAvailability, roomStatus } from "@/lib/room-logic";
 import { signCommand, type CommandArgs } from "@/lib/room-commands";
 
 /**
- * The door device polls this every ~30 s.
+ * The room device polls this every ~5 s.
  *
  *   GET /api/room/status?device_id=<uuid>
  *   x-device-key: <key>
@@ -48,10 +48,13 @@ export async function GET(req: NextRequest) {
   // Remote commands: anything still waiting (the HTTP fallback for MQTT), and
   // the lockdown state, so a device that restarts comes back locked down.
   const remote = await pendingCommands(cfg.db, auth.device.id, now);
+  // the room's setup version: a device on an older one fetches the new setup
+  const { data: ver } = await cfg.db.from("room_devices").select("config_version").eq("id", auth.device.id).maybeSingle();
 
   return NextResponse.json({
     ok: true, room: auth.device.label, now: now.toISOString(), ...status,
     commands: remote.commands, lockdown: remote.lockdown,
+    ...(ver?.config_version ? { config_version: ver.config_version } : {}),
     current: status.current && {
       ...status.current,
       can_extend: extension?.ok ?? false,

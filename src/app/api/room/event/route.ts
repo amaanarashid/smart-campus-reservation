@@ -3,6 +3,47 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { authDevice, config, logEvent, roomBookings, type Device } from "@/lib/room-server";
 import { earlyReleaseDecision, isDeviceEvent, overstayBooking, type DoorBooking } from "@/lib/room-logic";
 import { fmtTime } from "@/lib/time";
+import { applyIrLearned, parseConfig } from "@/lib/room-config";
+
+/** Staff to tell about a room: its managers, or the admins if it has none. */
+async function roomStaff(db: SupabaseClient, facilityId: string) {
+  const { data: mgrs } = await db.from("facility_managers").select("manager_id").eq("facility_id", facilityId);
+  let staff = (mgrs ?? []).map((m) => m.manager_id as string);
+  if (staff.length === 0) {
+    const { data: admins } = await db.from("profiles").select("id").eq("role", "admin");
+    staff = (admins ?? []).map((a) => a.id as string);
+  }
+  return staff;
+}
+
+/** The device recognised the air-con's remote: save the make in the room's setup. */
+async function irLearned(db: SupabaseClient, device: Device, detail: unknown) {
+  const { data: row } = await db.from("room_devices").select("config, config_version").eq("id", device.id).maybeSingle();
+  const next = applyIrLearned(parseConfig(row?.config), detail);
+  if (next && row) {
+    await db.from("room_devices").update({ config: next, config_version: (row.config_version ?? 1) + 1 }).eq("id", device.id);
+  }
+  return NextResponse.json({ ok: true, saved: !!next });
+}
+
+/** IR is one-way: the room did not cool after "on". Tell staff, at most every 6 hours. */
+async function acNoResponse(db: SupabaseClient, device: Device) {
+  const since = new Date(Date.now() - 6 * 3_600_000).toISOString();
+  const { count } = await db.from("room_events").select("id", { count: "exact", head: true })
+    .eq("device_id", device.id).eq("kind", "ac_no_response").gte("at", since);
+  if ((count ?? 0) > 1) return NextResponse.json({ ok: true, notified: false });
+  const [{ data: fac }, staff] = await Promise.all([
+    db.from("facilities").select("name").eq("id", device.facility_id).maybeSingle(),
+    roomStaff(db, device.facility_id),
+  ]);
+  if (staff.length) await db.from("notifications").insert(staff.map((uid) => ({
+    user_id: uid, title: "Air-con not responding",
+    body: `${fac?.name ?? "A room"}: the air-con was switched on but the room is not cooling. ` +
+      "Check that the AC has power and that nothing blocks its IR receiver.",
+    type: "room_ac", entity_id: device.facility_id,
+  })));
+  return NextResponse.json({ ok: true, notified: staff.length > 0 });
+}
 
 /**
  * People are still in the room after the booking ended. Logged every time;
@@ -21,16 +62,11 @@ async function overstay(db: SupabaseClient, device: Device, bookings: DoorBookin
   await logEvent(db, device, "overstay", b.id, { minutes_over: minsOver, ...(typeof detail === "object" && detail ? detail : {}) });
   if ((count ?? 0) > 0) return NextResponse.json({ ok: true, notified: false, reason: "already notified" });
 
-  const [{ data: res }, { data: fac }, { data: mgrs }] = await Promise.all([
+  const [{ data: res }, { data: fac }, staff] = await Promise.all([
     db.from("reservations").select("user_id").eq("id", b.id).maybeSingle(),
     db.from("facilities").select("name").eq("id", device.facility_id).maybeSingle(),
-    db.from("facility_managers").select("manager_id").eq("facility_id", device.facility_id),
+    roomStaff(db, device.facility_id),
   ]);
-  let staff = (mgrs ?? []).map((m) => m.manager_id as string);
-  if (staff.length === 0) {
-    const { data: admins } = await db.from("profiles").select("id").eq("role", "admin");
-    staff = (admins ?? []).map((a) => a.id as string);
-  }
   const room = fac?.name ?? "A room";
   const rows = staff.map((uid) => ({
     user_id: uid, title: "Room still occupied",
@@ -56,7 +92,8 @@ async function overstay(db: SupabaseClient, device: Device, bookings: DoorBookin
  *   { "device_id": "<uuid>", "kind": "lights_on", "detail": { ... } }
  *
  * Kinds: presence_on/off, lights_on/off, ac_on/off, door_open/closed,
- * reminder, released_early, heartbeat. Every event is logged against the
+ * reminder, released_early, heartbeat, temperature, ir_learned (the make of
+ * air-con is saved in the room's setup), ac_no_response (staff are told). Every event is logged against the
  * booking running at the time, which is the raw data for the energy and
  * booked-vs-used figures.
  *
@@ -94,6 +131,14 @@ export async function POST(req: NextRequest) {
   const current = bookings.find((b) => new Date(b.start_time).getTime() <= t && t < new Date(b.end_time).getTime());
 
   if (body.kind === "overstay") return overstay(db, device, bookings, now, detail);
+  if (body.kind === "ir_learned") {
+    await logEvent(db, device, "ir_learned", null, detail);
+    return irLearned(db, device, detail);
+  }
+  if (body.kind === "ac_no_response") {
+    await logEvent(db, device, "ac_no_response", current?.id ?? null, detail);
+    return acNoResponse(db, device);
+  }
 
   if (body.kind === "booking_ended") {
     // the booking that just ended, not whatever is running now

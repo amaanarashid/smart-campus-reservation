@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
-import { config } from "@/lib/room-server";
+import { config, roomDevice } from "@/lib/room-server";
 import {
-  COMMAND_TTL_S, commandTopic, describeCommand, signCommand, validateCommand,
+  COMMAND_MISSING, COMMAND_NEEDS, COMMAND_TTL_S, commandTopic, describeCommand, signCommand, validateCommand,
 } from "@/lib/room-commands";
-import { mqttConfigured, publish } from "@/lib/mqtt-publish";
+import { NOT_AUTHORIZED, mqttConfigured, publish } from "@/lib/mqtt-publish";
+import { emqxApi, ensureServerRule } from "@/lib/mqtt-accounts";
 
 /**
  * Remote control: an admin or a manager of the room sends a command to its
@@ -44,13 +45,16 @@ export async function POST(req: NextRequest) {
   const uid = u?.user?.id;
   if (!uid) return json({ ok: false, error: "Session expired - sign in again." }, 401);
 
-  const [{ data: prof }, { data: mgr }, { data: dev }] = await Promise.all([
+  const [{ data: prof }, { data: mgr }, dev] = await Promise.all([
     db.from("profiles").select("role").eq("id", uid).maybeSingle(),
     db.from("facility_managers").select("id").eq("facility_id", body.facility_id).eq("manager_id", uid).maybeSingle(),
-    db.from("room_devices").select("id, key_hash, active").eq("facility_id", body.facility_id).maybeSingle(),
+    roomDevice(db, body.facility_id),
   ]);
   if (prof?.role !== "admin" && !mgr) return json({ ok: false, error: "Only admins and this room's managers can control it." }, 403);
   if (!dev || !dev.active) return json({ ok: false, error: "This room has no active smart device." }, 404);
+  // only what the room has (Admin -> Smart room -> the room -> Setup)
+  if (!dev.caps[COMMAND_NEEDS[v.value.kind]]) return json({ ok: false, error: COMMAND_MISSING[v.value.kind] }, 409);
+  if (v.value.kind === "ir_learn" && prof?.role !== "admin") return json({ ok: false, error: "Only admins can change a room's setup." }, 403);
 
   // save, sign, publish
   const id = randomUUID();
@@ -68,7 +72,20 @@ export async function POST(req: NextRequest) {
   let delivery: "mqtt" | "http" = "http";
   let mqttError: string | null = null;
   if (mqttConfigured()) {
-    const r = await publish(commandTopic(dev.id), JSON.stringify({ cmd: signed.cmd, sig: signed.sig }));
+    const message = JSON.stringify({ cmd: signed.cmd, sig: signed.sig });
+    let r = await publish(commandTopic(dev.id), message);
+    // the broker refused the server's login: with the EMQX API set up, give it
+    // publish rights on campus/rooms/# and try once more
+    const api = emqxApi();
+    if (!r.ok && r.code === NOT_AUTHORIZED && api && process.env.MQTT_USERNAME) {
+      const refused = r.error;
+      try {
+        await ensureServerRule(api, process.env.MQTT_USERNAME);
+        r = await publish(commandTopic(dev.id), message);
+      } catch (e) {
+        r = { ok: false, error: `${refused} Could not fix it through the EMQX API: ${e instanceof Error ? e.message : e}` };
+      }
+    }
     if (r.ok) delivery = "mqtt"; else mqttError = r.error;
   }
 

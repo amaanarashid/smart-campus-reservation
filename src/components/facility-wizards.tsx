@@ -72,7 +72,7 @@ function VenuePicker({ venues, categories, value, onPick, allowNew, newName, onN
         const types = categories.filter((c) => c.venue === v);
         const on = value === v;
         return (
-          <button key={v} type="button" onClick={() => onPick(v)}
+          <button key={v} type="button" onClick={() => onPick(v)} aria-pressed={on}
             className={`overflow-hidden rounded-xl border text-left transition-all ${on ? "border-primary ring-2 ring-primary/30" : "hover:border-primary/50"}`}>
             <div className="aspect-[12/7] bg-muted/30"><VenueArt name={v} types={types.map((c) => c.slug)} /></div>
             <div className="p-2.5">
@@ -84,7 +84,7 @@ function VenuePicker({ venues, categories, value, onPick, allowNew, newName, onN
       })}
       {allowNew && (
         <div className={`overflow-hidden rounded-xl border transition-all ${isNew ? "border-primary ring-2 ring-primary/30" : "border-dashed"}`}>
-          <button type="button" onClick={() => onPick(null)} className="block w-full text-left">
+          <button type="button" onClick={() => onPick(null)} className="block w-full text-left" aria-label="New location" aria-pressed={isNew}>
             <div className="aspect-[12/7] bg-muted/30">
               {isNew && newName?.trim()
                 ? <VenueArt name={newName} />
