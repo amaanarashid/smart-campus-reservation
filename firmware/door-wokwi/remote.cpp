@@ -160,9 +160,14 @@ static void ensureMqtt() {
   String clientId = String("room-") + deviceId.substring(0, 8) + "-" + String(esp_random() & 0xffff, HEX);
   if (mqtt.connect(clientId.c_str(), mqttUser.c_str(), mqttPass.c_str())) {
     mqtt.subscribe(cmdTopic.c_str(), 1);
-    Serial.println("MQTT connected, listening on " + cmdTopic);
+    Serial.println("MQTT connected as " + mqttUser + ", listening on " + cmdTopic);
   } else {
-    Serial.printf("MQTT connect failed, state %d\n", mqtt.state());
+    // which login the server handed out (never the password), and what the refusal means
+    int st = mqtt.state();
+    const char *why = st == 4 ? "wrong username or password" : st == 5 ? "the broker refused this login"
+                    : st < 0 ? "could not reach the broker" : "refused by the broker";
+    Serial.printf("MQTT connect failed, state %d (%s): user \"%s\" at %s:%d\n",
+                  st, why, mqttUser.c_str(), mqttHost.c_str(), mqttPort);
   }
 }
 
