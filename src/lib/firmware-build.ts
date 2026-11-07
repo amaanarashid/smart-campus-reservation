@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sha256hex } from "./room-logic";
 import type { Board, RoomConfig } from "./room-config";
@@ -16,15 +18,27 @@ export const FIRMWARE_PARTS = ["bootloader.bin", "partitions.bin", "boot_app0.bi
 
 export interface Manifest { name: string; version: string; builds: { chipFamily: string; parts: { path: string; offset: number }[] }[] }
 
-/** One file of the published build, fetched from this site's own static files. */
-export async function publishedFile(origin: string, board: Board, name: string): Promise<Uint8Array> {
-  const r = await fetch(new URL(`/firmware/${FIRMWARE_FOLDER[board]}/${name}`, origin), { cache: "no-store" });
-  if (!r.ok) throw new Error(`${FIRMWARE_FOLDER[board]}/${name} is missing`);
-  return new Uint8Array(await r.arrayBuffer());
+/**
+ * One file of the published build, read from the deployment's own files.
+ * Not fetched over HTTP from this site: a protected Vercel preview answers
+ * the server's own request with a login page. next.config.ts includes
+ * public/firmware in these routes' server bundle (outputFileTracingIncludes).
+ */
+export async function publishedFile(board: Board, name: string): Promise<Uint8Array> {
+  const file = path.join(process.cwd(), "public", "firmware", FIRMWARE_FOLDER[board], name);
+  try {
+    return new Uint8Array(await readFile(file));
+  } catch {
+    throw new Error(`${FIRMWARE_FOLDER[board]}/${name} is missing`);
+  }
 }
 
-export async function publishedManifest(origin: string, board: Board): Promise<Manifest> {
-  return JSON.parse(new TextDecoder().decode(await publishedFile(origin, board, "manifest.json")));
+export async function publishedManifest(board: Board): Promise<Manifest> {
+  try {
+    return JSON.parse(new TextDecoder().decode(await publishedFile(board, "manifest.json")));
+  } catch (e) {
+    throw e instanceof SyntaxError ? new Error(`${FIRMWARE_FOLDER[board]}/manifest.json is not valid`) : e;
+  }
 }
 
 /** The app image with this room's key and setup in it. */

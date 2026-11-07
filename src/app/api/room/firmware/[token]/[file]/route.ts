@@ -37,15 +37,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   if (!dev || !dev.active || dev.key_hash !== sha256hex(key))
     return refuse(410, "This room has been given another device since. Start again from Connect a room.");
 
-  const origin = req.nextUrl.origin;
   const headers = { "Cache-Control": "no-store" };
   try {
     if (file === "manifest.json") {
       const { data: fac } = await cfg.db.from("facilities").select("name").eq("id", link.facility).maybeSingle();
-      const m = await publishedManifest(origin, link.board);
+      const m = await publishedManifest(link.board);
       return NextResponse.json({ ...m, name: `${m.name} for ${fac?.name ?? "this room"}` }, { headers });
     }
-    let data = await publishedFile(origin, link.board, file);
+    let data = await publishedFile(link.board, file);
     if (file === "firmware.bin") {
       const setup = parseConfig(dev.config);
       if (!setup) return refuse(409, "This room has no setup saved. Start again from Connect a room.");

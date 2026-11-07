@@ -50,13 +50,12 @@ export async function POST(req: NextRequest) {
   const key = randomBytes(24).toString("hex");
   let flash: Uint8Array;
   try {
-    const origin = req.nextUrl.origin;
-    const manifest = await publishedManifest(origin, "wokwi-door");
+    const manifest = await publishedManifest("wokwi-door");
     const parts = await Promise.all(manifest.builds[0].parts.map(async (p) => ({
       offset: p.offset,
       data: p.path === "firmware.bin"
-        ? personalise(await publishedFile(origin, "wokwi-door", p.path), key, setup)
-        : await publishedFile(origin, "wokwi-door", p.path),
+        ? personalise(await publishedFile("wokwi-door", p.path), key, setup)
+        : await publishedFile("wokwi-door", p.path),
     })));
     flash = mergeFlash(parts);
   } catch (e) {
