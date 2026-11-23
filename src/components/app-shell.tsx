@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -16,9 +16,16 @@ const ROLE_LABELS: Record<string, string> = {
   admin: "Administrator",
 };
 
-export function BrandMark({ light = false }: { light?: boolean }) {
+/** Where the logo takes a signed-in person: their own dashboard, never out to the public home page. */
+export const ROLE_HOME: Record<string, string> = {
+  student: "/student",
+  facility_manager: "/facility-manager",
+  admin: "/admin",
+};
+
+export function BrandMark({ light = false, href = "/" }: { light?: boolean; href?: string }) {
   return (
-    <Link href="/" className="flex items-center gap-2.5">
+    <Link href={href} className="flex items-center gap-2.5">
       <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-sm">
         <CampusIcon className="h-5 w-5" />
       </span>
@@ -40,6 +47,7 @@ export default function AppShell({
   role,
   userName,
   focused = false,
+  wide,
   children,
 }: {
   title: string;
@@ -48,17 +56,24 @@ export default function AppShell({
   userName?: string;
   /** One-task page: a narrower column and a shorter title band. */
   focused?: boolean;
+  /** With `focused`, let the column grow on big screens: "rail" makes room for a
+   *  side column, "full" is for working dashboards. Phones and tablets are unchanged. */
+  wide?: "rail" | "full";
   children: ReactNode;
 }) {
   const router = useRouter();
-  const width = focused ? "max-w-5xl" : "max-w-[1680px]";
+  // signed in: the logo stays inside the app (own dashboard, or this section if the role is not known yet)
+  const pathname = usePathname();
+  const home = (role && ROLE_HOME[role]) || `/${pathname.split("/")[1] ?? ""}`;
+  const width = !focused || wide === "full" ? "max-w-[1680px]"
+    : wide === "rail" ? "max-w-5xl xl:max-w-7xl" : "max-w-5xl";
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <div className="h-1 bg-gradient-to-r from-primary via-primary/70 to-primary" />
       <header className="sticky top-0 z-40 border-b bg-card/95 shadow-sm backdrop-blur">
         <div className={`mx-auto flex h-16 w-full ${width} items-center justify-between px-4 sm:px-6 lg:px-10`}>
-          <BrandMark />
+          <BrandMark href={home} />
           <div className="flex items-center gap-3">
             <ThemeToggle />
             <NotificationBell />
@@ -75,7 +90,7 @@ export default function AppShell({
               size="sm"
               onClick={async () => {
                 await supabase.auth.signOut({ scope: "local" });   // this tab only
-                router.replace("/login");
+                router.replace("/");   // only signing out leads back to the public home page
               }}
             >
               Sign out

@@ -16,7 +16,8 @@ import {
 import {
   initBandit, isBanditState, rankWithBandit, cascadeUpdate, compactBandit,
 } from "@/lib/bandit";
-import { addDays, fmtDay, fmtRelativeDay, fmtTime, myAt, myDateKey } from "@/lib/time";
+import { diversify, usualHour } from "@/lib/suggest";
+import { addDays, fmtDay, fmtRelativeDay, fmtTime, myAt, myDateKey, myTimeKey } from "@/lib/time";
 import {
   clampDuration, durationOptions, firstSlot, fmtDuration, nearestTime, recentFacilityIds, timeOptions,
 } from "@/lib/booking-form";
@@ -36,6 +37,8 @@ import AppShell from "@/components/app-shell";
 import FacilityIso from "@/components/facility-iso";
 import VenueArt from "@/components/venue-art";
 import PopularTimes from "@/components/popular-times";
+import AvailabilityGrid from "@/components/availability-grid";
+import SlotSuggestions from "@/components/slot-suggestions";
 import { BookingSteps, ChoiceChips, Disclosure } from "@/components/booking-ui";
 import ReportProblemDialog, { CATEGORY_ICON } from "@/components/report-problem-dialog";
 import {
@@ -45,7 +48,7 @@ import {
 import { logEvent } from "@/lib/evaluation";
 import {
   CalendarDays, CalendarPlus, Clock, CheckCircle2, ChevronDown, ArrowLeft, BarChart3, History, PackagePlus,
-  Sparkles, MapPin, Users2, CalendarX, Copy, KeyRound, Loader2, TriangleAlert, MessageSquareWarning, Lock,
+  MapPin, Users2, CalendarX, Copy, KeyRound, Loader2, TriangleAlert, MessageSquareWarning, Lock,
 } from "lucide-react";
 
 const STATUS_COLOR: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -68,6 +71,9 @@ function hoursOf(rs: FacilityRule[]) {
     close: Math.min(24, Math.max(...rs.map((r) => Number(r.close_time.slice(0, 2)) + (r.close_time.slice(3, 5) !== "00" ? 1 : 0)))),
   };
 }
+
+/** How many upcoming bookings the desktop side column shows. */
+const RAIL_MAX = 3;
 
 function DashboardSkeleton() {
   return (
@@ -120,6 +126,15 @@ export default function StudentDashboard() {
   // what the student asked for when the suggestions were produced; the form
   // may change afterwards, but learning must be against the original request
   const [suggestCtx, setSuggestCtx] = useState<{ preferredHour: number; peaks: PeakModel } | null>(null);
+  // Suggestions offered up front, before the student asks for a time. `key`
+  // says which room/day/length/group they were worked out for.
+  const [offers, setOffers] = useState<{ key: string; slots: ScoredSlot[]; preferredHour: number | null; peaks: PeakModel } | null>(null);
+  // An offered slot the student tapped. The model learns from it only if that
+  // exact slot is then booked; changing the time afterwards teaches nothing.
+  const [pickedOffer, setPickedOffer] = useState<{
+    slot: ScoredSlot; rank: number; list: ScoredSlot[]; preferredHour: number | null; peaks: PeakModel;
+  } | null>(null);
+  const offerLogged = useRef("");
   const [checking, setChecking] = useState(false);
   // which suggestion is being booked right now; blocks double clicks
   const [bookingKey, setBookingKey] = useState<string | null>(null);
@@ -307,28 +322,22 @@ export default function StudentDashboard() {
         num: idx,
         note: `same_facility=${fromSuggestion.features[4]};day_offset=${Math.round(1 / fromSuggestion.features[5] - 1)}`,
       });
-
-      // Baseline weights: learn against the hour the student ASKED for.
+      // learn against the hour the student ASKED for
       const ctx = suggestCtx ?? { preferredHour: Number(startTime.split(":")[0]), peaks: DEFAULT_PEAKS };
-      const newW = updateWeights(profile.rec_weights ?? DEFAULT_WEIGHTS, fromSuggestion, ctx.preferredHour, ctx.peaks);
-
-      // Bandit: cascade feedback over the list the student actually saw.
-      const stored = profile.rec_bandit;
-      const current = isBanditState(stored) ? stored : initBandit();
-      const newB = compactBandit(cascadeUpdate(current, suggestions, idx));
-
-      const { error: upErr } = await supabase
-        .from("profiles").update({ rec_weights: newW, rec_bandit: newB }).eq("id", profile.id);
-      if (upErr) {
-        // rec_bandit column missing until upgrade-recommender.sql is run;
-        // still save the baseline weights rather than lose both
-        console.warn("bandit not saved:", upErr.message);
-        await supabase.from("profiles").update({ rec_weights: newW }).eq("id", profile.id);
-        setProfile({ ...profile, rec_weights: newW });
-      } else {
-        setProfile({ ...profile, rec_weights: newW, rec_bandit: newB });
-      }
+      await learnFrom(suggestions, idx, ctx.preferredHour, ctx.peaks);
+    } else if (pickedOffer && pickedOffer.slot.facilityId === target.id
+      && pickedOffer.slot.start.getTime() === start.getTime() && pickedOffer.slot.end.getTime() === end.getTime()) {
+      // booked exactly the offered slot they tapped; logged apart from the
+      // "time is taken" suggestions so the two acceptance rates stay separate
+      const s = pickedOffer.slot;
+      logEvent("rec_offer_accepted", {
+        num: pickedOffer.rank,
+        note: `same_facility=${s.features[4]};day_offset=${Math.round(1 / s.features[5] - 1)}`,
+      });
+      await learnFrom(pickedOffer.list, pickedOffer.rank, pickedOffer.preferredHour, pickedOffer.peaks);
     }
+    setPickedOffer(null);
+    setOffers(null);
     setSuggestions(null);
     setSuggestCtx(null);
     setEquipReq({});
@@ -344,14 +353,42 @@ export default function StudentDashboard() {
     window.scrollTo(0, 0);
   }
 
-  async function suggestAlternatives() {
-    if (!facility || !rules[facility.id]) return;
+  /**
+   * Feedback from one accepted suggestion: the baseline weights and the
+   * bandit (cascade over the list the student actually saw).
+   */
+  async function learnFrom(list: ScoredSlot[], idx: number, preferredHour: number | null, peaks: PeakModel) {
+    if (!profile || !list[idx]) return;
+    const newW = updateWeights(profile.rec_weights ?? DEFAULT_WEIGHTS, list[idx], preferredHour, peaks);
+    const stored = profile.rec_bandit;
+    const current = isBanditState(stored) ? stored : initBandit();
+    const newB = compactBandit(cascadeUpdate(current, list, idx));
+
+    const { error: upErr } = await supabase
+      .from("profiles").update({ rec_weights: newW, rec_bandit: newB }).eq("id", profile.id);
+    if (upErr) {
+      // rec_bandit column missing until upgrade-recommender.sql is run;
+      // still save the baseline weights rather than lose both
+      console.warn("bandit not saved:", upErr.message);
+      await supabase.from("profiles").update({ rec_weights: newW }).eq("id", profile.id);
+      setProfile({ ...profile, rec_weights: newW });
+    } else {
+      setProfile({ ...profile, rec_weights: newW, rec_bandit: newB });
+    }
+  }
+
+  /**
+   * Free slots for a request, across the room's category, ranked by the
+   * student's bandit. `wide` keeps a longer candidate list so a varied
+   * shortlist can be cut from it.
+   */
+  async function findSlots(f: Facility, day: string, dur: number, people: number, preferredHour: number | null, wide: boolean) {
     const LOOK_AHEAD = 2;
 
     // every facility of the same category is a candidate
-    const ids = facilities.filter((f) => f.category_id === facility.category_id).map((f) => f.id);
-    const from = myAt(date, "00:00").toISOString();
-    const to = myAt(addDays(date, LOOK_AHEAD + 1), "00:00").toISOString();
+    const ids = facilities.filter((x) => x.category_id === f.category_id).map((x) => x.id);
+    const from = myAt(day, "00:00").toISOString();
+    const to = myAt(addDays(day, LOOK_AHEAD + 1), "00:00").toISOString();
     const since = myAt(addDays(myDateKey(), -60), "00:00").toISOString();
 
     const [{ data: res }, { data: hist }] = await Promise.all([
@@ -366,18 +403,25 @@ export default function StudentDashboard() {
     ]);
 
     const peaks = learnPeakHours(hist ?? []);
-    const preferredHour = Number(startTime.split(":")[0]);
     const out = recommendAcross({
-      requested: facility, facilities: facilities.filter((x) => canBook(rules[x.id], profile?.member_type)), rules,
+      requested: f, facilities: facilities.filter((x) => canBook(rules[x.id], profile?.member_type)), rules,
       reservations: (res as BusySlot[] | null) ?? [],
-      date, durationMins: duration, participants, preferredHour,
+      date: day, durationMins: dur, participants: people, preferredHour,
       weights: profile?.rec_weights ?? DEFAULT_WEIGHTS,
       peaks, lookAheadDays: LOOK_AHEAD,
+      ...(wide ? { limit: 48, perFacility: 16 } : {}),
     });
 
     const stored = profile?.rec_bandit;
     const bandit = isBanditState(stored) ? stored : initBandit();
-    const shown = rankWithBandit(out.slots, bandit).slice(0, 4);
+    return { out, peaks, ranked: rankWithBandit(out.slots, bandit) };
+  }
+
+  async function suggestAlternatives() {
+    if (!facility || !rules[facility.id]) return;
+    const preferredHour = Number(startTime.split(":")[0]);
+    const { out, peaks, ranked } = await findSlots(facility, date, duration, participants, preferredHour, false);
+    const shown = ranked.slice(0, 4);
 
     setSuggestions(shown);
     setSuggestCtx({ preferredHour, peaks });
@@ -446,11 +490,25 @@ export default function StudentDashboard() {
     setEquipReq({});
     setSuggestions(null);
     // comparing rooms: keep the chosen time if it also works here
-    if (!timeOptions(r, date, d, clock).includes(startTime)) {
-      const slot = firstSlot(r, d, clock);
-      setDate(slot.date);
-      setStartTime(slot.time);
+    const sameDay = timeOptions(r, date, d, clock);
+    if (!sameDay.includes(startTime)) {
+      // keep the day the student was looking at, if the room has time left on it
+      if (sameDay.length > 0) setStartTime(nearestTime(sameDay, startTime));
+      else {
+        const slot = firstSlot(r, d, clock);
+        setDate(slot.date);
+        setStartTime(slot.time);
+      }
     }
+  }
+
+  /** A free cell in the venue grid: open that room at that time. */
+  function pickFromGrid(facilityId: string, time: string) {
+    const f = facilities.find((x) => x.id === facilityId);
+    if (!f) return;
+    openRoom(f);
+    setDate(todayKey);
+    setStartTime(time);
   }
 
   function chooseVenue(v: string) {
@@ -463,6 +521,22 @@ export default function StudentDashboard() {
   function goToStep(index: number) {
     setFacility(null);
     if (index === 0) setVenue(null);
+    setSuggestions(null);
+    setPickedOffer(null);
+  }
+
+  /** An offered slot was tapped: put it in the form (it may be another room or day). */
+  function takeOffer(s: ScoredSlot, rank: number) {
+    const f = facilities.find((x) => x.id === s.facilityId);
+    if (!f || !facility || !offers) return;
+    setPickedOffer({ slot: s, rank, list: offers.slots, preferredHour: offers.preferredHour, peaks: offers.peaks });
+    if (f.id !== facility.id) {
+      setVenue(f.venue);
+      setFacility(f);
+      setEquipReq({});
+    }
+    setDate(s.dateKey);
+    setStartTime(myTimeKey(s.start));
     setSuggestions(null);
   }
 
@@ -572,6 +646,9 @@ export default function StudentDashboard() {
   const upNext = activeBookings[0] && new Date(activeBookings[0].start_time).getTime() - now < 86_400_000
     ? activeBookings[0] : null;
 
+  // desktop only: upcoming bookings beside the place and room steps
+  const showRail = !facility && activeBookings.length > 0;
+
   const todayKey = myDateKey(new Date(now || 0));
   const issues = issuesByFacility(openIssues);
   const stepKey = !venue ? "venues" : !facility ? `venue:${venue}` : `facility:${facility.id}`;
@@ -583,6 +660,42 @@ export default function StudentDashboard() {
     { value: todayKey, label: "Today" },
     ...(rule && rule.max_advance_days >= 1 ? [{ value: tomorrowKey, label: "Tomorrow" }] : []),
   ];
+
+  const bookableRooms = sortedRooms.filter((f) => canBook(rules[f.id], profile?.member_type));
+
+  // ---------- suggestions offered up front ----------
+  // Aim for the hour this student usually books; null until there is history.
+  const usual = usualHour(myBookings);
+  const offerKey = facility && rule ? `${facility.id}|${date}|${duration}|${participants}` : "";
+  useEffect(() => {
+    if (!offerKey || !facility) return;
+    let stale = false;
+    // short wait so stepping the group size up and down is one lookup, not five
+    const t = setTimeout(async () => {
+      const { ranked, peaks, out } = await findSlots(facility, date, duration, participants, usual, true);
+      if (stale) return;
+      const slots = diversify(ranked, 3);
+      setOffers({ key: offerKey, slots, preferredHour: usual, peaks });
+      // once per room and day, not on every change of length or group size
+      const logKey = `${facility.id}|${date}`;
+      if (slots.length > 0 && offerLogged.current !== logKey) {
+        offerLogged.current = logKey;
+        logEvent("rec_offered", {
+          num: slots.length,
+          note: `usual_hour=${usual ?? "none"};peaks=${peaks.learned ? "learned" : "default"};lookahead=${out.usedLookAhead}`,
+        });
+      }
+    }, 200);
+    return () => { stale = true; clearTimeout(t); };
+    // findSlots reads the loaded rooms and rules, which do not change while a room is open
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offerKey, usual]);
+
+  const storedBandit = profile?.rec_bandit;
+  const bandit = isBanditState(storedBandit) ? storedBandit : null;
+  const clashMode = !!suggestions?.length;
+  const offersCurrent = offers?.key === offerKey;
+  const shownSlots = clashMode ? suggestions! : offers?.slots ?? [];
 
   // a new step or new suggestions must not open off screen (long lists on phones)
   useEffect(() => {
@@ -658,7 +771,15 @@ export default function StudentDashboard() {
             )}
             {b.no_show && !released && <Badge variant="destructive">No-show</Badge>}
             {!!b.extended_mins && <Badge variant="outline">Extended +{b.extended_mins} min</Badge>}
+            {b.booking_kind === "walk_in" && <Badge variant="outline">Booked at the desk</Badge>}
           </div>
+          {/* why staff cancelled or rejected it (upgrade-staff-bookings.sql) */}
+          {b.staff_note && (b.status === "cancelled" || b.status === "rejected") && (
+            <p className="pt-1.5 text-xs">
+              <span className="font-medium">{b.status === "rejected" ? "Not approved" : "Cancelled by the facility team"}:</span>{" "}
+              {b.staff_note}
+            </p>
+          )}
           {showDeadline && checkInBy && (
             <p className="pt-1.5 text-xs font-medium text-primary">
               {hasDoor ? "Enter your door code by " : "Check in by "}
@@ -748,7 +869,7 @@ export default function StudentDashboard() {
     : `When do you need ${facility.name}?`;
   const stepHint = !venue ? "Pick a place to see what is free right now."
     : !facility ? "Choose a room. You pick the time next."
-    : "If that time is taken, we suggest the closest free options.";
+    : "Tap a suggested time, or pick your own below.";
 
   return (
     <AppShell
@@ -757,6 +878,7 @@ export default function StudentDashboard() {
       role="student"
       userName={profile?.full_name}
       focused
+      wide="rail"
     >
       {/* top-center: on phones a bottom toast covered the suggestion cards it was announcing */}
       <Toaster richColors position="top-center" />
@@ -778,10 +900,12 @@ export default function StudentDashboard() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="book" className="space-y-5">
+          {/* big screens: bookings sit beside the place and room steps; the time step keeps the full width */}
+          <TabsContent value="book" className={showRail ? "xl:grid xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start xl:gap-6" : undefined}>
+            <div className="min-w-0 space-y-5">
             {/* the one thing a returning student may need right now */}
             {upNext && !venue && (
-              <section aria-label="Up next" className="animate-reveal space-y-2">
+              <section aria-label="Up next" className="animate-reveal space-y-2 xl:hidden">
                 <div className="flex items-center justify-between gap-2">
                   <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Up next</h2>
                   {activeBookings.length > 1 && (
@@ -930,6 +1054,27 @@ export default function StudentDashboard() {
                           );
                         })}
                       </div>
+                      {bookableRooms.length > 0 && (
+                        <section aria-label="Free times" className="space-y-3 pt-2">
+                          <div>
+                            <h3 className="font-display flex items-center gap-2 text-lg font-semibold">
+                              <CalendarDays className="h-5 w-5 text-primary" /> Free times today
+                            </h3>
+                            <p className="text-xs text-muted-foreground">Tap a green slot to book that room from then. Other days: pick a room first.</p>
+                          </div>
+                          <AvailabilityGrid
+                            rooms={bookableRooms.map((f) => ({
+                              id: f.id, name: f.name, sub: mixedTypes ? typeLabel(f.type) : undefined,
+                              rule: rules[f.id], duration: clampDuration(duration, rules[f.id]),
+                            }))}
+                            date={todayKey}
+                            openHour={venueHours.open}
+                            closeHour={venueHours.close}
+                            nowMs={nowMs}
+                            onPick={pickFromGrid}
+                          />
+                        </section>
+                      )}
                       <Disclosure title="See when it is usually busy" icon={<BarChart3 className="h-4 w-4 text-primary" />}>
                         <PopularTimes
                           key={venue}
@@ -951,6 +1096,20 @@ export default function StudentDashboard() {
                             Known issue: {issues[facility.id].categories.map((c) => REPORT_CATEGORIES[c].toLowerCase()).join(", ")}
                           </p>
                         )}
+                        <div ref={suggestionsRef}>
+                          <SlotSuggestions
+                            mode={clashMode ? "clash" : "offer"}
+                            slots={shownSlots}
+                            loading={!clashMode && !offersCurrent}
+                            requestedFacilityId={facility.id}
+                            requestedDate={date}
+                            bandit={bandit}
+                            preferredHour={clashMode ? suggestCtx?.preferredHour ?? null : offers?.preferredHour ?? null}
+                            selectedKey={slotReady ? `${facility.id}-${myAt(date, startTime).getTime()}` : null}
+                            bookingKey={bookingKey}
+                            onPick={clashMode ? bookSuggestion : takeOffer}
+                          />
+                        </div>
                         <div className="space-y-1.5">
                           <p className="text-sm font-medium">Day</p>
                           <div className="flex flex-wrap items-center gap-2">
@@ -962,34 +1121,45 @@ export default function StudentDashboard() {
                               onChange={(e) => { if (e.target.value) changeDate(e.target.value); }} />
                           </div>
                         </div>
-                        <div className="flex flex-wrap gap-x-8 gap-y-4">
-                          <div className="space-y-1.5">
-                            <p className="text-sm font-medium">Start time</p>
-                            {starts.length === 0 ? (
-                              <p className="flex h-9 items-center text-sm text-muted-foreground">No times left that day - try another day.</p>
-                            ) : (
-                              <Select value={slotReady ? startTime : ""} onValueChange={(v) => { setStartTime(v); setSuggestions(null); }}>
-                                <SelectTrigger aria-label="Start time" className="w-44"><SelectValue placeholder="Pick a time" /></SelectTrigger>
-                                <SelectContent>
-                                  {starts.map((t) => <SelectItem key={t} value={t}>{fmtTime(myAt(date, t))}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                            )}
-                          </div>
-                          <div className="space-y-1.5">
-                            <p className="text-sm font-medium">How long</p>
-                            {durations.length <= 6 ? (
-                              <ChoiceChips label="How long" value={duration} onChange={changeDuration}
-                                options={durations.map((d) => ({ value: d, label: fmtDuration(d) }))} />
-                            ) : (
-                              <Select value={String(duration)} onValueChange={(v) => changeDuration(Number(v))}>
-                                <SelectTrigger aria-label="How long" className="w-44"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  {durations.map((d) => <SelectItem key={d} value={String(d)}>{fmtDuration(d)}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                            )}
-                          </div>
+                        <div className="space-y-1.5">
+                          <p className="text-sm font-medium">How long</p>
+                          {durations.length <= 6 ? (
+                            <ChoiceChips label="How long" value={duration} onChange={changeDuration}
+                              options={durations.map((d) => ({ value: d, label: fmtDuration(d) }))} />
+                          ) : (
+                            <Select value={String(duration)} onValueChange={(v) => changeDuration(Number(v))}>
+                              <SelectTrigger aria-label="How long" className="w-44"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {durations.map((d) => <SelectItem key={d} value={String(d)}>{fmtDuration(d)}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
+                        <div className="space-y-1.5">
+                          <p className="text-sm font-medium">
+                            Start time{" "}
+                            <span className="font-normal text-muted-foreground">
+                              {slotReady ? `- ${fmtTime(myAt(date, startTime))}` : "- tap a free slot"}
+                            </span>
+                          </p>
+                          <AvailabilityGrid
+                            rooms={[{ id: facility.id, name: facility.name, rule, duration }]}
+                            date={date}
+                            openHour={roomHours.open}
+                            closeHour={roomHours.close}
+                            nowMs={nowMs}
+                            size="lg"
+                            selected={slotReady ? { facilityId: facility.id, time: startTime, duration } : null}
+                            onPick={(_, t) => { setStartTime(t); setSuggestions(null); }}
+                            refreshKey={suggestions}
+                            suggested={shownSlots
+                              .filter((x) => x.facilityId === facility.id && x.dateKey === date)
+                              .map((x) => ({ facilityId: x.facilityId, time: myTimeKey(x.start) }))}
+                            pickTaken
+                          />
+                          {starts.length === 0 && (
+                            <p className="text-sm text-muted-foreground">No times left that day - try another day.</p>
+                          )}
                         </div>
                         <div className="space-y-1.5">
                           <p className="text-sm font-medium">
@@ -1100,61 +1270,24 @@ export default function StudentDashboard() {
                           </div>
                         </div>
 
-                        {suggestions && suggestions.length > 0 && (
-                          <div ref={suggestionsRef} className="animate-field-in space-y-2 rounded-xl border border-primary/30 bg-accent/40 p-3">
-                            <p className="flex items-center gap-1.5 text-sm font-medium">
-                              <Sparkles className="h-4 w-4 shrink-0 text-primary" />
-                              That time is taken - AI-ranked alternatives:
-                            </p>
-                            <div className="grid gap-2">
-                              {suggestions.map((s, i) => {
-                                const key = `${s.facilityId}-${s.start.getTime()}`;
-                                const isBooking = bookingKey === key;
-                                return (
-                                  <button key={key} onClick={() => bookSuggestion(s, i)}
-                                    disabled={bookingKey !== null}
-                                    style={stagger(i)}
-                                    className={`animate-reveal stagger relative rounded-lg border bg-card p-3 text-left transition-all
-                                      hover:-translate-y-0.5 hover:border-primary hover:shadow-md active:translate-y-0 active:scale-[0.99]
-                                      disabled:cursor-wait disabled:opacity-60 disabled:hover:translate-y-0
-                                      ${i === 0 ? "border-primary/60 ring-2 ring-primary/15" : ""}
-                                      ${isBooking ? "!opacity-100 border-primary" : ""}`}>
-                                    <div className="flex items-center justify-between">
-                                      <span className="font-display font-semibold">
-                                        {fmtTime(s.start)} - {fmtTime(s.end)}
-                                      </span>
-                                      {isBooking ? (
-                                        <span className="flex items-center gap-1.5 text-xs font-medium text-primary">
-                                          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
-                                          Booking
-                                        </span>
-                                      ) : i === 0 && (
-                                        <Badge className="animate-pop-in gap-1" style={{ animationDelay: "250ms" }}>
-                                          <Sparkles className="h-3 w-3" /> Best
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    {(s.facilityId !== facility.id || s.dateKey !== date) && (
-                                      <span className="block pt-0.5 text-xs font-medium text-primary">
-                                        {s.facilityId !== facility.id ? s.facilityName : facility.name}
-                                        {s.dateKey !== date && ` - ${fmtRelativeDay(s.dateKey)}`}
-                                      </span>
-                                    )}
-                                    {s.reasons.length > 0 && (
-                                      <span className="block pt-0.5 text-xs text-muted-foreground">{s.reasons.join(" - ")}</span>
-                                    )}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
                       </aside>
                     </div>
                   )}
                 </div>
               </CardContent>
             </Card>
+            </div>
+            {showRail && (
+              <aside aria-label="Coming up" className="animate-reveal hidden space-y-2 xl:sticky xl:top-20 xl:block">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Coming up</h2>
+                  <button onClick={() => setView("bookings")} className="text-xs font-medium text-primary hover:underline">
+                    {activeBookings.length > RAIL_MAX ? `See all ${activeBookings.length}` : "My bookings"}
+                  </button>
+                </div>
+                {activeBookings.slice(0, RAIL_MAX).map((b, i) => renderBooking(b, i))}
+              </aside>
+            )}
           </TabsContent>
 
           <TabsContent value="bookings">

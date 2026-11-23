@@ -2,6 +2,7 @@ import Link from "next/link";
 import ThemeToggle from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "@/components/app-shell";
+import SignedInRedirect from "@/components/signed-in-redirect";
 import { CalendarCheck, Sparkles, SlidersHorizontal, MessageCircle } from "lucide-react";
 
 const FEATURES = [
@@ -44,6 +45,8 @@ const STATS = [
 export default function Home() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
+      {/* already signed in: go to your dashboard instead of the public page */}
+      <SignedInRedirect />
       <div className="h-1 bg-gradient-to-r from-primary via-primary/70 to-primary" />
       <header className="sticky top-0 z-40 border-b bg-card/95 shadow-sm backdrop-blur">
         <div className="mx-auto flex h-16 w-full max-w-[1680px] items-center justify-between px-4 sm:px-6 lg:px-10">

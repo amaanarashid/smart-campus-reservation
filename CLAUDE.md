@@ -41,7 +41,7 @@ npm install      # needed after pulls (three, mqtt, vitest)
 npm run dev      # localhost:3000
 npm run build
 npm run lint
-npm test         # vitest — 258 cases, all with explicit +08:00 times
+npm test         # vitest — 288 cases, all with explicit +08:00 times
 npx tsx scripts/simulate-recommender.ts && python scripts/plot-simulation.py   # recommender simulation → docs/simulation/
 npx tsx scripts/eval/recommender-latency.ts && npx tsx scripts/eval/chatbot-eval.ts   # objective 5 → docs/evaluation/
 cd scripts/eval && npm install && node concurrency.mjs   # DS1 concurrent-booking stress test (local Postgres 17)
@@ -69,11 +69,13 @@ src/components/
   facility-detail (room page: 3D twin, live tiles, countdown, today, log, remote control, energy chart)
   room-twin (three.js wrapper, next/dynamic), room-panel (manager smart-room section), room-controls (MQTT panel)
   report-problem-dialog, room-reports (feedback inbox)
+  slot-suggestions (student time step: "Suggested for you" cards up front, same cards for "that time is taken", "Why this?" factor bars; no percentages - the UCB score is not a probability)
   noshow-badge (manager Low/Medium/High risk + reasons tooltip), noshow-card (admin Analytics: model, metrics, calibration, Retrain)
 src/lib/
   time.ts            Malaysia time (UTC+8) helpers — always use these, never getHours()/toISOString().slice(0,10)
   recommend.ts       slot scoring S = w₁T + w₂C + w₃U, recommendAcross, learnPeakHours, updateWeights (baseline)
   bandit.ts          per-student LinUCB, Sherman–Morrison, cascade feedback (profiles.rec_bandit)
+  suggest.ts         how suggestions are shown, not how they are ranked: usualHour (from own bookings), diversify (no overlapping cards), explainSlot (5 factors + the student's weights), learningSummary
   noshow.ts          no-show prediction: features (history cut at start − 24 h, no leakage), L2 logistic regression, baseline fallback, explain(), AUC/Brier/log loss/calibration, time-split trainAndEvaluate; noshow-server.ts loads data + stores model rows
   chat-logic.ts      intent parsing / facility matching / free windows (understands Malay dates, times, facility words)
   chat-lang.ts       language detection (word lists), Malay time/day formats, fixed replies in EN/MS
@@ -126,6 +128,8 @@ Run in the Supabase SQL editor, in this order (all re-runnable):
 ## Status (Oct 2026)
 
 **Done and verified:** booking engine + rule model, DB no-overlap + DB-enforced rules, who-can-book + fair-use limits, three dashboards, AI recommender (LinUCB; simulation 79.6% vs 71.1% fixed; robust over 10 seeds, 4 demand levels, skimming; weak spot: ~10 attempts after a preference change; `--part=main|seeds|context` splits the run), grounded chatbot (English + Bahasa Melayu; reads only the asker's own bookings + free/busy), private bookings, smart door + room automation (live in Wokwi), room feedback, remote-control server path, venue-first facilities UI with wizards, forgot password, auto-refresh, per-tab login. No-show prediction (logistic + baseline, reminders, manager badge, admin card + Retrain; SIMULATED test AUC 0.715 vs 0.651 student-rate baseline, ceiling 0.760). DB suites: private 23, rules 23, access 16, reports 23, commands 10, no-show 33.
+
+**Suggestions on the student page (Nov 2026):** offered as soon as the time step opens (3 cards, aimed at the student's usual hour, also marked with a sparkle on the grid; tap = fill the form) and reused when a requested time is taken (4 cards, tap = book, ranking unchanged). The model learns from an offered card only if that exact slot is then booked. Offers log `rec_offered` / `rec_offer_accepted`, kept apart from `rec_shown` / `rec_accepted` so the acceptance metric still means the "time is taken" case. axe re-run on the 5 student screens + the Why panel: 0 violations; the full 22-screen audit and KLM times have not been re-run since.
 
 **Usability (no human participants allowed, so SUS is "not tested"):** axe WCAG 2.1 A+AA 0 violations in 66 checks (22 screens x light/dark/phone; fixes: labels, contrast tokens, toasts, tabs); heuristic review fixed 6 (two-step cancel, "too late to cancel", phone stat grids, top-center toasts, equipment qty saves on blur, aria-current/pressed), 4 minor open; KLM task times in `docs/evaluation/usability/`. Keep new UI passing the audit: label every input/select trigger, use theme tokens (dark-mode `text-primary`/`text-destructive` are lightened in `globals.css`).
 

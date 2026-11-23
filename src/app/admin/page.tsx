@@ -53,10 +53,10 @@ function AdminSkeleton() {
   return (
     <div className="space-y-6">
       <div className="skeleton h-11" />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[0, 1, 2, 3].map((i) => <div key={i} className="skeleton h-[88px]" />)}
       </div>
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="skeleton h-80" /><div className="skeleton h-80" />
       </div>
     </div>
@@ -351,7 +351,7 @@ export default function AdminDashboard() {
 
           {tab === "overview" && (
           <div key="ov" className="space-y-6">
-            <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
               {([
                 ["Registered users", stats.users, Users, "users"],
                 ["Total bookings", stats.bookings, CalendarRange, "analytics"],
@@ -375,7 +375,7 @@ export default function AdminDashboard() {
               ))}
             </div>
 
-            <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+            <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_420px]">
               {/* campus right now */}
               <Card className="animate-reveal" style={{ animationDelay: "200ms" }}>
                 <CardHeader>
@@ -439,7 +439,7 @@ export default function AdminDashboard() {
               </Card>
 
               {/* recent activity */}
-              <Card className="animate-reveal xl:sticky xl:top-36" style={{ animationDelay: "260ms" }}>
+              <Card className="animate-reveal lg:sticky lg:top-36" style={{ animationDelay: "260ms" }}>
                 <CardHeader>
                   <CardTitle className="font-display flex items-center gap-2">
                     <Activity className="h-5 w-5 text-primary" /> Recent activity
@@ -633,7 +633,7 @@ export default function AdminDashboard() {
                     onChange={(e) => setUserSearch(e.target.value)} className="pl-8" />
                 </div>
               </div>
-              <Table>
+              <Table className="table-stack">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Member type</TableHead><TableHead>Role</TableHead>
@@ -654,7 +654,7 @@ export default function AdminDashboard() {
                           </span>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">{u.email}</TableCell>
-                        <TableCell>
+                        <TableCell data-label="Member type">
                           {u.member_type ? (
                             <Select value={u.member_type} onValueChange={(v) => changeMemberType(u, v as MemberType)}>
                               <SelectTrigger className="h-8 w-40" aria-label={`Member type of ${u.full_name}`}><SelectValue /></SelectTrigger>
@@ -664,7 +664,7 @@ export default function AdminDashboard() {
                             </Select>
                           ) : <span className="text-xs text-muted-foreground">-</span>}
                         </TableCell>
-                        <TableCell>
+                        <TableCell data-label="Role">
                           <Select value={u.role} onValueChange={(v) => changeRole(u, v)}>
                             <SelectTrigger className="h-8 w-44" aria-label={`Role of ${u.full_name}`}><SelectValue /></SelectTrigger>
                             <SelectContent>
@@ -731,7 +731,7 @@ export default function AdminDashboard() {
               {approvalGroups.map((g) => (
                 <section key={g.title} className="space-y-3">
                   <h3 className="text-sm font-medium text-muted-foreground">{g.title} ({g.rows.length})</h3>
-                  <div className="grid gap-3 2xl:grid-cols-2">
+                  <div className="grid gap-3 xl:grid-cols-2">
                       {g.rows.map((r, i) => {
                         const f = facilities.find((x) => x.id === r.facility_id);
                         const start = new Date(r.start_time);
@@ -794,7 +794,7 @@ export default function AdminDashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Table>
+              <Table className="table-stack">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Item</TableHead><TableHead>Category</TableHead><TableHead>Quantity</TableHead>
@@ -804,8 +804,8 @@ export default function AdminDashboard() {
                   {equipment.map((e) => (
                     <TableRow key={e.id}>
                       <TableCell className="font-medium">{e.name}</TableCell>
-                      <TableCell>{typeLabel(e.facility_type)}</TableCell>
-                      <TableCell>
+                      <TableCell data-label="Category">{typeLabel(e.facility_type)}</TableCell>
+                      <TableCell data-label="Quantity">
                         <Input type="number" min={0} defaultValue={e.total_qty} className="w-20" aria-label={`Total ${e.name}`}
                           title="Saves when you press Enter or leave the box"
                           onKeyDown={(ev) => ev.key === "Enter" && (ev.target as HTMLInputElement).blur()}
@@ -861,7 +861,7 @@ export default function AdminDashboard() {
                   className="ml-auto h-8 w-48" />
               </div>
               <div className="max-h-[420px] overflow-y-auto rounded-lg border xl:max-h-[calc(100vh-22rem)]">
-                <Table>
+                <Table className="table-stack">
                   <TableHeader className="sticky top-0 bg-card">
                     <TableRow>
                       <TableHead className="w-36">When</TableHead>

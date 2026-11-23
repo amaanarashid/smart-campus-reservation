@@ -47,6 +47,12 @@ export function myWholeHour(d: Date): number {
   return wall(d).getUTCHours();
 }
 
+/** Malaysia wall-clock time as "HH:MM", the format the booking form uses. */
+export function myTimeKey(d: Date): string {
+  const w = wall(d);
+  return `${pad(w.getUTCHours())}:${pad(w.getUTCMinutes())}`;
+}
+
 /** Day of week in Malaysia, 0 = Sunday. */
 export function myWeekday(d: Date): number {
   return wall(d).getUTCDay();

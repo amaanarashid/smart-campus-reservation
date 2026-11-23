@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
 import { useAutoRefresh } from "@/lib/use-auto-refresh";
@@ -10,8 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  ArrowLeft, CalendarDays, Cpu, DoorClosed, DoorOpen, Leaf, Lightbulb, LightbulbOff, Lock,
-  LockOpen, MapPin, PersonStanding, Snowflake, Users2, Wifi, WifiOff, Zap,
+  ArrowLeft, CalendarDays, Cpu, Leaf,
+  MapPin, Users2, Wifi, WifiOff, Zap,
 } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -66,32 +66,18 @@ const EVENT_LABEL: Record<string, string> = {
 };
 const WARN = new Set(["unlock_denied", "overstay", "extend_denied", "ac_no_response"]);
 
-function Live({ label, on, onText, offText, Icon }: {
-  label: string; on: boolean; onText: string; offText: string; Icon: ComponentType<{ className?: string }>;
-}) {
-  return (
-    <div className={`flex items-center gap-3 rounded-xl border p-3 transition-colors duration-500 ${on ? "border-primary/50 bg-accent/40" : "bg-card"}`}>
-      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-500 ${
-        on ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-        <Icon className="h-4 w-4" />
-      </span>
-      <div className="min-w-0">
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</p>
-        <p className="truncate text-sm font-medium">{on ? onText : offText}</p>
-      </div>
-    </div>
-  );
-}
-
 /**
  * One facility, opened from the admin Smart room grid: a 3D twin fed by the
  * room's Wokwi device (or by its bookings if it has none), live readings,
  * today's schedule, the room log and the energy figures.
  */
-export default function FacilityDetail({ facility, rule, onBack }: {
+export default function FacilityDetail({ facility, rule, onBack, canSetup = true }: {
   facility: Facility;
   rule?: FacilityRule;
-  onBack: () => void;
+  /** without it the page sits inside another room view: no back button or title */
+  onBack?: () => void;
+  /** admins change what is wired to the device; managers only see the room */
+  canSetup?: boolean;
 }) {
   const [device, setDevice] = useState<DeviceRow | null>(null);
   const [events, setEvents] = useState<Ev[]>([]);
@@ -179,9 +165,12 @@ export default function FacilityDetail({ facility, rule, onBack }: {
     <div className="animate-step-in space-y-6">
       {/* header */}
       <div className="flex flex-wrap items-center gap-3">
+        {onBack && (
         <Button variant="outline" size="sm" className="gap-1.5" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" /> All rooms
         </Button>
+        )}
+        {onBack && (
         <div className="min-w-0">
           <h2 className="font-display text-2xl font-semibold leading-tight">{facility.name}</h2>
           <p className="flex flex-wrap items-center gap-1.5 pt-0.5 text-sm text-muted-foreground">
@@ -189,7 +178,8 @@ export default function FacilityDetail({ facility, rule, onBack }: {
             <Users2 className="h-3.5 w-3.5" /> {facility.capacity}
           </p>
         </div>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+        )}
+        <div className={`flex flex-wrap items-center gap-2 ${onBack ? "ml-auto" : ""}`}>
           <Badge variant={reading.status === "in_use" ? "destructive" : reading.status === "free" ? "default" : "secondary"}>
             {statusText}
           </Badge>
@@ -239,22 +229,21 @@ export default function FacilityDetail({ facility, rule, onBack }: {
               ) : (
                 <div className="rounded-xl border border-dashed p-3 text-sm text-muted-foreground">No booking running right now.</div>
               )}
-              <div className="grid grid-cols-2 gap-2">
-                <Live label="Presence" on={reading.people} onText="People inside" offText="Empty" Icon={PersonStanding} />
-                <Live label="Lights" on={reading.lights} onText="On" offText="Off" Icon={reading.lights ? Lightbulb : LightbulbOff} />
-                <Live label="Air-con" on={reading.ac} onText="Cooling" offText="Off" Icon={Snowflake} />
-                <Live label="Door" on={reading.doorOpen} onText="Open" offText="Closed" Icon={reading.doorOpen ? DoorOpen : DoorClosed} />
-              </div>
-              {reading.source === "device" && (
-                <>
-                  <Live label="Lock" on={reading.unlocked} onText="Unlocked" offText="Locked" Icon={reading.unlocked ? LockOpen : Lock} />
+              {/* live tiles with the remote control built in (only for rooms with a device) */}
+              <RoomControls facilityId={facility.id} controllable={!!device}
+                caps={capabilities(device ? parseConfig(device.config) : null)}
+                state={{
+                  people: reading.people, lights: reading.lights, ac: reading.ac, door: reading.doorOpen,
+                  unlocked: reading.source === "device" ? reading.unlocked : undefined,
+                }}>
+                {reading.source === "device" && (
                   <div className="flex items-center gap-3 rounded-xl border bg-muted/30 px-3 py-2.5">
                     <Zap className={`h-5 w-5 ${powerKw ? "text-primary" : "text-muted-foreground"}`} />
                     <span className="font-display text-xl font-semibold tabular-nums">{powerKw.toFixed(2)} kW</span>
                     <span className="ml-auto text-xs text-muted-foreground">{todayKwh} kWh today</span>
                   </div>
-                </>
-              )}
+                )}
+              </RoomControls>
             </CardContent>
           </Card>
 
@@ -345,11 +334,9 @@ export default function FacilityDetail({ facility, rule, onBack }: {
         </Card>
       </div>
 
-      {/* remote control over MQTT: only for rooms with a device */}
-      {device && <RoomControls facilityId={facility.id} caps={capabilities(parseConfig(device.config))} />}
 
       {/* what is wired to the device (admins change it; the device restarts with it) */}
-      {device && <RoomSetup key={`${device.id}-${device.config_version ?? 0}`} device={device} onSaved={loadLive} />}
+      {device && canSetup && <RoomSetup key={`${device.id}-${device.config_version ?? 0}`} device={device} onSaved={loadLive} />}
 
       {/* energy chart */}
       {energy && (

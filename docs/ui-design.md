@@ -75,6 +75,15 @@ narrower column and a shorter title band.
 
 - **Loading:** a skeleton in the shape of the real page (tabs and venue grid)
   with a shimmer, so nothing jumps when the data arrives.
+- **Suggestions first (time step):** a "Suggested for you" panel sits above
+  the day and time controls (`components/slot-suggestions.tsx`). Three cards,
+  ranked by the student's own model and aimed at the hour they usually book;
+  the same slots carry a sparkle on the availability grid. Tapping a card
+  fills the form, it does not book. If a requested time is taken the same
+  panel switches to "closest fits" and a tap books. "Why this?" opens five
+  bars (time, room size, quiet hour, same room, same day) with a plain
+  sentence each, and one line on how personalised the list is. No match
+  percentage is shown, because the ranking score is not a probability.
 - **Two tabs:** Book and My bookings (with a count), so the two tasks never
   compete. The old stat tiles are gone: their numbers now sit where they are
   used (tab count, "waiting for approval" line, "n of m free now" on venues).
@@ -135,19 +144,25 @@ Rooms without a device still get the twin, inferred from bookings and labelled
 
 ## Facility manager dashboard
 
-- **Summary strip:** waiting for approval, bookings today, rooms in use now,
-  attendance still to mark.
-- **Your facilities:** picture cards (the same isometric renders students
-  see), with a live "In use / Free now" badge, a "n waiting" bubble, and a
-  timeline of today's opening hours (approved and pending blocks plus a "now"
-  line). Clicking a card focuses the queue and schedule on that room; click
-  again or "Show all" to clear.
-- **Approval queue:** cards rather than a table: student, room thumbnail,
-  day and time, duration, party size against capacity (red if over), purpose,
-  and requested equipment. The button spins while saving, and all buttons lock
-  so nothing gets double-submitted.
-- **Today & upcoming:** grouped by day, running bookings highlighted with a
-  "Now" dot, and Attended / No-show buttons appear once a session starts.
+Same shape as the student page: a narrow column and tabs, with counts on the
+tabs instead of a stat strip. It opens on My rooms: the rooms this manager
+is assigned to. A "Show room" picker (or tapping a room card) narrows
+Requests, Schedule and Rooms to one room.
+
+- **Requests:** cards rather than a table: student, room thumbnail, day and
+  time, duration, party size against capacity (red if over), purpose,
+  requested equipment, no-show badge. Reject asks first (the student is
+  notified). Requests whose time has passed sink to the bottom, say "Already
+  over" and can only be rejected. Buttons lock while saving.
+- **Schedule:** approved bookings grouped by day, running ones highlighted
+  with a "Now" dot; Attended / No-show appear once a session starts.
+- **Rooms:** picture cards (the same isometric renders students see) with a
+  live "In use / Free now" badge, a "n waiting" bubble, problem count and a
+  timeline of today's opening hours; below them the room problems inbox and
+  the smart-room panel.
+- **Lost & found:** log form and list. "Claimed" asks for the claimant in a
+  dialog (no window.prompt); Dispose asks first.
+- **Equipment:** inventory; a quantity saves on Enter or leaving the box.
 - The same 30-second clock as the student page; no `Date.now()` during render.
 
 ## Motion system
@@ -176,3 +191,32 @@ Defined in `globals.css`. Every animation stops under `prefers-reduced-motion`.
 - Tables for queues/records, cards for grouped inputs and stats, badges for status (approved = filled, pending = secondary, rejected = destructive, cancelled = outline).
 - Page metadata is set in `src/app/layout.tsx` ("Campus Reserve - APU Smart Facility Reservation").
 - All colors come from the CSS variables - no hard-coded hex values in components, so a rebrand is a one-file change.
+
+## Screen sizes
+
+The same pages serve phones and big screens; wider screens show more at once rather than bigger versions of the same thing.
+
+- **Shell width** (`AppShell`): `focused` pages are capped at `max-w-5xl`. `wide="rail"` (student) lets the column grow to `max-w-7xl` from 1280px so a side column fits; `wide="full"` (manager) uses the full 1680px like admin.
+- **Student:** from 1280px, upcoming bookings sit in a "Coming up" column beside the place and room steps (up to 3, replacing the "Up next" strip). The time step keeps the full width, so the booking form is never squeezed. Below 1280px nothing changed.
+- **Manager:** room cards go 1 / 2 / 3 / 4 / 5 across; requests and schedule rows go two across from 1280px; lost & found puts the log form beside the list.
+- **Admin:** the stat row and the side panels (recent activity) switch to their desktop layout at 1024px instead of 1280px; approvals go two across from 1280px.
+- **Tables on phones:** `<Table className="table-stack">` (rules in `globals.css`) turns each row into a small block below 640px instead of scrolling sideways. Give a cell `data-label="..."` when it needs its column name once the header row is hidden.
+
+## Staff bookings and reasons (manager)
+
+Needs `supabase/upgrade-staff-bookings.sql`. Until it is run, the buttons are there but saving says so.
+
+- **Walk-in / block** (My rooms and Schedule) opens one dialog (`components/staff-booking.tsx`). *Walk-in*: type the student's email, Find, check the name shown, pick day, length, start and people. The booking sits under the student, is approved at once, and is checked in if it starts within 15 minutes. The slot running right now is offered (`lib/staff-booking.ts`, tested). *Block*: day, from, to and a reason; stored as the manager's own approved booking so the time shows as taken everywhere.
+- **Reject** and **Cancel** (on an approved booking in Schedule) ask for a written reason first, with quick picks. The student gets it in the notification and sees it on the booking in My bookings. A block is removed with a plain confirm and notifies nobody.
+- Rules for a walk-in are checked again in the database by `staff_create_booking()`: opening hours, length, capacity, who may book. Fair-use limits are left to the manager. Nothing can be placed over an existing booking.
+
+## Live room tiles with remote control
+
+`components/room-controls.tsx` is the live tiles and the remote control in one (the separate "Remote control" card is gone). Used in a room's Live view (managers and admins) and in `room-panel.tsx`.
+
+- Presence and Door are read-only. Lights, Air-con and Lock open when tapped: On / Off / Auto with how long a manual choice holds, Unlock for 8 s, and Lock down keypad (asks twice).
+- A tile never pretends. After a tap it shows "Sending to the room..." with a pulsing outline, and its On / Off text changes only when the device reports it. A command that fails or is not delivered shakes the tile once and says "Not delivered" for two minutes.
+- A manual override shows "Manual on until 3:40 pm" and a bar along the bottom of the tile that runs down; otherwise the tile says "Automatic".
+- Motion carries meaning (`globals.css`, `tile-*`): lights glow, the air-con fan turns, the lock swings when it opens, presence bobs. All off under `prefers-reduced-motion`.
+- The door-screen message stays as a row under the tiles; the command log is under "Recent commands".
+- `columns="two"` (side column): the read-only pair shares a row and each control has its own, so opening one moves nothing. `columns="four"` (full width): one grid, each tile opens in place. `controllable={false}` gives plain tiles for a room with no device.

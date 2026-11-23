@@ -17,6 +17,8 @@ function timeAgo(iso: string): string {
 const DOT: Record<string, string> = {
   booking_approved: "bg-green-500",
   booking_rejected: "bg-destructive",
+  booking_cancelled: "bg-destructive",
+  booking_made: "bg-green-500",
   new_request: "bg-primary",
   booking_ending: "bg-amber-500",
   noshow_check: "bg-amber-500",

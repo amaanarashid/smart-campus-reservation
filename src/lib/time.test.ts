@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { addDays, daysBetween, fmtDay, fmtRelativeDay, fmtTime, myAt, myDateKey, myHour, myWeekday } from "./time";
+import { addDays, daysBetween, fmtDay, fmtRelativeDay, fmtTime, myAt, myDateKey, myHour, myTimeKey, myWeekday } from "./time";
 
 describe("Malaysia time helpers", () => {
   it("gives the Malaysia date, not the UTC date, in the early morning", () => {
@@ -36,5 +36,11 @@ describe("Malaysia time helpers", () => {
     expect(fmtRelativeDay("2026-10-02", now)).toBe("today");
     expect(fmtRelativeDay("2026-10-03", now)).toBe("tomorrow");
     expect(fmtRelativeDay("2026-10-05", now)).toBe("Mon 5 Oct");
+  });
+
+  it("gives the form's HH:MM key and round-trips with myAt", () => {
+    expect(myTimeKey(new Date("2026-10-01T17:30:00Z"))).toBe("01:30");
+    expect(myTimeKey(myAt("2026-10-02", "09:00"))).toBe("09:00");
+    expect(myTimeKey(myAt("2026-10-02", "23:45"))).toBe("23:45");
   });
 });

@@ -173,8 +173,13 @@ export interface Reservation {
   checked_in_at: string | null;
   no_show: boolean;
   created_at: string;
-  /** Why it was cancelled: user | no_checkin | early_leave | admin. */
+  /** Why it was cancelled: user | no_checkin | early_leave | admin | staff. */
   cancel_reason?: string | null;
+  /** Set when staff made it (upgrade-staff-bookings.sql): a walk-in for a student, or a room block. */
+  booking_kind?: "walk_in" | "block" | null;
+  created_by?: string | null;
+  /** Reason typed by staff when cancelling or rejecting; for a block, why the room is blocked. */
+  staff_note?: string | null;
   released_at?: string | null;
   /** Minutes added by extensions (upgrade-room-end.sql). */
   extended_mins?: number;

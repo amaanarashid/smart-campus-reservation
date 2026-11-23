@@ -52,15 +52,14 @@ It answers from live data. It can tell you a room is taken, but never who booked
 
 ## Facility managers
 
-You see only the facilities you have been assigned.
+You see only the facilities you have been assigned. The page opens on **My rooms**, the rooms you are assigned to. The other tabs are **Requests**, **Schedule**, **Lost & found** and **Equipment**. The numbers on the tabs show what needs you. With more than one room, use **All my rooms** (or tap a room card) to look at one room.
 
-- **Your facilities**: a card per room with today's timeline (approved and pending bookings, and a line for now). Click a card to filter everything below to that room.
-- **Approval queue**: approve or reject pending requests. Each card shows the student, time, group size against capacity, purpose and equipment.
+- **Requests**: approve or reject pending requests. Each card shows the student, time, group size against capacity, purpose and equipment. Rejecting asks you to confirm, and the student is told. A request whose time has already passed moves to the bottom and can only be rejected.
 - **No-show risk badge**: bookings in the next 24 hours show **Low**, **Medium** or **High no-show risk**. Hover over it (or tab to it) to see the chance and up to three reasons, for example "Missed 2 of last 4 bookings" or "Booked 3 weeks ahead". It is a guess from past bookings and is for information only. It never blocks, rejects, cancels or penalises anyone, and students never see it. For a High booking the student gets one "Still coming?" reminder about an hour before the start. Approve or reject on the usual grounds, not on the badge.
-- **Today & upcoming**: once a session starts, mark **Attended** or **No-show**.
-- **Room problems**: reports from students. Move them to In progress, Resolved or Dismissed, and add a note the student will see.
-- **Smart room**: live state of a connected room (door, presence, lights, air-con), its event log, and **remote control** (unlock, lights or air-con on/off/auto for a while, a message on the door screen, lockdown).
-- **Equipment** and **Lost & found** registers for your facilities.
+- **Schedule**: today and upcoming bookings. Once a session starts, mark **Attended** or **No-show**.
+- **My rooms**: a card per room with today's timeline (approved and pending bookings, and a line for now), then **Room problems** reported by students (move them to In progress, Resolved or Dismissed, and add a note the student will see) and **Smart room**: live state of a connected room (door, presence, lights, air-con), its event log, and **remote control** (unlock, lights or air-con on/off/auto for a while, a message on the door screen, lockdown).
+- **Lost & found**: log items handed in at your rooms. **Claimed** asks who collected it; **Dispose** asks you to confirm.
+- **Equipment**: the items students can request with a booking. Change a quantity and press Enter to save.
 
 ## Administrators
 

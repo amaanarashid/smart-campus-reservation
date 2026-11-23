@@ -71,26 +71,6 @@ function lastState(events: RoomEvent[], on: string, off: string): boolean | null
   return e ? e.kind === on : null;
 }
 
-function Tile({ label, on, onText, offText, Icon, i }: {
-  label: string; on: boolean | null; onText: string; offText: string;
-  Icon: ComponentType<{ className?: string }>; i: number;
-}) {
-  return (
-    <div style={stagger(i)}
-      className={`animate-reveal stagger flex items-center gap-3 rounded-xl border p-3 transition-colors ${
-        on ? "border-primary/50 bg-accent/40" : "bg-card"}`}>
-      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors ${
-        on ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-        <Icon className="h-5 w-5" />
-      </span>
-      <div>
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</p>
-        <p className="font-medium">{on === null ? "No data yet" : on ? onText : offText}</p>
-      </div>
-    </div>
-  );
-}
-
 /**
  * Live readings and energy for smart rooms. Admins see every room; a facility
  * manager sees only the rooms they manage (room_devices_visible and the
@@ -278,18 +258,13 @@ export default function RoomPanel({ hideWhenEmpty = false, heading }: { hideWhen
                 <span className="text-muted-foreground"> today · {today?.lightsMins ?? 0} min lights · {today?.acMins ?? 0} min air-con</span>
               </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-              <Tile i={0} label="Presence" on={people} onText="People inside" offText="Empty" Icon={PersonStanding} />
-              <Tile i={1} label="Lights" on={lights} onText="On" offText="Off" Icon={lights ? Lightbulb : LightbulbOff} />
-              <Tile i={2} label="Air-con" on={ac} onText="Cooling" offText="Off" Icon={Snowflake} />
-              <Tile i={3} label="Door" on={door} onText="Open" offText="Closed" Icon={door ? DoorOpen : DoorClosed} />
-            </div>
+            {/* live tiles with the remote control built in (the API lets only admins and this room's managers use it) */}
+            <RoomControls columns="four" facilityId={device.facility_id} caps={capabilities(parseConfig(device.config))}
+              state={{ people, lights, ac, door }} />
           </div>
         </div>
       </Card>
 
-      {/* remote control (the API lets only admins and this room's managers use it) */}
-      <RoomControls facilityId={device.facility_id} caps={capabilities(parseConfig(device.config))} />
 
       {/* energy */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

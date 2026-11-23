@@ -49,16 +49,13 @@ const clickText = (text, ...also) => async (page) => {
   await page.click("[data-audit-target]");
   await new Promise((r) => setTimeout(r, 900));
 };
-const wait = (ms) => async () => new Promise((r) => setTimeout(r, ms));
-/** Pick an option in a list opened by a real click (these lists ignore scripted clicks). */
-const chooseOption = (label, text) => async (page) => {
-  await page.click(`[role="combobox"][aria-label="${label}"]`);
-  await new Promise((r) => setTimeout(r, 300));
-  const handle = await page.evaluateHandle((t) => [...document.querySelectorAll("[role=option]")].find((o) => o.textContent?.trim() === t), text);
-  if (!handle.asElement()) throw new Error(`no option "${text}" in "${label}"`);
-  await handle.asElement().click();
-  await new Promise((r) => setTimeout(r, 300));
+/** Click an element by CSS selector (the availability grid's slot buttons have no text). */
+const clickSelector = (sel) => async (page) => {
+  await page.waitForSelector(sel, { timeout: 5000 });
+  await page.click(sel);
+  await new Promise((r) => setTimeout(r, 600));
 };
+const wait = (ms) => async () => new Promise((r) => setTimeout(r, ms));
 
 // [name, role, path, steps]
 const VIEWS = [
@@ -66,7 +63,7 @@ const VIEWS = [
   ["student-home", "student", "/student", []],
   ["student-venue", "student", "/student", [clickText("Sports Complex")]],
   ["student-booking-form", "student", "/student", [clickText("Sports Complex"), clickText("Court 1", "up to 4 people")]],
-  ["student-suggestions", "student", "/student", [clickText("Sports Complex"), clickText("Court 1", "up to 4 people"), clickText("Tomorrow"), chooseOption("Start time", "3:00 pm"), clickText("Request this time"), wait(1500)]],
+  ["student-suggestions", "student", "/student", [clickText("Sports Complex"), clickText("Court 1", "up to 4 people"), clickText("Tomorrow"), clickSelector('button[aria-label^="Court 1, 3:00 pm:"]'), clickText("Request this time"), wait(1500)]],
   ["student-report-problem", "student", "/student", [clickText("Report a problem")]],
   ["student-cancel-confirm", "student", "/student", [clickText("My bookings"), clickText("Cancel")]],
   ["student-chatbot", "student", "/student", [async (p) => { await p.evaluate(() => document.querySelector("[aria-label*='chat' i], [aria-label*='assistant' i]")?.click()); await wait(900)(); }]],
